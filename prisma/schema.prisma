@@ -1,0 +1,1266 @@
+// Prisma Schema for SHARE2GO (Global Carpool & Bikepool Platform)
+// Documentation: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// ------------------------------------------------------------------------------
+// ENUMS
+// ------------------------------------------------------------------------------
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+  PREFER_NOT_TO_SAY
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  BLOCKED
+  DELETED
+}
+
+enum VerificationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  SUSPENDED
+}
+
+enum DocumentType {
+  DRIVING_LICENSE
+  NATIONAL_ID
+  PASSPORT
+  BACKGROUND_CHECK
+  RC_CARD
+  INSURANCE_COPY
+  OTHER
+}
+
+enum VehicleType {
+  CAR
+  BIKE
+}
+
+enum ConversationType {
+  DIRECT
+  RIDE_GROUP
+  COMMUNITY_GROUP
+  TRIP_GROUP
+  JOURNEY_GROUP
+}
+
+enum MessageType {
+  TEXT
+  LOCATION_SHARE
+  IMAGE
+  SYSTEM_ALERT
+}
+
+enum FuelType {
+  PETROL
+  DIESEL
+  CNG
+  ELECTRIC
+  HYBRID
+}
+
+enum LuggageSize {
+  NONE
+  SMALL
+  MEDIUM
+  LARGE
+}
+
+enum InsuranceType {
+  COMPREHENSIVE
+  THIRD_PARTY
+}
+
+enum CommunityType {
+  OFFICE
+  APARTMENT
+  COLLEGE
+  COMPANY
+  LOCAL_COMMUNITY
+}
+
+enum CommunityMemberRole {
+  MEMBER
+  MODERATOR
+  ADMIN
+}
+
+enum RideType {
+  DAILY_COMMUTE
+  LONG_DISTANCE
+  RECURRING_INSTANCE
+  ONE_TIME
+}
+
+enum RideStatus {
+  DRAFT
+  PUBLISHED
+  FULL
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  EXPIRED
+}
+
+enum StopType {
+  START
+  PICKUP
+  DROPOFF
+  INTERMEDIATE
+  END
+}
+
+enum BookingStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  CANCELLED
+  COMPLETED
+  NO_SHOW
+}
+
+enum PricingType {
+  FREE
+  COST_SHARING
+}
+
+enum ReportReason {
+  UNSAFE_DRIVING
+  HARASSMENT
+  FAKE_PROFILE
+  WRONG_VEHICLE
+  NO_SHOW
+  FRAUD
+  COMMERCIAL_FARE_DEMAND
+  OTHER
+}
+
+enum ReportStatus {
+  OPEN
+  UNDER_INVESTIGATION
+  RESOLVED
+  DISMISSED
+}
+
+enum DeviceType {
+  ANDROID
+  IOS
+  WEB
+}
+
+enum NotificationType {
+  BOOKING_REQUEST
+  BOOKING_ACCEPTED
+  BOOKING_REJECTED
+  RIDE_REMINDER
+  RIDE_CANCELLED
+  RATING_REQUEST
+  VERIFICATION_UPDATE
+  COMMUNITY_ALERT
+  JOURNEY_MATCH_FOUND
+  TRIP_JOIN_REQUEST
+  TRIP_JOIN_ACCEPTED
+  TRIP_JOIN_REJECTED
+  TRIP_UPDATED
+  TRIP_ROUTE_CHANGED
+  TRIP_CANCELLED
+  TRIP_COMPLETED
+  TRIP_MEETUP_ALERT
+}
+
+enum JourneyTransportMode {
+  CAR
+  BIKE
+  BUS
+  TRAIN
+  FLIGHT
+  OTHER
+  NOT_DECIDED
+}
+
+enum JourneyStatus {
+  DRAFT
+  PUBLISHED
+  DISCOVERABLE
+  FULL
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  EXPIRED
+}
+
+enum GenderPreference {
+  ANY
+  MALE_ONLY
+  FEMALE_ONLY
+}
+
+enum TripStatus {
+  DRAFT
+  PUBLISHED
+  DISCOVERABLE
+  FULL
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum TripMemberRole {
+  ORGANIZER
+  CO_LEAD
+  SWEEPER
+  MEMBER
+}
+
+enum TripMemberStatus {
+  INTERESTED
+  REQUESTED
+  ACCEPTED
+  REJECTED
+  LEFT
+  REMOVED
+  BLOCKED
+  CANCELLED
+  COMPLETED
+}
+
+enum RidingPace {
+  RELAXED
+  MODERATE
+  FAST
+}
+
+enum RidingExperience {
+  BEGINNER
+  INTERMEDIATE
+  EXPERIENCED
+}
+
+enum RidingSchedule {
+  EARLY_MORNING
+  MORNING
+  AFTERNOON
+  EVENING
+}
+
+enum TripStyle {
+  ADVENTURE
+  RELAXED
+  PHOTOGRAPHY
+  FOOD
+  NATURE
+  SPIRITUAL
+  CAMPING
+  MIXED
+}
+
+enum StopFrequency {
+  FREQUENT
+  NORMAL
+  MINIMAL
+}
+
+enum MatchSourceType {
+  JOURNEY
+  TRIP
+  RIDE
+}
+
+enum MatchStatus {
+  ACTIVE
+  EXPIRED
+  DISMISSED
+}
+
+// ------------------------------------------------------------------------------
+// DOMAIN 1: IDENTITY & CORE USERS
+// ------------------------------------------------------------------------------
+
+model User {
+  id               String       @id @default(cuid())
+  uuid             String       @unique @default(uuid())
+  username         String       @unique
+  displayName      String       @map("display_name")
+  phone            String       @unique
+  email            String?      @unique
+  passwordHash     String       @map("password_hash")
+  avatarUrl        String?      @map("avatar_url")
+  gender           Gender       @default(PREFER_NOT_TO_SAY)
+  status           UserStatus   @default(ACTIVE)
+  emailVerifiedAt  DateTime?    @map("email_verified_at")
+  phoneVerifiedAt  DateTime?    @map("phone_verified_at")
+  lastLoginAt      DateTime?    @map("last_login_at")
+  createdAt        DateTime     @default(now()) @map("created_at")
+  updatedAt        DateTime     @updatedAt @map("updated_at")
+  deletedAt        DateTime?    @map("deleted_at")
+
+  // Relationships
+  driverProfile     DriverProfile?
+  verifications     UserVerification[]
+  emergencyContacts EmergencyContact[]
+  devices           UserDevice[]
+  notifications     Notification[]
+  blocksInitiated   UserBlock[]        @relation("BlocksInitiated")
+  blocksReceived    UserBlock[]        @relation("BlocksReceived")
+  favoritesGiven    UserFavorite[]     @relation("FavoritesGiven")
+  favoritesReceived UserFavorite[]     @relation("FavoritesReceived")
+  communityMemberships CommunityMember[]
+  communitiesCreated   Community[]     @relation("CommunityCreator")
+  bookingsAsPassenger  Booking[]       @relation("PassengerBookings")
+  ratingsGiven      Rating[]           @relation("RatingsGiven")
+  ratingsReceived   Rating[]           @relation("RatingsReceived")
+  reportsFiled      RideReport[]       @relation("ReportsFiled")
+  reportsReceived   RideReport[]       @relation("ReportsReceived")
+  sharedTrips       SharedTrip[]
+  chatParticipations ConversationParticipant[]
+  chatMessages       ChatMessage[]
+  socialJourneys       SocialJourney[]
+  bikerTripsOrganized  BikerTrip[]                @relation("BikerTripOrganizer")
+  tripMemberships      TripMember[]
+
+  @@index([status, deletedAt])
+  @@index([createdAt])
+  @@map("users")
+}
+
+model UserVerification {
+  id              String             @id @default(cuid())
+  userId          String             @map("user_id")
+  verificationType String            @map("verification_type")
+  status          VerificationStatus @default(PENDING)
+  documentUrl     String?            @map("document_url")
+  verifiedAt      DateTime?          @map("verified_at")
+  rejectionReason String?            @map("rejection_reason")
+  createdAt       DateTime           @default(now()) @map("created_at")
+  updatedAt       DateTime           @updatedAt @map("updated_at")
+
+  user            User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@map("user_verifications")
+}
+
+model EmergencyContact {
+  id           String   @id @default(cuid())
+  userId       String   @map("user_id")
+  name         String
+  phone        String
+  relationship String
+  isPrimary    Boolean  @default(false) @map("is_primary")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("emergency_contacts")
+}
+
+model UserDevice {
+  id           String     @id @default(cuid())
+  userId       String     @map("user_id")
+  deviceType   DeviceType @map("device_type")
+  deviceToken  String     @unique @map("device_token")
+  appVersion   String?    @map("app_version")
+  lastActiveAt DateTime   @default(now()) @map("last_active_at")
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
+
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("user_devices")
+}
+
+model UserBlock {
+  id            String   @id @default(cuid())
+  userId        String   @map("user_id")
+  blockedUserId String   @map("blocked_user_id")
+  reason        String?
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  user          User     @relation("BlocksInitiated", fields: [userId], references: [id], onDelete: Cascade)
+  blockedUser   User     @relation("BlocksReceived", fields: [blockedUserId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, blockedUserId])
+  @@index([blockedUserId])
+  @@map("user_blocks")
+}
+
+model UserFavorite {
+  id             String   @id @default(cuid())
+  userId         String   @map("user_id")
+  favoriteUserId String   @map("favorite_user_id")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  user           User     @relation("FavoritesGiven", fields: [userId], references: [id], onDelete: Cascade)
+  favoriteUser   User     @relation("FavoritesReceived", fields: [favoriteUserId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, favoriteUserId])
+  @@index([favoriteUserId])
+  @@map("user_favorites")
+}
+
+// ------------------------------------------------------------------------------
+// DOMAIN 2: DRIVER PROFILE, VEHICLES & DOCUMENTS
+// ------------------------------------------------------------------------------
+
+model DriverProfile {
+  id                 String             @id @default(cuid())
+  userId             String             @unique @map("user_id")
+  licenseNumber      String             @unique @map("license_number")
+  licenseExpiryDate  DateTime           @map("license_expiry_date")
+  licenseVerifiedAt  DateTime?          @map("license_verified_at")
+  verificationStatus VerificationStatus @default(PENDING) @map("verification_status")
+  verifiedAt         DateTime?          @map("verified_at")
+  rejectedReason     String?            @map("rejected_reason")
+  totalRidesOffered  Int                @default(0) @map("total_rides_offered")
+  totalKmShared      Decimal            @default(0.00) @map("total_km_shared") @db.Decimal(10, 2)
+  averageRating      Decimal            @default(5.00) @map("average_rating") @db.Decimal(3, 2)
+  createdAt          DateTime           @default(now()) @map("created_at")
+  updatedAt          DateTime           @updatedAt @map("updated_at")
+
+  // Relationships
+  user               User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  documents          DriverDocument[]
+  vehicles           Vehicle[]
+  recurringRides     RecurringRide[]
+  rides              Ride[]
+
+  @@index([verificationStatus])
+  @@map("driver_profiles")
+}
+
+model DriverDocument {
+  id             String             @id @default(cuid())
+  driverId       String             @map("driver_id")
+  documentType   DocumentType       @map("document_type")
+  documentNumber String?            @map("document_number")
+  fileUrl        String             @map("file_url")
+  status         VerificationStatus @default(PENDING)
+  expiryDate     DateTime?          @map("expiry_date")
+  verifiedAt     DateTime?          @map("verified_at")
+  rejectedReason String?            @map("rejected_reason")
+  createdAt      DateTime           @default(now()) @map("created_at")
+  updatedAt      DateTime           @updatedAt @map("updated_at")
+
+  driver         DriverProfile      @relation(fields: [driverId], references: [id], onDelete: Cascade)
+
+  @@index([driverId, status])
+  @@map("driver_documents")
+}
+
+model Vehicle {
+  id                 String             @id @default(cuid())
+  uuid               String             @unique @default(uuid())
+  driverId           String             @map("driver_id")
+  vehicleType        VehicleType        @map("vehicle_type")
+  registrationNumber String             @unique @map("registration_number")
+  make               String
+  model              String
+  year               Int
+  color              String
+  seatCapacity       Int                @map("seat_capacity")
+  fuelType           FuelType           @default(PETROL) @map("fuel_type")
+  hasAc              Boolean            @default(false) @map("has_ac")
+  helmetProvided     Boolean            @default(false) @map("helmet_provided")
+  luggageCapacity    LuggageSize        @default(SMALL) @map("luggage_capacity")
+  status             VerificationStatus @default(PENDING)
+  verifiedAt         DateTime?          @map("verified_at")
+  createdAt          DateTime           @default(now()) @map("created_at")
+  updatedAt          DateTime           @updatedAt @map("updated_at")
+  deletedAt          DateTime?          @map("deleted_at")
+
+  // Relationships
+  driver             DriverProfile      @relation(fields: [driverId], references: [id], onDelete: Cascade)
+  insurances         VehicleInsurance[]
+  verifications      VehicleVerification[]
+  rides              Ride[]
+  recurringRides     RecurringRide[]
+
+  @@index([driverId, status])
+  @@index([vehicleType])
+  @@map("vehicles")
+}
+
+model VehicleInsurance {
+  id                 String             @id @default(cuid())
+  vehicleId          String             @map("vehicle_id")
+  policyNumber       String             @map("policy_number")
+  providerName       String             @map("provider_name")
+  policyType         InsuranceType      @default(COMPREHENSIVE) @map("policy_type")
+  validFrom          DateTime           @map("valid_from")
+  validUntil         DateTime           @map("valid_until")
+  documentUrl        String             @map("document_url")
+  verificationStatus VerificationStatus @default(PENDING) @map("verification_status")
+  verifiedAt         DateTime?          @map("verified_at")
+  createdAt          DateTime           @default(now()) @map("created_at")
+  updatedAt          DateTime           @updatedAt @map("updated_at")
+
+  vehicle            Vehicle            @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+
+  @@index([vehicleId, validUntil])
+  @@map("vehicle_insurances")
+}
+
+model VehicleVerification {
+  id             String             @id @default(cuid())
+  vehicleId      String             @map("vehicle_id")
+  documentType   DocumentType       @map("document_type")
+  documentUrl    String             @map("document_url")
+  status         VerificationStatus @default(PENDING)
+  verifiedBy     String?            @map("verified_by")
+  verifiedAt     DateTime?          @map("verified_at")
+  rejectionReason String?           @map("rejection_reason")
+  createdAt      DateTime           @default(now()) @map("created_at")
+  updatedAt      DateTime           @updatedAt @map("updated_at")
+
+  vehicle        Vehicle            @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+
+  @@index([vehicleId, status])
+  @@map("vehicle_verifications")
+}
+
+// ------------------------------------------------------------------------------
+// DOMAIN 3: COMMUNITIES & TRUST NETWORKS
+// ------------------------------------------------------------------------------
+
+model Community {
+  id                String            @id @default(cuid())
+  uuid              String            @unique @default(uuid())
+  name              String
+  type              CommunityType
+  description       String?           @db.Text
+  logoUrl           String?           @map("logo_url")
+  domainRestriction String?           @map("domain_restriction")
+  isActive          Boolean           @default(true) @map("is_active")
+  createdBy         String?           @map("created_by")
+  createdAt         DateTime          @default(now()) @map("created_at")
+  updatedAt         DateTime          @updatedAt @map("updated_at")
+  deletedAt         DateTime?         @map("deleted_at")
+
+  creator           User?             @relation("CommunityCreator", fields: [createdBy], references: [id], onDelete: SetNull)
+  members           CommunityMember[]
+  conversations     Conversation[]
+
+  @@index([type, isActive])
+  @@map("communities")
+}
+
+model CommunityMember {
+  id          String              @id @default(cuid())
+  communityId String              @map("community_id")
+  userId      String              @map("user_id")
+  role        CommunityMemberRole @default(MEMBER)
+  isApproved  Boolean             @default(true) @map("is_approved")
+  joinedAt    DateTime            @default(now()) @map("joined_at")
+  createdAt   DateTime            @default(now()) @map("created_at")
+  updatedAt   DateTime            @updatedAt @map("updated_at")
+
+  community   Community           @relation(fields: [communityId], references: [id], onDelete: Cascade)
+  user        User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([communityId, userId])
+  @@index([userId])
+  @@map("community_members")
+}
+
+// ------------------------------------------------------------------------------
+// DOMAIN 4: RIDES, ROUTES, STOPS & PRICING
+// ------------------------------------------------------------------------------
+
+model RecurringRide {
+  id                String        @id @default(cuid())
+  driverId          String        @map("driver_id")
+  vehicleId         String        @map("vehicle_id")
+  startLocationName String        @map("start_location_name")
+  startLat          Decimal       @map("start_lat") @db.Decimal(10, 7)
+  startLng          Decimal       @map("start_lng") @db.Decimal(10, 7)
+  endLocationName   String        @map("end_location_name")
+  endLat            Decimal       @map("end_lat") @db.Decimal(10, 7)
+  endLng            Decimal       @map("end_lng") @db.Decimal(10, 7)
+  departureTime     String        @map("departure_time") // HH:MM format
+  returnTime        String?       @map("return_time")
+  startDate         DateTime      @map("start_date")
+  endDate           DateTime      @map("end_date")
+  daysOfWeek        String        @map("days_of_week") // JSON string e.g. ["MON","TUE","WED","THU","FRI"]
+  totalSeats        Int           @map("total_seats")
+  isActive          Boolean       @default(true) @map("is_active")
+  createdAt         DateTime      @default(now()) @map("created_at")
+  updatedAt         DateTime      @updatedAt @map("updated_at")
+
+  driver            DriverProfile @relation(fields: [driverId], references: [id], onDelete: Cascade)
+  vehicle           Vehicle       @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  ridesGenerated    Ride[]
+
+  @@index([driverId, isActive])
+  @@map("recurring_rides")
+}
+
+model Ride {
+  id                 String         @id @default(cuid())
+  uuid               String         @unique @default(uuid())
+  driverId           String         @map("driver_id")
+  vehicleId          String         @map("vehicle_id")
+  recurringRideId    String?        @map("recurring_ride_id")
+  rideType           RideType       @default(DAILY_COMMUTE) @map("ride_type")
+  departureAt        DateTime       @map("departure_at")
+  estimatedArrivalAt DateTime       @map("estimated_arrival_at")
+  totalSeats         Int            @map("total_seats")
+  availableSeats     Int            @map("available_seats")
+  startLocationName  String         @map("start_location_name")
+  startLat           Decimal        @map("start_lat") @db.Decimal(10, 7)
+  startLng           Decimal        @map("start_lng") @db.Decimal(10, 7)
+  endLocationName    String         @map("end_location_name")
+  endLat             Decimal        @map("end_lat") @db.Decimal(10, 7)
+  endLng             Decimal        @map("end_lng") @db.Decimal(10, 7)
+  status             RideStatus     @default(PUBLISHED)
+  womenOnly          Boolean        @default(false) @map("women_only")
+  autoAccept         Boolean        @default(false) @map("auto_accept")
+  notes              String?        @db.Text
+  cancelledAt        DateTime?      @map("cancelled_at")
+  cancellationReason String?        @map("cancellation_reason")
+  createdAt          DateTime       @default(now()) @map("created_at")
+  updatedAt          DateTime       @updatedAt @map("updated_at")
+
+  // Relationships
+  driver             DriverProfile  @relation(fields: [driverId], references: [id], onDelete: Cascade)
+  vehicle            Vehicle        @relation(fields: [vehicleId], references: [id], onDelete: Restrict)
+  recurringRide      RecurringRide? @relation(fields: [recurringRideId], references: [id], onDelete: SetNull)
+  route              RideRoute?
+  stops              RideStop[]
+  pricing            RidePricing?
+  bookings           Booking[]
+  ratings            Rating[]
+  reports            RideReport[]
+  sharedTrips        SharedTrip[]
+  conversation       Conversation?
+
+  @@index([status, departureAt, availableSeats])
+  @@index([driverId, status])
+  @@map("rides")
+}
+
+model RideRoute {
+  id              String           @id @default(cuid())
+  rideId          String           @unique @map("ride_id")
+  routeVersion    Int              @default(1) @map("route_version")
+  distanceKm      Decimal          @map("distance_km") @db.Decimal(8, 2)
+  durationMinutes Int              @map("duration_minutes")
+  encodedPolyline String           @map("encoded_polyline") @db.MediumText
+  createdAt       DateTime         @default(now()) @map("created_at")
+  updatedAt       DateTime         @updatedAt @map("updated_at")
+
+  ride            Ride             @relation(fields: [rideId], references: [id], onDelete: Cascade)
+  waypoints       RideRoutePoint[]
+
+  @@map("ride_routes")
+}
+
+model RideRoutePoint {
+  id          String    @id @default(cuid())
+  rideRouteId String    @map("ride_route_id")
+  sequence    Int
+  latitude    Decimal   @db.Decimal(10, 7)
+  longitude   Decimal   @db.Decimal(10, 7)
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  route       RideRoute @relation(fields: [rideRouteId], references: [id], onDelete: Cascade)
+
+  @@unique([rideRouteId, sequence])
+  @@map("ride_route_points")
+}
+
+model RideStop {
+  id                 String    @id @default(cuid())
+  rideId             String    @map("ride_id")
+  stopType           StopType  @map("stop_type")
+  name               String
+  latitude           Decimal   @db.Decimal(10, 7)
+  longitude          Decimal   @db.Decimal(10, 7)
+  sequence           Int
+  estimatedArrivalAt DateTime  @map("estimated_arrival_at")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+
+  ride               Ride      @relation(fields: [rideId], references: [id], onDelete: Cascade)
+  pickupBookings     Booking[] @relation("PickupStop")
+  dropoffBookings    Booking[] @relation("DropoffStop")
+
+  @@unique([rideId, sequence])
+  @@index([rideId, estimatedArrivalAt])
+  @@map("ride_stops")
+}
+
+model RidePricing {
+  id                String      @id @default(cuid())
+  rideId            String      @unique @map("ride_id")
+  pricingType       PricingType @default(FREE) @map("pricing_type")
+  distanceKm        Decimal     @default(0.00) @map("distance_km") @db.Decimal(8, 2)
+  estimatedFuelCost Decimal     @default(0.00) @map("estimated_fuel_cost") @db.Decimal(10, 2)
+  tollAmount        Decimal     @default(0.00) @map("toll_amount") @db.Decimal(10, 2)
+  totalCost         Decimal     @default(0.00) @map("total_cost") @db.Decimal(10, 2)
+  costPerSeat       Decimal     @default(0.00) @map("cost_per_seat") @db.Decimal(10, 2)
+  currency          String      @default("INR")
+  platformFee       Decimal     @default(0.00) @map("platform_fee") @db.Decimal(10, 2)
+  createdAt         DateTime    @default(now()) @map("created_at")
+  updatedAt         DateTime    @updatedAt @map("updated_at")
+
+  ride              Ride        @relation(fields: [rideId], references: [id], onDelete: Cascade)
+
+  @@map("ride_pricing")
+}
+
+model PricingRule {
+  id                    String      @id @default(cuid())
+  vehicleType           VehicleType @map("vehicle_type")
+  minimumDistanceKm     Decimal     @default(1.00) @map("minimum_distance_km") @db.Decimal(6, 2)
+  maximumDistanceKm     Decimal     @default(2000.00) @map("maximum_distance_km") @db.Decimal(8, 2)
+  ratePerKm             Decimal     @map("rate_per_km") @db.Decimal(6, 2)
+  maxContributionPerKm  Decimal     @map("max_contribution_per_km") @db.Decimal(6, 2)
+  isActive              Boolean     @default(true) @map("is_active")
+  createdAt             DateTime    @default(now()) @map("created_at")
+  updatedAt             DateTime    @updatedAt @map("updated_at")
+
+  @@index([vehicleType, isActive])
+  @@map("pricing_rules")
+}
+
+// ------------------------------------------------------------------------------
+// DOMAIN 5: BOOKINGS, SEATS & JOURNEY TRACKING
+// ------------------------------------------------------------------------------
+
+model Booking {
+  id                    String        @id @default(cuid())
+  uuid                  String        @unique @default(uuid())
+  rideId                String        @map("ride_id")
+  passengerId           String        @map("passenger_id")
+  pickupStopId          String        @map("pickup_stop_id")
+  dropoffStopId         String        @map("dropoff_stop_id")
+  seatsRequested        Int           @default(1) @map("seats_requested")
+  status                BookingStatus @default(PENDING)
+  totalCostContribution Decimal       @default(0.00) @map("total_cost_contribution") @db.Decimal(10, 2)
+  passengerNotes        String?       @map("passenger_notes")
+  requestedAt           DateTime      @default(now()) @map("requested_at")
+  acceptedAt            DateTime?     @map("accepted_at")
+  rejectedAt            DateTime?     @map("rejected_at")
+  cancelledAt           DateTime?     @map("cancelled_at")
+  completedAt           DateTime?     @map("completed_at")
+  createdAt             DateTime      @default(now()) @map("created_at")
+  updatedAt             DateTime      @updatedAt @map("updated_at")
+
+  ride                  Ride          @relation(fields: [rideId], references: [id], onDelete: Cascade)
+  passenger             User          @relation("PassengerBookings", fields: [passengerId], references: [id], onDelete: Cascade)
+  pickupStop            RideStop      @relation("PickupStop", fields: [pickupStopId], references: [id], onDelete: Restrict)
+  dropoffStop           RideStop      @relation("DropoffStop", fields: [dropoffStopId], references: [id], onDelete: Restrict)
+
+  @@index([rideId, status])
+  @@index([passengerId, status])
+  @@map("bookings")
+}
+
+model SharedTrip {
+  id         String   @id @default(cuid())
+  rideId     String   @map("ride_id")
+  userId     String   @map("user_id")
+  shareToken String   @unique @map("share_token")
+  isActive   Boolean  @default(true) @map("is_active")
+  expiresAt  DateTime @map("expires_at")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  ride       Ride     @relation(fields: [rideId], references: [id], onDelete: Cascade)
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([rideId, isActive])
+  @@map("shared_trips")
+}
+
+// ------------------------------------------------------------------------------
+// DOMAIN 6: RATINGS, SAFETY & NOTIFICATIONS
+// ------------------------------------------------------------------------------
+
+model Rating {
+  id         String   @id @default(cuid())
+  rideId     String   @map("ride_id")
+  fromUserId String   @map("from_user_id")
+  toUserId   String   @map("to_user_id")
+  rating     Int
+  comment    String?  @db.Text
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  ride       Ride     @relation(fields: [rideId], references: [id], onDelete: Cascade)
+  fromUser   User     @relation("RatingsGiven", fields: [fromUserId], references: [id], onDelete: Cascade)
+  toUser     User     @relation("RatingsReceived", fields: [toUserId], references: [id], onDelete: Cascade)
+
+  @@unique([rideId, fromUserId, toUserId])
+  @@index([toUserId])
+  @@map("ratings")
+}
+
+model RideReport {
+  id             String       @id @default(cuid())
+  rideId         String       @map("ride_id")
+  reportedBy     String       @map("reported_by")
+  reportedUserId String       @map("reported_user_id")
+  reason         ReportReason
+  description    String       @db.Text
+  status         ReportStatus @default(OPEN)
+  adminNotes     String?      @map("admin_notes") @db.Text
+  resolvedBy     String?      @map("resolved_by")
+  resolvedAt     DateTime?    @map("resolved_at")
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
+
+  ride           Ride         @relation(fields: [rideId], references: [id], onDelete: Cascade)
+  reporter       User         @relation("ReportsFiled", fields: [reportedBy], references: [id], onDelete: Cascade)
+  reportedUser   User         @relation("ReportsReceived", fields: [reportedUserId], references: [id], onDelete: Cascade)
+
+  @@index([status, createdAt])
+  @@index([reportedUserId])
+  @@map("ride_reports")
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String           @map("user_id")
+  type      NotificationType
+  title     String
+  message   String           @db.Text
+  data      String?          @db.Text // JSON string payload
+  readAt    DateTime?        @map("read_at")
+  createdAt DateTime         @default(now()) @map("created_at")
+
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt, createdAt])
+  @@map("notifications")
+}
+
+// ------------------------------------------------------------------------------
+// DOMAIN 7: ADMINISTRATION & AUDIT LOGS
+// ------------------------------------------------------------------------------
+
+model AdminUser {
+  id           String              @id @default(cuid())
+  name         String
+  email        String              @unique
+  passwordHash String              @map("password_hash")
+  isActive     Boolean             @default(true) @map("is_active")
+  lastLoginAt  DateTime?           @map("last_login_at")
+  createdAt    DateTime            @default(now()) @map("created_at")
+  updatedAt    DateTime            @updatedAt @map("updated_at")
+
+  roles        AdminUserRole[]
+  activityLogs AdminActivityLog[]
+
+  @@map("admin_users")
+}
+
+model AdminRole {
+  id          String                @id @default(cuid())
+  name        String                @unique
+  description String?
+  createdAt   DateTime              @default(now()) @map("created_at")
+  updatedAt   DateTime              @updatedAt @map("updated_at")
+
+  permissions AdminRolePermission[]
+  users       AdminUserRole[]
+
+  @@map("admin_roles")
+}
+
+model AdminPermission {
+  id          String                @id @default(cuid())
+  name        String                @unique
+  description String?
+  createdAt   DateTime              @default(now()) @map("created_at")
+  updatedAt   DateTime              @updatedAt @map("updated_at")
+
+  roles       AdminRolePermission[]
+
+  @@map("admin_permissions")
+}
+
+model AdminRolePermission {
+  id           String          @id @default(cuid())
+  roleId       String          @map("role_id")
+  permissionId String          @map("permission_id")
+  createdAt    DateTime        @default(now()) @map("created_at")
+
+  role         AdminRole       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   AdminPermission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, permissionId])
+  @@map("admin_role_permissions")
+}
+
+model AdminUserRole {
+  id          String    @id @default(cuid())
+  adminUserId String    @map("admin_user_id")
+  roleId      String    @map("role_id")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  adminUser   AdminUser @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
+  role        AdminRole @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([adminUserId, roleId])
+  @@map("admin_user_roles")
+}
+
+model AdminActivityLog {
+  id         String    @id @default(cuid())
+  adminId    String    @map("admin_id")
+  action     String
+  entityType String    @map("entity_type")
+  entityId   String    @map("entity_id")
+  oldValues  String?   @map("old_values") @db.Text
+  newValues  String?   @map("new_values") @db.Text
+  ipAddress  String?   @map("ip_address")
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  admin      AdminUser @relation(fields: [adminId], references: [id], onDelete: Cascade)
+
+  @@index([adminId, createdAt])
+  @@index([entityType, entityId])
+  @@map("admin_activity_logs")
+}
+
+// ------------------------------------------------------------------------------
+// DOMAIN 8: REAL-TIME CHAT & MESSAGING
+// ------------------------------------------------------------------------------
+
+model Conversation {
+  id            String                  @id @default(cuid())
+  uuid          String                  @unique @default(uuid())
+  type          ConversationType        @default(DIRECT)
+  title         String?
+  rideId        String?                 @unique @map("ride_id")
+  communityId   String?                 @map("community_id")
+  bikerTripId   String?                 @unique @map("biker_trip_id")
+  isArchived    Boolean                 @default(false) @map("is_archived")
+  lastMessageAt DateTime                @default(now()) @map("last_message_at")
+  createdAt     DateTime                @default(now()) @map("created_at")
+  updatedAt     DateTime                @updatedAt @map("updated_at")
+
+  ride          Ride?                   @relation(fields: [rideId], references: [id], onDelete: Cascade)
+  community     Community?              @relation(fields: [communityId], references: [id], onDelete: Cascade)
+  bikerTrip     BikerTrip?              @relation(fields: [bikerTripId], references: [id], onDelete: Cascade)
+  participants  ConversationParticipant[]
+  messages      ChatMessage[]
+
+  @@index([type, isArchived])
+  @@index([lastMessageAt])
+  @@map("conversations")
+}
+
+model ConversationParticipant {
+  id             String       @id @default(cuid())
+  conversationId String       @map("conversation_id")
+  userId         String       @map("user_id")
+  lastReadAt     DateTime?    @map("last_read_at")
+  isMuted        Boolean      @default(false) @map("is_muted")
+  joinedAt       DateTime     @default(now()) @map("joined_at")
+
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([conversationId, userId])
+  @@index([userId])
+  @@map("conversation_participants")
+}
+
+model ChatMessage {
+  id             String       @id @default(cuid())
+  conversationId String       @map("conversation_id")
+  senderId       String       @map("sender_id")
+  messageType    MessageType  @default(TEXT) @map("message_type")
+  content        String       @db.Text
+  latitude       Decimal?     @db.Decimal(10, 7)
+  longitude      Decimal?     @db.Decimal(10, 7)
+  mediaUrl       String?      @map("media_url")
+  isDeleted      Boolean      @default(false) @map("is_deleted")
+  createdAt      DateTime     @default(now()) @map("created_at")
+
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender         User         @relation(fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
+  @@map("chat_messages")
+}
+
+// ------------------------------------------------------------------------------
+// DOMAIN 9: SOCIAL JOURNEYS, BIKER TRIPS & ROUTE MATCHING ENGINE
+// ------------------------------------------------------------------------------
+
+model SocialJourney {
+  id                String               @id @default(cuid())
+  uuid              String               @unique @default(uuid())
+  userId            String               @map("user_id")
+  title             String
+  description       String?              @db.Text
+  mode              JourneyTransportMode @default(NOT_DECIDED)
+  status            JourneyStatus        @default(PUBLISHED)
+  departureDate     DateTime             @map("departure_date")
+  departureTime     String?              @map("departure_time")
+  isDateFlexible    Boolean              @default(false) @map("is_date_flexible")
+  flexibilityDays   Int                  @default(0) @map("flexibility_days")
+  startLocationName String               @map("start_location_name")
+  startLat          Decimal              @map("start_lat") @db.Decimal(10, 7)
+  startLng          Decimal              @map("start_lng") @db.Decimal(10, 7)
+  startCell         String               @map("start_cell")
+  endLocationName   String               @map("end_location_name")
+  endLat            Decimal              @map("end_lat") @db.Decimal(10, 7)
+  endLng            Decimal              @map("end_lng") @db.Decimal(10, 7)
+  endCell           String               @map("end_cell")
+  distanceKm        Decimal              @default(0.00) @map("distance_km") @db.Decimal(8, 2)
+  durationMinutes   Int                  @default(0) @map("duration_minutes")
+  encodedPolyline   String?              @map("encoded_polyline") @db.MediumText
+  minLat            Decimal?             @map("min_lat") @db.Decimal(10, 7)
+  maxLat            Decimal?             @map("max_lat") @db.Decimal(10, 7)
+  minLng            Decimal?             @map("min_lng") @db.Decimal(10, 7)
+  maxLng            Decimal?             @map("max_lng") @db.Decimal(10, 7)
+  budgetEstimate    Decimal              @default(0.00) @map("budget_estimate") @db.Decimal(10, 2)
+  maxCompanions     Int                  @default(4) @map("max_companions")
+  currentCompanions Int                  @default(1) @map("current_companions")
+  viewsCount        Int                  @default(0) @map("views_count")
+  createdAt         DateTime             @default(now()) @map("created_at")
+  updatedAt         DateTime             @updatedAt @map("updated_at")
+
+  user              User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  stops             JourneyStop[]
+  preferences       JourneyPreference?
+
+  @@index([status, departureDate, startCell])
+  @@index([status, departureDate, endCell])
+  @@index([userId, status])
+  @@index([createdAt])
+  @@map("social_journeys")
+}
+
+model JourneyStop {
+  id                 String        @id @default(cuid())
+  journeyId          String        @map("journey_id")
+  name               String
+  latitude           Decimal       @db.Decimal(10, 7)
+  longitude          Decimal       @db.Decimal(10, 7)
+  sequence           Int
+  cell               String
+  estimatedArrivalAt DateTime?     @map("estimated_arrival_at")
+  dwellMinutes       Int           @default(0) @map("dwell_minutes")
+  notes              String?
+  createdAt          DateTime      @default(now()) @map("created_at")
+
+  journey            SocialJourney @relation(fields: [journeyId], references: [id], onDelete: Cascade)
+
+  @@unique([journeyId, sequence])
+  @@index([journeyId, sequence])
+  @@index([cell])
+  @@map("journey_stops")
+}
+
+model JourneyPreference {
+  id               String           @id @default(cuid())
+  journeyId        String           @unique @map("journey_id")
+  genderPreference GenderPreference @default(ANY) @map("gender_preference")
+  smokingAllowed   Boolean          @default(false) @map("smoking_allowed")
+  musicAllowed     Boolean          @default(true) @map("music_allowed")
+  petFriendly      Boolean          @default(false) @map("pet_friendly")
+  languages        String?          @db.Text
+  interests        String?          @db.Text
+  notes            String?          @db.Text
+
+  journey          SocialJourney    @relation(fields: [journeyId], references: [id], onDelete: Cascade)
+
+  @@map("journey_preferences")
+}
+
+model BikerTrip {
+  id                 String                @id @default(cuid())
+  uuid               String                @unique @default(uuid())
+  organizerId        String                @map("organizer_id")
+  title              String
+  description        String                @db.Text
+  coverImageUrl      String?               @map("cover_image_url")
+  status             TripStatus            @default(PUBLISHED)
+  startDate          DateTime              @map("start_date")
+  endDate            DateTime              @map("end_date")
+  startTime          String?               @map("start_time")
+  startLocationName  String                @map("start_location_name")
+  startLat           Decimal               @map("start_lat") @db.Decimal(10, 7)
+  startLng           Decimal               @map("start_lng") @db.Decimal(10, 7)
+  startCell          String                @map("start_cell")
+  endLocationName    String                @map("end_location_name")
+  endLat             Decimal               @map("end_lat") @db.Decimal(10, 7)
+  endLng             Decimal               @map("end_lng") @db.Decimal(10, 7)
+  endCell            String                @map("end_cell")
+  minRiders          Int                   @default(2) @map("min_riders")
+  maxRiders          Int                   @default(10) @map("max_riders")
+  currentRiders      Int                   @default(1) @map("current_riders")
+  distanceKm         Decimal               @default(0.00) @map("distance_km") @db.Decimal(8, 2)
+  durationDays       Int                   @default(1) @map("duration_days")
+  encodedPolyline    String?               @map("encoded_polyline") @db.MediumText
+  minLat             Decimal?              @map("min_lat") @db.Decimal(10, 7)
+  maxLat             Decimal?              @map("max_lat") @db.Decimal(10, 7)
+  minLng             Decimal?              @map("min_lng") @db.Decimal(10, 7)
+  maxLng             Decimal?              @map("max_lng") @db.Decimal(10, 7)
+  cancelledAt        DateTime?             @map("cancelled_at")
+  cancellationReason String?               @map("cancellation_reason") @db.Text
+  createdAt          DateTime              @default(now()) @map("created_at")
+  updatedAt          DateTime              @updatedAt @map("updated_at")
+
+  organizer          User                  @relation("BikerTripOrganizer", fields: [organizerId], references: [id], onDelete: Cascade)
+  requirements       BikerTripRequirement?
+  preferences        BikerTripPreference?
+  stops              BikerTripStop[]
+  members            TripMember[]
+  meetups            TripMeetup[]
+  conversation       Conversation?
+
+  @@index([status, startDate, startCell])
+  @@index([status, startDate, endCell])
+  @@index([organizerId, status])
+  @@index([createdAt])
+  @@map("biker_trips")
+}
+
+model BikerTripRequirement {
+  id                 String    @id @default(cuid())
+  tripId             String    @unique @map("trip_id")
+  minEngineCc        Int       @default(150) @map("min_engine_cc")
+  maxEngineCc        Int?      @map("max_engine_cc")
+  allowedBikeTypes   String?   @map("allowed_bike_types") @db.Text
+  helmetMandatory    Boolean   @default(true) @map("helmet_mandatory")
+  licenseMandatory   Boolean   @default(true) @map("license_mandatory")
+  rcMandatory        Boolean   @default(true) @map("rc_mandatory")
+  insuranceMandatory Boolean   @default(true) @map("insurance_mandatory")
+  requiredGear       String    @map("required_gear") @db.Text
+  customRules        String?   @map("custom_rules") @db.Text
+
+  trip               BikerTrip @relation(fields: [tripId], references: [id], onDelete: Cascade)
+
+  @@map("biker_trip_requirements")
+}
+
+model BikerTripPreference {
+  id                   String           @id @default(cuid())
+  tripId               String           @unique @map("trip_id")
+  ridingPace           RidingPace       @default(MODERATE) @map("riding_pace")
+  ridingExperience     RidingExperience @default(INTERMEDIATE) @map("riding_experience")
+  ridingSchedule       RidingSchedule   @default(EARLY_MORNING) @map("riding_schedule")
+  nightRidingAllowed   Boolean          @default(false) @map("night_riding_allowed")
+  tripStyle            TripStyle        @default(ADVENTURE) @map("trip_style")
+  stopFrequency        StopFrequency    @default(NORMAL) @map("stop_frequency")
+  maxRidingHoursPerDay Int              @default(6) @map("max_riding_hours_per_day")
+  additionalNotes      String?          @map("additional_notes") @db.Text
+
+  trip                 BikerTrip        @relation(fields: [tripId], references: [id], onDelete: Cascade)
+
+  @@map("biker_trip_preferences")
+}
+
+model BikerTripStop {
+  id                   String    @id @default(cuid())
+  tripId               String    @map("trip_id")
+  name                 String
+  latitude             Decimal   @db.Decimal(10, 7)
+  longitude            Decimal   @db.Decimal(10, 7)
+  sequence             Int
+  cell                 String
+  dayNumber            Int       @default(1) @map("day_number")
+  estimatedArrivalAt   DateTime? @map("estimated_arrival_at")
+  estimatedDepartureAt DateTime? @map("estimated_departure_at")
+  isNightHalt          Boolean   @default(false) @map("is_night_halt")
+  description          String?
+
+  trip                 BikerTrip @relation(fields: [tripId], references: [id], onDelete: Cascade)
+
+  @@unique([tripId, sequence])
+  @@index([tripId, sequence])
+  @@index([cell])
+  @@map("biker_trip_stops")
+}
+
+model TripMember {
+  id                    String           @id @default(cuid())
+  tripId                String           @map("trip_id")
+  userId                String           @map("user_id")
+  role                  TripMemberRole   @default(MEMBER)
+  status                TripMemberStatus @default(REQUESTED)
+  bikeModel             String?          @map("bike_model")
+  bikeCc                Int?             @map("bike_cc")
+  emergencyContactPhone String?          @map("emergency_contact_phone")
+  userNotes             String?          @map("user_notes") @db.Text
+  organizerNotes        String?          @map("organizer_notes") @db.Text
+  requestedAt           DateTime         @default(now()) @map("requested_at")
+  respondedAt           DateTime?        @map("responded_at")
+  createdAt             DateTime         @default(now()) @map("created_at")
+  updatedAt             DateTime         @updatedAt @map("updated_at")
+
+  trip                  BikerTrip        @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  user                  User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([tripId, userId])
+  @@index([tripId, status])
+  @@index([userId, status])
+  @@map("trip_members")
+}
+
+model TripMeetup {
+  id           String    @id @default(cuid())
+  tripId       String    @map("trip_id")
+  title        String
+  description  String?   @db.Text
+  meetupAt     DateTime  @map("meetup_at")
+  locationName String    @map("location_name")
+  latitude     Decimal   @db.Decimal(10, 7)
+  longitude    Decimal   @db.Decimal(10, 7)
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  trip         BikerTrip @relation(fields: [tripId], references: [id], onDelete: Cascade)
+
+  @@index([tripId, meetupAt])
+  @@map("trip_meetups")
+}
+
+model JourneyMatch {
+  id                     String          @id @default(cuid())
+  sourceType             MatchSourceType @map("source_type")
+  sourceId               String          @map("source_id")
+  matchedType            MatchSourceType @map("matched_type")
+  matchedId              String          @map("matched_id")
+  matchScore             Decimal         @map("match_score") @db.Decimal(5, 2)
+  routeOverlapPercentage Decimal         @map("route_overlap_percentage") @db.Decimal(5, 2)
+  startDistanceKm        Decimal         @map("start_distance_km") @db.Decimal(8, 2)
+  destinationDistanceKm  Decimal         @map("destination_distance_km") @db.Decimal(8, 2)
+  directionSimilarity    Decimal         @map("direction_similarity") @db.Decimal(4, 3)
+  dateScore              Decimal         @map("date_score") @db.Decimal(5, 2)
+  timeScore              Decimal         @map("time_score") @db.Decimal(5, 2)
+  preferenceScore        Decimal         @map("preference_score") @db.Decimal(5, 2)
+  matchReasons           String          @map("match_reasons") @db.Text
+  status                 MatchStatus     @default(ACTIVE)
+  calculatedAt           DateTime        @default(now()) @map("calculated_at")
+  expiresAt              DateTime        @map("expires_at")
+
+  @@unique([sourceType, sourceId, matchedType, matchedId], name: "source_matched_pair")
+  @@index([sourceType, sourceId, matchScore])
+  @@index([expiresAt])
+  @@map("journey_matches")
+}
+
+
