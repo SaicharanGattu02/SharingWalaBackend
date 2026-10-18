@@ -123,7 +123,7 @@ const formatUserProfile = (user) => {
   const driverProfile = user.driverProfile;
   const vehicles = (driverProfile?.vehicles || []).map((v) => ({
     id: v.id,
-    name: `${v.make} ${v.model}`,
+    name: v.model && v.model.trim().length > 0 ? `${v.make} ${v.model}`.trim() : v.make,
     numberPlate: v.registrationNumber,
     color: v.color,
     type: v.vehicleType === 'CAR' ? 'Car' : 'Bike',
@@ -139,6 +139,12 @@ const formatUserProfile = (user) => {
 
   const joinedCommunities = (user.communityMemberships || []).map((m) => m.communityId);
 
+  const isDriver =
+    (user.isDriverMode === true || user.is_driver_mode === 1) ||
+    (user.activeRole && user.activeRole.toUpperCase() === 'HOST') ||
+    (user.rolePreference && (user.rolePreference === 'offerRide' || user.rolePreference.toUpperCase() === 'HOST'));
+  const activeRole = isDriver ? 'Host' : 'Guest';
+
   return {
     id: user.id,
     name: user.displayName,
@@ -149,6 +155,10 @@ const formatUserProfile = (user) => {
     workArea: user.workArea || 'Hitech City, Hyderabad',
     preferredMode: user.preferredMode || 'both',
     rolePreference: user.rolePreference || 'both',
+    activeRole: activeRole,
+    isDriverMode: isDriver,
+    currentRole: activeRole,
+    role: activeRole,
     identityVerified: user.phoneVerifiedAt !== null,
     driverVerified: driverProfile?.verificationStatus === 'APPROVED',
     rating: driverProfile ? Number(driverProfile.averageRating) : 5.0,
@@ -177,7 +187,7 @@ export const formatRideForFlutter = (ride) => {
   const formattedTime = departureDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
 
   const mode = vehicle?.vehicleType === 'BIKE' ? 'bikepool' : 'carpool';
-  const price = ride.pricing ? Number(ride.pricing.baseFare) : 45.0;
+  const price = ride.pricing ? Number(ride.pricing.costPerSeat ?? ride.pricing.baseFare ?? 45.0) : 45.0;
 
   return {
     id: ride.id,
@@ -240,12 +250,75 @@ export const getUserProfile = async (userId) => {
  * 2. Update User Profile & Preferences
  */
 export const updateUserProfile = async (userId, data) => {
+  const updatePayload = {};
+
+  if (data.displayName !== undefined) updatePayload.displayName = data.displayName;
+  if (data.avatarUrl !== undefined) updatePayload.avatarUrl = data.avatarUrl;
+  if (data.gender !== undefined) updatePayload.gender = data.gender;
+  if (data.homeArea !== undefined) updatePayload.homeArea = data.homeArea;
+  if (data.workArea !== undefined) updatePayload.workArea = data.workArea;
+  if (data.preferredMode !== undefined) updatePayload.preferredMode = data.preferredMode;
+  if (data.rolePreference !== undefined) updatePayload.rolePreference = data.rolePreference;
+  if (data.womenOnlyPreference !== undefined) updatePayload.womenOnlyPreference = data.womenOnlyPreference;
+  if (data.activeRole !== undefined) {
+    const isHost = data.activeRole.toUpperCase() === 'HOST';
+    updatePayload.rolePreference = isHost ? 'offerRide' : 'findRide';
+  }
+  if (data.isDriverMode !== undefined) {
+    const isHost = Boolean(data.isDriverMode);
+    updatePayload.rolePreference = isHost ? 'offerRide' : 'findRide';
+  }
+
+  const updatedUser = await prisma.user.update({
+    where: { id: userId },
+    data: updatePayload,
+    include: {
+      driverProfile: {
+        include: { vehicles: true },
+      },
+      emergencyContacts: true,
+      communityMemberships: true,
+      bookingsAsPassenger: true,
+    },
+  });
+
+  if (data.activeRole !== undefined || data.isDriverMode !== undefined) {
+    const isDriver = data.isDriverMode !== undefined
+      ? Boolean(data.isDriverMode)
+      : data.activeRole.toUpperCase() === 'HOST';
+    try {
+      await prisma.$executeRawUnsafe(
+        'UPDATE users SET active_role = ?, is_driver_mode = ? WHERE id = ?',
+        isDriver ? 'HOST' : 'GUEST',
+        isDriver ? 1 : 0,
+        userId
+      );
+    } catch {}
+  }
+
+  return formatUserProfile(updatedUser);
+};
+
+/**
+ * 2b. Switch Active Role (Host <-> Guest)
+ */
+export const switchRole = async (userId, data = {}) => {
+  let isDriver = false;
+  if (data.isDriverMode !== undefined) {
+    isDriver = Boolean(data.isDriverMode);
+  } else if (data.role !== undefined) {
+    isDriver = data.role.toUpperCase() === 'HOST';
+  } else if (data.activeRole !== undefined) {
+    isDriver = data.activeRole.toUpperCase() === 'HOST';
+  }
+
+  const roleName = isDriver ? 'HOST' : 'GUEST';
+  const rolePref = isDriver ? 'offerRide' : 'findRide';
+
   const updatedUser = await prisma.user.update({
     where: { id: userId },
     data: {
-      ...(data.displayName && { displayName: data.displayName }),
-      ...(data.avatarUrl !== undefined && { avatarUrl: data.avatarUrl }),
-      ...(data.gender && { gender: data.gender }),
+      rolePreference: rolePref,
     },
     include: {
       driverProfile: {
@@ -253,8 +326,18 @@ export const updateUserProfile = async (userId, data) => {
       },
       emergencyContacts: true,
       communityMemberships: true,
+      bookingsAsPassenger: true,
     },
   });
+
+  try {
+    await prisma.$executeRawUnsafe(
+      'UPDATE users SET active_role = ?, is_driver_mode = ? WHERE id = ?',
+      roleName,
+      isDriver ? 1 : 0,
+      userId
+    );
+  } catch {}
 
   return formatUserProfile(updatedUser);
 };
@@ -276,7 +359,12 @@ export const getTrustedContacts = async (userId) => {
 
 export const addTrustedContact = async (userId, { name, phone, relationship }) => {
   const created = await prisma.emergencyContact.create({
-    data: { userId, name, phone, relationship },
+    data: {
+      userId,
+      name: name.trim(),
+      phone: phone.trim(),
+      relationship: relationship.trim(),
+    },
   });
   return {
     id: created.id,
@@ -286,11 +374,46 @@ export const addTrustedContact = async (userId, { name, phone, relationship }) =
   };
 };
 
-export const deleteTrustedContact = async (userId, contactId) => {
-  await prisma.emergencyContact.deleteMany({
+export const updateTrustedContact = async (userId, contactId, data = {}) => {
+  const existing = await prisma.emergencyContact.findFirst({
     where: { id: contactId, userId },
   });
-  return { success: true };
+
+  if (!existing) {
+    throw new ApiError(404, 'Trusted safety contact not found');
+  }
+
+  const updated = await prisma.emergencyContact.update({
+    where: { id: contactId },
+    data: {
+      ...(data.name && { name: data.name.trim() }),
+      ...(data.phone && { phone: data.phone.trim() }),
+      ...(data.relationship && { relationship: data.relationship.trim() }),
+    },
+  });
+
+  return {
+    id: updated.id,
+    name: updated.name,
+    phone: updated.phone,
+    relationship: updated.relationship,
+  };
+};
+
+export const deleteTrustedContact = async (userId, contactId) => {
+  const existing = await prisma.emergencyContact.findFirst({
+    where: { id: contactId, userId },
+  });
+
+  if (!existing) {
+    return { id: contactId, success: true, message: 'Contact already removed' };
+  }
+
+  await prisma.emergencyContact.delete({
+    where: { id: contactId },
+  });
+
+  return { id: contactId, success: true };
 };
 
 /**

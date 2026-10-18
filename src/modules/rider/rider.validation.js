@@ -19,12 +19,24 @@ export const addVehicleSchema = {
   }),
 };
 
+export const updateVehicleSchema = {
+  body: z.object({
+    type: z.enum(['Car', 'Bike']).optional(),
+    name: z.string().min(2).max(100).optional(),
+    numberPlate: z.string().min(4).max(20).optional(),
+    color: z.string().min(2).max(50).optional(),
+    capacity: z.number().int().min(1).max(8).optional(),
+  }),
+};
+
 export const offerRideSchema = {
   body: z.object({
-    vehicleId: z.string().min(1),
-    mode: z.enum(['carpool', 'bikepool', 'other']).default('carpool'),
-    rideType: z.enum(['oneTime', 'recurring']).default('oneTime'),
-    activeDays: z.array(z.string()).optional(), // e.g. ['Mon', 'Tue', 'Wed']
+    vehicleId: z.string().optional(),
+    vehicleName: z.string().optional(),
+    vehicleNumber: z.string().optional(),
+    mode: z.string().default('carpool'), // 'carpool' or 'bikepool'
+    rideType: z.string().default('oneTime'), // 'oneTime' or 'recurring'
+    activeDays: z.array(z.string()).optional(), // e.g. ['Mon', 'Tue', 'Wed', 'Thu', 'Fri']
     origin: z.string().min(2),
     originLat: z.number().optional().default(17.448293),
     originLng: z.number().optional().default(78.391487),
@@ -32,12 +44,44 @@ export const offerRideSchema = {
     destLat: z.number().optional().default(17.437462),
     destLng: z.number().optional().default(78.365448),
     departureTime: z.string().min(1), // e.g. "08:30 AM"
-    availableSeats: z.number().int().min(1).max(8),
-    pricePerSeat: z.number().min(0).default(45.0),
+    returnTime: z.string().optional(), // e.g. "06:00 PM"
+    date: z.string().optional(), // e.g. "Today" or ISO string
+    seats: z.number().int().min(1).max(8).optional(),
+    availableSeats: z.number().int().min(1).max(8).optional(),
+    pricePerSeat: z.number().min(0).optional(),
     notes: z.string().max(500).optional(),
+    pickupFlexibility: z.string().max(200).optional(),
     meetingPoint: z.string().max(200).optional(),
     isWomenOnly: z.boolean().default(false),
     autoAccept: z.boolean().default(false),
+  }),
+};
+
+export const updateOfferRideSchema = {
+  body: z.object({
+    vehicleId: z.string().optional(),
+    vehicleName: z.string().optional(),
+    vehicleNumber: z.string().optional(),
+    mode: z.string().optional(),
+    rideType: z.string().optional(),
+    activeDays: z.array(z.string()).optional(),
+    origin: z.string().min(2).optional(),
+    originLat: z.number().optional(),
+    originLng: z.number().optional(),
+    destination: z.string().min(2).optional(),
+    destLat: z.number().optional(),
+    destLng: z.number().optional(),
+    departureTime: z.string().optional(),
+    returnTime: z.string().optional(),
+    date: z.string().optional(),
+    seats: z.number().int().min(1).max(8).optional(),
+    availableSeats: z.number().int().min(1).max(8).optional(),
+    pricePerSeat: z.number().min(0).optional(),
+    notes: z.string().max(500).optional(),
+    pickupFlexibility: z.string().max(200).optional(),
+    meetingPoint: z.string().max(200).optional(),
+    isWomenOnly: z.boolean().optional(),
+    autoAccept: z.boolean().optional(),
   }),
 };
 

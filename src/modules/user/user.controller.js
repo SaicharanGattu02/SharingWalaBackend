@@ -12,6 +12,11 @@ export const updateProfile = asyncHandler(async (req, res) => {
   res.status(200).json(new ApiResponse(200, updated, 'Profile updated successfully'));
 });
 
+export const switchRole = asyncHandler(async (req, res) => {
+  const updated = await userService.switchRole(req.user.id, req.body);
+  res.status(200).json(new ApiResponse(200, updated, `Switched role to ${updated.activeRole}`));
+});
+
 export const getTrustedContacts = asyncHandler(async (req, res) => {
   const contacts = await userService.getTrustedContacts(req.user.id);
   res.status(200).json(new ApiResponse(200, contacts, 'Trusted contacts retrieved'));
@@ -22,9 +27,14 @@ export const addTrustedContact = asyncHandler(async (req, res) => {
   res.status(201).json(new ApiResponse(201, contact, 'Contact added successfully'));
 });
 
+export const updateTrustedContact = asyncHandler(async (req, res) => {
+  const contact = await userService.updateTrustedContact(req.user.id, req.params.id, req.body);
+  res.status(200).json(new ApiResponse(200, contact, 'Contact updated successfully'));
+});
+
 export const deleteTrustedContact = asyncHandler(async (req, res) => {
-  await userService.deleteTrustedContact(req.user.id, req.params.id);
-  res.status(200).json(new ApiResponse(200, null, 'Contact deleted'));
+  const result = await userService.deleteTrustedContact(req.user.id, req.params.id);
+  res.status(200).json(new ApiResponse(200, result, 'Contact deleted successfully'));
 });
 
 export const searchRides = asyncHandler(async (req, res) => {

@@ -3,7 +3,9 @@ import { authenticate } from '../../middlewares/auth.middleware.js';
 import { validate } from '../../middlewares/validate.middleware.js';
 import {
   updateProfileSchema,
+  switchRoleSchema,
   trustedContactSchema,
+  updateTrustedContactSchema,
   searchRidesQuerySchema,
   requestSeatSchema,
 } from './user.validation.js';
@@ -21,10 +23,13 @@ router.use(authenticate);
 // Profile & Preferences
 router.get('/profile', userController.getProfile);
 router.put('/profile', validate(updateProfileSchema), userController.updateProfile);
+router.patch('/switch-role', validate(switchRoleSchema), userController.switchRole);
+router.post('/switch-role', validate(switchRoleSchema), userController.switchRole);
 
-// Trusted Contacts
+// Trusted Contacts (Emergency / SOS)
 router.get('/trusted-contacts', userController.getTrustedContacts);
 router.post('/trusted-contacts', validate(trustedContactSchema), userController.addTrustedContact);
+router.put('/trusted-contacts/:id', validate(updateTrustedContactSchema), userController.updateTrustedContact);
 router.delete('/trusted-contacts/:id', userController.deleteTrustedContact);
 
 // Bookings & Rides
