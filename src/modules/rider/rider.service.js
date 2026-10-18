@@ -106,15 +106,43 @@ export const addRiderVehicle = async (userId, { type, name, numberPlate, color, 
     });
   }
 
+  const cleanRegNumber = numberPlate.trim().toUpperCase();
   const parts = name.trim().split(' ');
   const make = parts[0] || 'Vehicle';
   const model = parts.slice(1).join(' ') || '';
+  const vehicleType = type.toUpperCase() === 'BIKE' ? 'BIKE' : 'CAR';
+
+  // Check if a vehicle with this registration number already exists
+  const existingVehicle = await prisma.vehicle.findUnique({
+    where: { registrationNumber: cleanRegNumber },
+  });
+
+  if (existingVehicle) {
+    if (existingVehicle.driverId === driver.id) {
+      // Upsert: user is re-registering or updating their own vehicle with this number plate
+      const updated = await prisma.vehicle.update({
+        where: { id: existingVehicle.id },
+        data: {
+          vehicleType,
+          make,
+          model,
+          color: color.trim(),
+          seatCapacity: capacity,
+          deletedAt: null,
+          status: 'APPROVED',
+        },
+      });
+      return formatVehicle(updated);
+    } else {
+      throw new ApiError(409, `Vehicle with registration number ${cleanRegNumber} is already registered to another driver`);
+    }
+  }
 
   const vehicle = await prisma.vehicle.create({
     data: {
       driverId: driver.id,
-      vehicleType: type.toUpperCase() === 'BIKE' ? 'BIKE' : 'CAR',
-      registrationNumber: numberPlate.trim().toUpperCase(),
+      vehicleType,
+      registrationNumber: cleanRegNumber,
       make,
       model,
       year: new Date().getFullYear(),
@@ -152,7 +180,16 @@ export const updateRiderVehicle = async (userId, vehicleId, data = {}) => {
     updateData.model = parts.slice(1).join(' ') || '';
   }
   if (data.numberPlate) {
-    updateData.registrationNumber = data.numberPlate.trim().toUpperCase();
+    const regNum = data.numberPlate.trim().toUpperCase();
+    if (regNum !== existing.registrationNumber) {
+      const duplicate = await prisma.vehicle.findFirst({
+        where: { registrationNumber: regNum, id: { not: vehicleId } },
+      });
+      if (duplicate) {
+        throw new ApiError(409, `Vehicle with registration number ${regNum} is already registered`);
+      }
+      updateData.registrationNumber = regNum;
+    }
   }
   if (data.color) {
     updateData.color = data.color.trim();
