@@ -546,7 +546,14 @@ export const requestSeatOnRide = async (passengerUserId, rideId, { seats = 1, pi
       throw new ApiError(400, `Not enough seats available. Only ${ride.availableSeats} remaining.`);
     }
 
-    const pricePerSeat = ride.pricing ? Number(ride.pricing.baseFare) : 45.0;
+    const stops = await tx.rideStop.findMany({
+      where: { rideId },
+      orderBy: { sequence: 'asc' },
+    });
+    const startStop = stops.find((s) => s.stopType === 'START' || s.sequence === 1) || stops[0];
+    const endStop = stops.find((s) => s.stopType === 'END' || s.sequence === stops.length) || stops[stops.length - 1];
+
+    const pricePerSeat = ride.pricing ? Number(ride.pricing.costPerSeat ?? 45.0) : 45.0;
     const totalFare = pricePerSeat * seats;
 
     // Create Booking
@@ -554,10 +561,13 @@ export const requestSeatOnRide = async (passengerUserId, rideId, { seats = 1, pi
       data: {
         rideId,
         passengerId: passengerUserId,
-        seatsBooked: seats,
-        totalFare,
+        pickupStopId: startStop.id,
+        dropoffStopId: endStop.id,
+        seatsRequested: seats,
+        totalCostContribution: totalFare,
+        passengerNotes: notes || pickupPoint || `${ride.startLocationName} Pickup`,
         status: ride.autoAccept ? 'ACCEPTED' : 'PENDING',
-        notes,
+        acceptedAt: ride.autoAccept ? new Date() : null,
       },
     });
 
@@ -575,7 +585,7 @@ export const requestSeatOnRide = async (passengerUserId, rideId, { seats = 1, pi
     return {
       bookingId: booking.id,
       rideId,
-      status: booking.status === 'ACCEPTED' ? 'accepted' : 'requestSent',
+      status: booking.status === 'ACCEPTED' ? 'accepted' : 'pending',
       seatsBooked: seats,
       totalFare,
       message: ride.autoAccept ? 'Seat confirmed automatically!' : 'Seat request sent to rider.',

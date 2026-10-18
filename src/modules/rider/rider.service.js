@@ -514,23 +514,98 @@ export const getMyOfferedRides = async (userId) => {
       passengerName: b.passenger.displayName,
       passengerPhone: b.passenger.phone,
       passengerAvatar: b.passenger.avatarUrl,
-      seatsRequested: b.seatsBooked,
+      seatsRequested: b.seatsRequested,
       status: b.status.toLowerCase(),
-      totalFare: Number(b.totalFare),
-      requestedAt: b.createdAt,
+      totalFare: Number(b.totalCostContribution || 0),
+      requestedAt: b.requestedAt || b.createdAt,
     }));
     return formatted;
   });
 };
 
 /**
+ * 5b. Get Passengers / Bookings for a Specific Offered Ride
+ */
+export const getOfferedRidePassengers = async (userId, rideId) => {
+  const driver = await prisma.driverProfile.findUnique({ where: { userId } });
+  if (!driver) throw new ApiError(403, 'Unauthorized: Driver profile not found');
+
+  const ride = await prisma.ride.findFirst({
+    where: { id: rideId, driverId: driver.id },
+    include: {
+      bookings: {
+        include: {
+          passenger: {
+            select: { id: true, displayName: true, phone: true, avatarUrl: true },
+          },
+          pickupStop: true,
+          dropoffStop: true,
+        },
+        orderBy: { createdAt: 'desc' },
+      },
+    },
+  });
+
+  if (!ride) throw new ApiError(404, 'Offered ride not found');
+
+  const bookedCount = ride.totalSeats - ride.availableSeats;
+  const originName = ride.startLocationName.includes(',')
+    ? ride.startLocationName.split(',')[0].trim()
+    : ride.startLocationName;
+  const destName = ride.endLocationName.includes(',')
+    ? ride.endLocationName.split(',')[0].trim()
+    : ride.endLocationName;
+  const departureDate = new Date(ride.departureAt);
+  const formattedTime = departureDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+
+  const passengers = ride.bookings.map((b) => {
+    const isAccepted = b.status === 'ACCEPTED';
+    const isPending = b.status === 'PENDING';
+    const statusLabel = isAccepted ? 'Confirmed' : isPending ? 'Pending' : b.status.toLowerCase();
+
+    return {
+      bookingId: b.id,
+      passengerId: b.passenger.id,
+      name: b.passenger.displayName || 'Passenger',
+      phone: b.passenger.phone || '',
+      avatarUrl: b.passenger.avatarUrl || 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=200&q=80',
+      seats: b.seatsRequested,
+      pickupPoint: b.pickupStop?.name || b.passengerNotes || `${ride.startLocationName} Point`,
+      dropoffPoint: b.dropoffStop?.name || ride.endLocationName,
+      status: b.status.toLowerCase(),
+      statusLabel,
+      isPending,
+      isConfirmed: isAccepted,
+      fare: Number(b.totalCostContribution || 0),
+      requestedAt: b.requestedAt || b.createdAt,
+      acceptedAt: b.acceptedAt,
+    };
+  });
+
+  return {
+    rideId: ride.id,
+    origin: ride.startLocationName,
+    originName,
+    destination: ride.endLocationName,
+    destName,
+    departureTime: formattedTime,
+    totalSeats: ride.totalSeats,
+    availableSeats: ride.availableSeats,
+    bookedCount: Math.max(0, bookedCount),
+    summary: `${Math.max(0, bookedCount)}/${ride.totalSeats} Seats`,
+    passengers,
+  };
+};
+
+/**
  * 6. Accept or Decline Passenger Request
  */
-export const respondToPassengerRequest = async (userId, bookingId, action) => {
+export const respondToPassengerRequest = async (userId, bookingId, actionOrStatus) => {
   return await prisma.$transaction(async (tx) => {
     const booking = await tx.booking.findUnique({
       where: { id: bookingId },
       include: {
+        passenger: { select: { id: true, displayName: true } },
         ride: { include: { driver: true } },
       },
     });
@@ -543,27 +618,104 @@ export const respondToPassengerRequest = async (userId, bookingId, action) => {
       throw new ApiError(403, 'Unauthorized to respond to this ride request');
     }
 
-    const newStatus = action === 'ACCEPT' ? 'ACCEPTED' : 'REJECTED';
+    const raw = (actionOrStatus || '').toUpperCase();
+    const isAccept = ['ACCEPT', 'ACCEPTED', 'APPROVE'].includes(raw);
+    const isReject = ['REJECT', 'REJECTED', 'DECLINE', 'DECLINED'].includes(raw);
 
-    const updatedBooking = await tx.booking.update({
-      where: { id: bookingId },
-      data: { status: newStatus },
-    });
-
-    if (action === 'ACCEPT') {
-      await tx.ride.update({
-        where: { id: booking.rideId },
-        data: {
-          availableSeats: { decrement: booking.seatsBooked },
-        },
-      });
+    if (!isAccept && !isReject) {
+      throw new ApiError(400, 'Invalid action. Must be ACCEPT or DECLINE/REJECT');
     }
 
-    return {
-      bookingId: updatedBooking.id,
-      status: newStatus.toLowerCase(),
-      message: action === 'ACCEPT' ? 'Seat request accepted!' : 'Seat request declined.',
-    };
+    const passengerName = booking.passenger?.displayName || 'Passenger';
+    const seats = booking.seatsRequested;
+
+    if (isAccept) {
+      if (booking.status === 'ACCEPTED') {
+        return {
+          bookingId: booking.id,
+          rideId: booking.rideId,
+          status: 'confirmed',
+          bookingStatus: 'ACCEPTED',
+          passengerName,
+          seats,
+          availableSeats: booking.ride.availableSeats,
+          totalSeats: booking.ride.totalSeats,
+          bookedCount: booking.ride.totalSeats - booking.ride.availableSeats,
+          message: `Booking request approved for ${passengerName}!`,
+        };
+      }
+
+      if (booking.ride.availableSeats < seats) {
+        throw new ApiError(400, `Not enough seats remaining. Only ${booking.ride.availableSeats} seat(s) left.`);
+      }
+
+      const updatedBooking = await tx.booking.update({
+        where: { id: bookingId },
+        data: {
+          status: 'ACCEPTED',
+          acceptedAt: new Date(),
+        },
+      });
+
+      const updatedRide = await tx.ride.update({
+        where: { id: booking.rideId },
+        data: {
+          availableSeats: { decrement: seats },
+        },
+      });
+
+      if (updatedRide.availableSeats === 0) {
+        await tx.ride.update({
+          where: { id: booking.rideId },
+          data: { status: 'FULL' },
+        });
+      }
+
+      return {
+        bookingId: updatedBooking.id,
+        rideId: booking.rideId,
+        status: 'confirmed',
+        bookingStatus: 'ACCEPTED',
+        passengerName,
+        seats,
+        availableSeats: updatedRide.availableSeats,
+        totalSeats: updatedRide.totalSeats,
+        bookedCount: updatedRide.totalSeats - updatedRide.availableSeats,
+        message: `Booking request approved for ${passengerName}!`,
+      };
+    } else {
+      let currentRide = booking.ride;
+      if (booking.status === 'ACCEPTED') {
+        currentRide = await tx.ride.update({
+          where: { id: booking.rideId },
+          data: {
+            availableSeats: { increment: seats },
+            ...(booking.ride.status === 'FULL' ? { status: 'PUBLISHED' } : {}),
+          },
+        });
+      }
+
+      const updatedBooking = await tx.booking.update({
+        where: { id: bookingId },
+        data: {
+          status: 'REJECTED',
+          rejectedAt: new Date(),
+        },
+      });
+
+      return {
+        bookingId: updatedBooking.id,
+        rideId: booking.rideId,
+        status: 'declined',
+        bookingStatus: 'REJECTED',
+        passengerName,
+        seats,
+        availableSeats: currentRide.availableSeats,
+        totalSeats: currentRide.totalSeats,
+        bookedCount: currentRide.totalSeats - currentRide.availableSeats,
+        message: `Booking declined for ${passengerName}.`,
+      };
+    }
   });
 };
 

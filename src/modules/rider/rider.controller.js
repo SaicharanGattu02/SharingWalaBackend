@@ -42,8 +42,15 @@ export const getMyOfferedRides = asyncHandler(async (req, res) => {
   res.status(200).json(new ApiResponse(200, rides, 'Offered rides retrieved'));
 });
 
+export const getRidePassengers = asyncHandler(async (req, res) => {
+  const result = await riderService.getOfferedRidePassengers(req.user.id, req.params.rideId || req.params.id);
+  res.status(200).json(new ApiResponse(200, result, 'Passenger bookings retrieved successfully'));
+});
+
 export const respondToRequest = asyncHandler(async (req, res) => {
-  const result = await riderService.respondToPassengerRequest(req.user.id, req.params.bookingId, req.body.action);
+  const bookingId = req.params.bookingId || req.params.id;
+  const actionOrStatus = req.body.action || req.body.status;
+  const result = await riderService.respondToPassengerRequest(req.user.id, bookingId, actionOrStatus);
   res.status(200).json(new ApiResponse(200, result, result.message));
 });
 

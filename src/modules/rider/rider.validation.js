@@ -86,9 +86,18 @@ export const updateOfferRideSchema = {
 };
 
 export const respondBookingSchema = {
-  body: z.object({
-    action: z.enum(['ACCEPT', 'DECLINE']),
-  }),
+  body: z
+    .object({
+      action: z
+        .enum(['ACCEPT', 'DECLINE', 'REJECT', 'APPROVE', 'accept', 'decline', 'reject', 'approve'])
+        .optional(),
+      status: z
+        .enum(['ACCEPTED', 'REJECTED', 'DECLINED', 'accepted', 'rejected', 'declined'])
+        .optional(),
+    })
+    .refine((data) => data.action !== undefined || data.status !== undefined, {
+      message: 'Either action (ACCEPT/DECLINE) or status (ACCEPTED/REJECTED) must be provided',
+    }),
 };
 
 export const updateRideStatusSchema = {

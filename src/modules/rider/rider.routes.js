@@ -44,8 +44,15 @@ router.put('/rides/:id', validate(updateOfferRideSchema), riderController.update
 router.delete('/rides/:id', riderController.deleteOfferRide);
 router.put('/rides/offer/:id', validate(updateOfferRideSchema), riderController.updateOfferRide);
 router.delete('/rides/offer/:id', riderController.deleteOfferRide);
-router.patch('/requests/:bookingId/respond', validate(respondBookingSchema), riderController.respondToRequest);
 router.patch('/rides/:rideId/status', validate(updateRideStatusSchema), riderController.updateRideStatus);
+
+// Manage Passengers (Bookings & Requests on Offered Ride)
+router.get('/rides/:rideId/passengers', riderController.getRidePassengers);
+router.get('/rides/:rideId/bookings', riderController.getRidePassengers);
+router.get('/rides/:rideId/requests', riderController.getRidePassengers);
+router.patch('/requests/:bookingId/respond', validate(respondBookingSchema), riderController.respondToRequest);
+router.patch('/bookings/:bookingId/respond', validate(respondBookingSchema), riderController.respondToRequest);
+router.patch('/rides/:rideId/passengers/:bookingId', validate(respondBookingSchema), riderController.respondToRequest);
 
 // Trusted Contacts (Safety / SOS for Rider / Host)
 router.get('/trusted-contacts', userController.getTrustedContacts);
