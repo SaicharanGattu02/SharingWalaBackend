@@ -517,9 +517,12 @@
 ---
 
 ### 2.8 Active Ride Live Tracking
-* **Screen:** `active_ride_details_sheet.dart`
-* **Method & Path:** `GET /api/v1/user/rides/:id/active`
-* **Auth Required:** ✅ Yes
+* **Screen:** `active_ride_details_sheet.dart`, `commute_active_tracking_screen.dart`
+* **Method & Path Options:**
+  - `GET /api/v1/user/rides/active` *(Auto-detects commuter's active running ride)*
+  - `GET /api/v1/user/active-ride`
+  - `GET /api/v1/user/rides/:id/active` *(Direct ride ID)*
+* **Auth Required:** ✅ Yes (`Bearer <token>`)
 * **Success Response (`200 OK`):**
 ```json
 {

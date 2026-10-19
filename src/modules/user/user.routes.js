@@ -15,6 +15,7 @@ const router = Router();
 
 // Public / Semi-authenticated ride search & details
 router.get('/rides/search', optionalAuthenticate, validate({ query: searchRidesQuerySchema }), userController.searchRides);
+router.get('/rides/active', authenticate, userController.getActiveRideTracking);
 router.get('/rides/:id', optionalAuthenticate, userController.getRideDetails);
 
 // Authenticated Passenger / Commuter Routes
@@ -35,6 +36,10 @@ router.delete('/trusted-contacts/:id', userController.deleteTrustedContact);
 // Bookings & Rides
 router.post('/rides/:id/request-seat', validate(requestSeatSchema), userController.requestSeat);
 router.get('/my-rides', userController.getMyRides);
+router.get('/active-ride', userController.getActiveRideTracking);
+router.get('/active-trip', userController.getActiveRideTracking);
+router.get('/rides/active', userController.getActiveRideTracking);
 router.get('/rides/:id/active', userController.getActiveRideTracking);
+router.get('/rides/active/:id', userController.getActiveRideTracking);
 
 export default router;

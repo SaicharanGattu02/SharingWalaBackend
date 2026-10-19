@@ -1109,8 +1109,52 @@ export const getUserMyRides = async (userId, query = {}) => {
  * 8. Active Ride Live Tracking Details
  */
 export const getActiveRideTracking = async (userId, rideId) => {
+  let targetRideId = rideId;
+
+  // Auto-resolve if rideId is not passed or is 'active' / 'current'
+  if (!targetRideId || targetRideId === 'active' || targetRideId === 'current') {
+    // 1. Check passenger bookings in active/in_progress rides
+    const activeBooking = await prisma.booking.findFirst({
+      where: {
+        passengerId: userId,
+        status: { in: ['ACCEPTED', 'COMPLETED'] },
+        ride: {
+          status: { in: ['IN_PROGRESS', 'PUBLISHED'] },
+        },
+      },
+      include: { ride: true },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (activeBooking) {
+      targetRideId = activeBooking.rideId;
+    } else {
+      // 2. Check if driver of an active in_progress ride
+      const driver = await prisma.driverProfile.findUnique({ where: { userId } });
+      if (driver) {
+        const activeDriverRide = await prisma.ride.findFirst({
+          where: {
+            driverId: driver.id,
+            status: { in: ['IN_PROGRESS', 'PUBLISHED'] },
+          },
+          orderBy: { departureAt: 'desc' },
+        });
+        if (activeDriverRide) targetRideId = activeDriverRide.id;
+      }
+    }
+  }
+
+  if (!targetRideId) {
+    return {
+      hasActiveRide: false,
+      rideId: null,
+      status: 'none',
+      message: 'No active running trip found at this time',
+    };
+  }
+
   const ride = await prisma.ride.findUnique({
-    where: { id: rideId },
+    where: { id: targetRideId },
     include: {
       driver: { include: { user: true } },
       vehicle: true,
@@ -1118,6 +1162,7 @@ export const getActiveRideTracking = async (userId, rideId) => {
       stops: { orderBy: { sequence: 'asc' } },
       bookings: {
         where: { passengerId: userId },
+        include: { pickupStop: true, dropoffStop: true },
       },
     },
   });
@@ -1126,23 +1171,69 @@ export const getActiveRideTracking = async (userId, rideId) => {
     throw new ApiError(404, 'Active ride not found');
   }
 
+  const userBooking = ride.bookings?.[0] || null;
+  const departureDate = new Date(ride.departureAt);
+  const formattedTime = departureDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+  const formattedDate = departureDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  const price = userBooking?.totalCostContribution
+    ? Number(userBooking.totalCostContribution)
+    : ride.pricing
+    ? Number(ride.pricing.costPerSeat ?? 45.0)
+    : 45.0;
+
   return {
+    hasActiveRide: true,
     rideId: ride.id,
-    driverName: ride.driver.user.displayName,
-    driverPhone: ride.driver.user.phone,
-    driverAvatar: ride.driver.user.avatarUrl,
-    vehicleName: `${ride.vehicle.make} ${ride.vehicle.model}`,
-    vehicleNumber: ride.vehicle.registrationNumber,
-    vehicleColor: ride.vehicle.color,
+    id: ride.id,
+    tripId: ride.id,
     status: ride.status.toLowerCase(),
+    statusLabel: ride.status === 'IN_PROGRESS' ? 'Trip in Progress' : 'Upcoming Trip',
+    rawStatus: ride.status,
+    isStarted: ride.status === 'IN_PROGRESS',
+    isInProgress: ride.status === 'IN_PROGRESS',
+    origin: ride.startLocationName,
+    originName: ride.startLocationName.includes(',') ? ride.startLocationName.split(',')[0].trim() : ride.startLocationName,
+    destination: ride.endLocationName,
+    destName: ride.endLocationName.includes(',') ? ride.endLocationName.split(',')[0].trim() : ride.endLocationName,
+    date: formattedDate,
+    departureTime: formattedTime,
+    mode: ride.vehicle?.vehicleType === 'BIKE' ? 'bikepool' : 'carpool',
+    driverId: ride.driver?.id,
+    driverName: ride.driver?.user?.displayName || 'Driver',
+    driverPhone: ride.driver?.user?.phone || '',
+    driverAvatar:
+      ride.driver?.user?.avatarUrl ||
+      'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=400&q=80',
+    driverRating: Number(ride.driver?.averageRating || 4.9),
+    vehicleName: ride.vehicle ? `${ride.vehicle.make} ${ride.vehicle.model}` : 'Vehicle',
+    vehicleNumber: ride.vehicle?.registrationNumber || '',
+    vehicleColor: ride.vehicle?.color || '',
+    totalSeats: ride.totalSeats,
+    availableSeats: ride.availableSeats,
     currentLocation: {
       latitude: Number(ride.startLat) + 0.005,
       longitude: Number(ride.startLng) + 0.005,
       heading: 45.0,
-      speedKmh: 35,
+      speedKmh: ride.status === 'IN_PROGRESS' ? 35 : 0,
     },
+    pickupLocation: userBooking?.pickupStop?.name || ride.stops?.[0]?.name || ride.startLocationName,
+    pickupPoint: userBooking?.pickupStop?.name || ride.stops?.[0]?.name || ride.startLocationName,
+    dropLocation: userBooking?.dropoffStop?.name || ride.stops?.[ride.stops.length - 1]?.name || ride.endLocationName,
+    dropoffPoint: userBooking?.dropoffStop?.name || ride.stops?.[ride.stops.length - 1]?.name || ride.endLocationName,
+    bookingId: userBooking?.id,
+    seatsBooked: userBooking?.seatsRequested || 1,
+    fare: price,
+    bookingStatus: userBooking?.status?.toLowerCase() || 'accepted',
     otp: '4821',
-    meetingPoint: ride.stops?.[0]?.name || ride.startLocationName,
+    meetingPoint: userBooking?.pickupStop?.name || ride.stops?.[0]?.name || ride.startLocationName,
+    stops: ride.stops.map((s) => ({
+      id: s.id,
+      name: s.name,
+      type: s.stopType,
+      latitude: Number(s.latitude),
+      longitude: Number(s.longitude),
+      sequence: s.sequence,
+    })),
     emergencyContacts: await getTrustedContacts(userId),
   };
 };
