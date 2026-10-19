@@ -60,3 +60,40 @@ export const requireVerifiedDriver = (req, res, next) => {
   }
   next();
 };
+
+export const optionalAuthenticate = asyncHandler(async (req, res, next) => {
+  let token;
+  const authHeader = req.headers.authorization;
+
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    token = authHeader.split(' ')[1];
+  }
+
+  if (!token) {
+    return next();
+  }
+
+  try {
+    const decoded = jwt.verify(token, env.jwt.secret);
+    const user = await prisma.user.findUnique({
+      where: { id: decoded.userId },
+      select: {
+        id: true,
+        displayName: true,
+        phone: true,
+        status: true,
+        driverProfile: {
+          select: { id: true, verificationStatus: true },
+        },
+      },
+    });
+    if (user && user.status === 'ACTIVE') {
+      const isDriverApproved = user.driverProfile?.verificationStatus === 'APPROVED';
+      user.role = isDriverApproved ? 'RIDER' : 'USER';
+      user.roles = user.driverProfile ? ['USER', 'RIDER'] : ['USER'];
+      req.user = user;
+    }
+  } catch {}
+  next();
+});
+

@@ -216,6 +216,9 @@ export const formatRideForFlutter = (ride) => {
     meetingPoint: ride.stops?.[0]?.name || `${ride.startLocationName} Main Gate`,
     isWomenOnly: ride.womenOnly,
     pricePerSeat: price,
+    price: price,
+    isFree: price === 0 || ride.pricing?.pricingType === 'FREE',
+    pricingType: (price === 0 || ride.pricing?.pricingType === 'FREE') ? 'FREE' : 'COST_SHARING',
   };
 };
 
@@ -417,19 +420,75 @@ export const deleteTrustedContact = async (userId, contactId) => {
 };
 
 /**
+ * Helper to enrich a formatted ride with the logged-in commuter's booking/request status
+ * Status values: 'none' | 'pending' | 'accepted' | 'rejected' | 'cancelled' | 'completed'
+ */
+export const enrichRideWithUserBooking = (formattedRide, rideBookings = [], currentUserId = null) => {
+  let requestStatus = 'none';
+  let userBooking = null;
+
+  if (currentUserId && rideBookings && rideBookings.length > 0) {
+    const myBooking = rideBookings.find((b) => b.passengerId === currentUserId);
+    if (myBooking) {
+      const statusLower = myBooking.status.toLowerCase();
+      // Normalize 'declined' -> 'rejected', 'pending' -> 'pending', 'accepted' -> 'accepted'
+      requestStatus = statusLower === 'declined' ? 'rejected' : statusLower;
+      userBooking = {
+        bookingId: myBooking.id,
+        status: requestStatus,
+        seatsRequested: myBooking.seatsRequested,
+        totalFare: Number(myBooking.totalCostContribution || 0),
+        notes: myBooking.passengerNotes || '',
+        requestedAt: myBooking.requestedAt || myBooking.createdAt,
+      };
+    }
+  }
+
+  return {
+    ...formattedRide,
+    requestStatus,
+    bookingStatus: requestStatus,
+    isRequestSent: requestStatus !== 'none',
+    userBooking,
+  };
+};
+
+/**
  * 4. Search Available Rides for Commuters
  */
-export const searchUserRides = async (query = {}) => {
-  const { origin, destination, mode, womenOnly } = query;
+export const searchUserRides = async (query = {}, currentUserId = null) => {
+  const { origin, destination, mode, womenOnly, verifiedOnly, search, q, date } = query;
+
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
 
   const whereClause = {
     status: 'PUBLISHED',
     availableSeats: { gt: 0 },
-    departureAt: { gte: new Date() },
   };
 
-  if (womenOnly === 'true') {
+  if (date) {
+    if (date.toLowerCase() === 'today') {
+      const endOfToday = new Date(startOfToday);
+      endOfToday.setHours(23, 59, 59, 999);
+      whereClause.departureAt = { gte: new Date(Date.now() - 48 * 3600 * 1000), lte: endOfToday };
+    } else if (date.toLowerCase() === 'tomorrow') {
+      const startOfTomorrow = new Date(startOfToday);
+      startOfTomorrow.setDate(startOfTomorrow.getDate() + 1);
+      const endOfTomorrow = new Date(startOfTomorrow);
+      endOfTomorrow.setHours(23, 59, 59, 999);
+      whereClause.departureAt = { gte: startOfTomorrow, lte: endOfTomorrow };
+    }
+  }
+
+  const isWomenOnly = womenOnly === 'true' || womenOnly === true;
+  if (isWomenOnly) {
     whereClause.womenOnly = true;
+  }
+
+  const isVerifiedOnly = verifiedOnly === 'true' || verifiedOnly === true;
+  if (isVerifiedOnly) {
+    whereClause.driver = { verificationStatus: 'APPROVED' };
   }
 
   if (mode && mode !== 'all') {
@@ -440,14 +499,55 @@ export const searchUserRides = async (query = {}) => {
     }
   }
 
-  if (origin) {
-    whereClause.startLocationName = { contains: origin.trim() };
-  }
-  if (destination) {
-    whereClause.endLocationName = { contains: destination.trim() };
+  const cleanLoc = (str) => {
+    if (!str || !str.trim()) return '';
+    const parts = str.split(',').map((p) => p.trim()).filter(Boolean);
+    return parts[0] || str.trim();
+  };
+
+  const andConditions = [];
+
+  if (origin && origin.trim()) {
+    const origClean = cleanLoc(origin);
+    const origTokens = origin.split(/[,;\-\/]/).map((s) => s.trim()).filter((s) => s.length >= 3);
+    const originMatchList = [
+      { startLocationName: { contains: origin.trim() } },
+      ...(origClean ? [{ startLocationName: { contains: origClean } }] : []),
+      ...origTokens.slice(0, 3).map((t) => ({ startLocationName: { contains: t } })),
+    ];
+    andConditions.push({ OR: originMatchList });
   }
 
-  const rides = await prisma.ride.findMany({
+  if (destination && destination.trim()) {
+    const destClean = cleanLoc(destination);
+    const destTokens = destination.split(/[,;\-\/]/).map((s) => s.trim()).filter((s) => s.length >= 3);
+    const destMatchList = [
+      { endLocationName: { contains: destination.trim() } },
+      ...(destClean ? [{ endLocationName: { contains: destClean } }] : []),
+      ...destTokens.slice(0, 3).map((t) => ({ endLocationName: { contains: t } })),
+    ];
+    andConditions.push({ OR: destMatchList });
+  }
+
+  const keyword = (search || q || '').trim().toLowerCase();
+  if (keyword) {
+    andConditions.push({
+      OR: [
+        { startLocationName: { contains: keyword } },
+        { endLocationName: { contains: keyword } },
+        { notes: { contains: keyword } },
+        { vehicle: { make: { contains: keyword } } },
+        { vehicle: { model: { contains: keyword } } },
+        { vehicle: { registrationNumber: { contains: keyword } } },
+      ],
+    });
+  }
+
+  if (andConditions.length > 0) {
+    whereClause.AND = andConditions;
+  }
+
+  let rides = await prisma.ride.findMany({
     where: whereClause,
     include: {
       driver: {
@@ -458,29 +558,138 @@ export const searchUserRides = async (query = {}) => {
       stops: {
         orderBy: { sequence: 'asc' },
       },
+      bookings: {
+        select: {
+          id: true,
+          passengerId: true,
+          status: true,
+          seatsRequested: true,
+          totalCostContribution: true,
+          passengerNotes: true,
+          requestedAt: true,
+          createdAt: true,
+        },
+      },
     },
     orderBy: { departureAt: 'asc' },
     take: 30,
   });
 
-  if (rides.length > 0) {
-    return rides.map(formatRideForFlutter);
+  // If strict AND location matching returned no rides, perform relaxed search
+  // so newly offered rides are visible to commuters even if search inputs contain slight variations
+  if (rides.length === 0) {
+    const relaxedWhere = {
+      status: 'PUBLISHED',
+      availableSeats: { gt: 0 },
+    };
+    if (isWomenOnly) relaxedWhere.womenOnly = true;
+    if (isVerifiedOnly) relaxedWhere.driver = { verificationStatus: 'APPROVED' };
+    if (mode && mode !== 'all') {
+      relaxedWhere.vehicle = { vehicleType: mode === 'bikepool' ? 'BIKE' : 'CAR' };
+    }
+
+    // Try finding rides matching either origin OR destination
+    const orLocationMatch = [];
+    if (origin && origin.trim()) {
+      const origClean = cleanLoc(origin);
+      orLocationMatch.push({ startLocationName: { contains: origClean } });
+    }
+    if (destination && destination.trim()) {
+      const destClean = cleanLoc(destination);
+      orLocationMatch.push({ endLocationName: { contains: destClean } });
+    }
+
+    if (orLocationMatch.length > 0) {
+      relaxedWhere.OR = orLocationMatch;
+    }
+
+    rides = await prisma.ride.findMany({
+      where: relaxedWhere,
+      include: {
+        driver: { include: { user: true } },
+        vehicle: true,
+        pricing: true,
+        stops: { orderBy: { sequence: 'asc' } },
+        bookings: {
+          select: {
+            id: true,
+            passengerId: true,
+            status: true,
+            seatsRequested: true,
+            totalCostContribution: true,
+            passengerNotes: true,
+            requestedAt: true,
+            createdAt: true,
+          },
+        },
+      },
+      orderBy: { departureAt: 'asc' },
+      take: 30,
+    });
   }
 
-  // Fallback initial commuter rides from Flutter MockDataService for instant UI preview
-  return defaultMockRides.filter((r) => {
-    if (womenOnly === 'true' && !r.isWomenOnly) return false;
-    if (mode && mode !== 'all' && r.mode !== mode) return false;
-    if (origin && !r.origin.toLowerCase().includes(origin.toLowerCase())) return false;
-    if (destination && !r.destination.toLowerCase().includes(destination.toLowerCase())) return false;
-    return true;
-  });
+  // If still no rides found in DB with relaxed location, fetch all active published rides
+  if (rides.length === 0) {
+    const broadWhere = {
+      status: 'PUBLISHED',
+      availableSeats: { gt: 0 },
+    };
+    if (isWomenOnly) broadWhere.womenOnly = true;
+    if (isVerifiedOnly) broadWhere.driver = { verificationStatus: 'APPROVED' };
+    if (mode && mode !== 'all') {
+      broadWhere.vehicle = { vehicleType: mode === 'bikepool' ? 'BIKE' : 'CAR' };
+    }
+
+    rides = await prisma.ride.findMany({
+      where: broadWhere,
+      include: {
+        driver: { include: { user: true } },
+        vehicle: true,
+        pricing: true,
+        stops: { orderBy: { sequence: 'asc' } },
+        bookings: {
+          select: {
+            id: true,
+            passengerId: true,
+            status: true,
+            seatsRequested: true,
+            totalCostContribution: true,
+            passengerNotes: true,
+            requestedAt: true,
+            createdAt: true,
+          },
+        },
+      },
+      orderBy: { departureAt: 'asc' },
+      take: 30,
+    });
+  }
+
+  if (rides.length > 0) {
+    return rides.map((r) => enrichRideWithUserBooking(formatRideForFlutter(r), r.bookings, currentUserId));
+  }
+
+  // Final fallback initial commuter rides from Flutter MockDataService for instant preview
+  return defaultMockRides
+    .filter((r) => {
+      if (isWomenOnly && !r.isWomenOnly) return false;
+      if (isVerifiedOnly && !r.isVerified) return false;
+      if (mode && mode !== 'all' && r.mode !== mode) return false;
+      return true;
+    })
+    .map((r) => ({
+      ...r,
+      requestStatus: 'none',
+      bookingStatus: 'none',
+      isRequestSent: false,
+      userBooking: null,
+    }));
 };
 
 /**
  * 5. Get Ride Details by ID
  */
-export const getRideDetails = async (rideId) => {
+export const getRideDetails = async (rideId, currentUserId = null) => {
   const ride = await prisma.ride.findUnique({
     where: { id: rideId },
     include: {
@@ -495,9 +704,10 @@ export const getRideDetails = async (rideId) => {
       bookings: {
         include: {
           passenger: {
-            select: { id: true, displayName: true, avatarUrl: true },
+            select: { id: true, displayName: true, avatarUrl: true, phone: true },
           },
         },
+        orderBy: { createdAt: 'desc' },
       },
     },
   });
@@ -507,6 +717,10 @@ export const getRideDetails = async (rideId) => {
     if (mockRide) {
       return {
         ...mockRide,
+        requestStatus: 'none',
+        bookingStatus: 'none',
+        isRequestSent: false,
+        userBooking: null,
         stopsTimeline: [
           { id: 'stop_1', name: mockRide.origin, sequence: 1, type: 'START', time: mockRide.departureTime },
           { id: 'stop_2', name: mockRide.destination, sequence: 2, type: 'END', time: '09:15 AM' },
@@ -525,7 +739,7 @@ export const getRideDetails = async (rideId) => {
     time: s.estimatedArrivalAt ? new Date(s.estimatedArrivalAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : null,
   }));
 
-  return formatted;
+  return enrichRideWithUserBooking(formatted, ride.bookings, currentUserId);
 };
 
 /**
@@ -555,6 +769,38 @@ export const requestSeatOnRide = async (passengerUserId, rideId, { seats = 1, pi
 
     const pricePerSeat = ride.pricing ? Number(ride.pricing.costPerSeat ?? 45.0) : 45.0;
     const totalFare = pricePerSeat * seats;
+
+    // Check if passenger already has an active booking on this ride
+    const existingActive = await tx.booking.findFirst({
+      where: {
+        rideId,
+        passengerId: passengerUserId,
+        status: { in: ['PENDING', 'ACCEPTED'] },
+      },
+    });
+
+    if (existingActive) {
+      if (existingActive.status === 'ACCEPTED') {
+        throw new ApiError(400, 'You already have a confirmed seat on this ride');
+      }
+      return {
+        bookingId: existingActive.id,
+        rideId,
+        status: 'pending',
+        seatsBooked: existingActive.seatsRequested,
+        totalFare: Number(existingActive.totalCostContribution || 0),
+        message: 'Your seat request is already pending with the host.',
+      };
+    }
+
+    // Clean up any old rejected/cancelled bookings for this passenger on this ride to prevent duplicates
+    await tx.booking.deleteMany({
+      where: {
+        rideId,
+        passengerId: passengerUserId,
+        status: { in: ['REJECTED', 'CANCELLED'] },
+      },
+    });
 
     // Create Booking
     const booking = await tx.booking.create({
@@ -594,11 +840,78 @@ export const requestSeatOnRide = async (passengerUserId, rideId, { seats = 1, pi
 };
 
 /**
- * 7. My Rides (Categorized: Active, Upcoming, Completed)
+ * 7. My Rides (Unified 3-tab support: History, Recurring, Offered, Requested)
+ * Handles all tabs for MyRidesScreen:
+ * - History: completed and cancelled trips
+ * - Recurring: user's recurring daily routes
+ * - Offered: active host rides
+ * - Requested: active passenger bookings
  */
-export const getUserMyRides = async (userId) => {
-  const bookings = await prisma.booking.findMany({
-    where: { passengerId: userId },
+export const getUserMyRides = async (userId, query = {}) => {
+  const driver = await prisma.driverProfile.findUnique({
+    where: { userId },
+  });
+
+  const search = (query.search || query.q || '').trim().toLowerCase();
+  const tabFilter = (query.type || query.tab || query.filter || '').trim().toLowerCase();
+
+  // ----------------------------------------------------
+  // 1. History: Completed & Cancelled trips (Driver + Passenger)
+  // ----------------------------------------------------
+  const history = [];
+
+  // 1a. Hosted rides that are COMPLETED or CANCELLED
+  if (driver) {
+    const hostedHistory = await prisma.ride.findMany({
+      where: {
+        driverId: driver.id,
+        status: { in: ['COMPLETED', 'CANCELLED'] },
+      },
+      include: {
+        vehicle: true,
+        pricing: true,
+        driver: { include: { user: true } },
+        bookings: {
+          include: {
+            passenger: {
+              select: { id: true, displayName: true, phone: true, avatarUrl: true },
+            },
+          },
+          orderBy: { createdAt: 'desc' },
+        },
+      },
+      orderBy: { departureAt: 'desc' },
+    });
+
+    for (const r of hostedHistory) {
+      const formatted = formatRideForFlutter(r);
+      formatted.isHost = true;
+      formatted.status = r.status === 'CANCELLED' ? 'cancelled' : 'completed';
+      formatted.cancellationReason = r.cancellationReason || (r.status === 'CANCELLED' ? 'Trip cancelled' : null);
+      formatted.passengerRequests = r.bookings.map((b) => ({
+        bookingId: b.id,
+        passengerId: b.passenger.id,
+        passengerName: b.passenger.displayName,
+        passengerPhone: b.passenger.phone,
+        passengerAvatar: b.passenger.avatarUrl,
+        seatsRequested: b.seatsRequested,
+        status: b.status.toLowerCase(),
+        totalFare: Number(b.totalCostContribution || 0),
+        requestedAt: b.requestedAt || b.createdAt,
+      }));
+      history.push(formatted);
+    }
+  }
+
+  // 1b. Passenger bookings that are COMPLETED or CANCELLED or REJECTED
+  const passengerHistoryBookings = await prisma.booking.findMany({
+    where: {
+      passengerId: userId,
+      OR: [
+        { status: { in: ['COMPLETED', 'CANCELLED', 'REJECTED'] } },
+        { ride: { status: { in: ['COMPLETED', 'CANCELLED'] } } },
+      ],
+    },
     include: {
       ride: {
         include: {
@@ -612,27 +925,184 @@ export const getUserMyRides = async (userId) => {
     orderBy: { createdAt: 'desc' },
   });
 
-  const active = [];
-  const upcoming = [];
-  const completed = [];
-
-  for (const b of bookings) {
+  for (const b of passengerHistoryBookings) {
     if (!b.ride) continue;
     const formatted = formatRideForFlutter(b.ride);
     formatted.bookingId = b.id;
-    formatted.seatsBooked = b.seatsBooked;
+    formatted.seatsBooked = b.seatsRequested;
     formatted.bookingStatus = b.status.toLowerCase();
+    formatted.isHost = false;
+    const isCancelled = b.status === 'CANCELLED' || b.status === 'REJECTED' || b.ride.status === 'CANCELLED';
+    formatted.status = isCancelled ? 'cancelled' : 'completed';
+    formatted.cancellationReason = b.ride.cancellationReason || (isCancelled ? 'Trip cancelled' : null);
+    history.push(formatted);
+  }
 
-    if (b.ride.status === 'IN_PROGRESS' || b.status === 'ACCEPTED' && new Date(b.ride.departureAt) <= new Date()) {
-      active.push(formatted);
-    } else if (b.ride.status === 'COMPLETED' || b.status === 'COMPLETED') {
-      completed.push(formatted);
-    } else if (b.status === 'PENDING' || b.status === 'ACCEPTED') {
-      upcoming.push(formatted);
+  // Sort all history by departure date descending
+  history.sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+
+  // ----------------------------------------------------
+  // 2. Recurring: Active Recurring Routes
+  // ----------------------------------------------------
+  let recurring = [];
+  if (driver) {
+    const recurringRides = await prisma.recurringRide.findMany({
+      where: {
+        driverId: driver.id,
+        isActive: true,
+      },
+      include: {
+        vehicle: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    recurring = recurringRides.map((rec) => {
+      let days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
+      try {
+        if (rec.daysOfWeek) {
+          days = typeof rec.daysOfWeek === 'string' ? JSON.parse(rec.daysOfWeek) : rec.daysOfWeek;
+        }
+      } catch {}
+
+      return {
+        id: rec.id,
+        origin: rec.startLocationName,
+        destination: rec.endLocationName,
+        departureTime: rec.departureTime,
+        returnTime: rec.returnTime || '',
+        activeDays: days,
+        daysOfWeek: days,
+        totalSeats: rec.totalSeats,
+        seats: rec.totalSeats,
+        availableSeats: rec.totalSeats,
+        mode: rec.vehicle?.vehicleType === 'BIKE' ? 'bikepool' : 'carpool',
+        vehicleName: rec.vehicle ? `${rec.vehicle.make} ${rec.vehicle.model}`.trim() : 'Vehicle',
+        vehicleNumber: rec.vehicle?.registrationNumber || '',
+        vehicleColor: rec.vehicle?.color || '',
+        isActive: rec.isActive,
+        status: rec.isActive ? 'active' : 'paused',
+        createdAt: rec.createdAt,
+      };
+    });
+  }
+
+  // ----------------------------------------------------
+  // 3. Offered: Active Host Offered Rides
+  // ----------------------------------------------------
+  const offered = [];
+  if (driver) {
+    const activeOfferedRides = await prisma.ride.findMany({
+      where: {
+        driverId: driver.id,
+        status: { in: ['PUBLISHED', 'IN_PROGRESS', 'FULL'] },
+      },
+      include: {
+        vehicle: true,
+        pricing: true,
+        driver: { include: { user: true } },
+        bookings: {
+          include: {
+            passenger: {
+              select: { id: true, displayName: true, phone: true, avatarUrl: true },
+            },
+          },
+          orderBy: { createdAt: 'desc' },
+        },
+      },
+      orderBy: { departureAt: 'asc' },
+    });
+
+    for (const r of activeOfferedRides) {
+      const formatted = formatRideForFlutter(r);
+      formatted.isHost = true;
+      formatted.passengerRequests = r.bookings.map((b) => ({
+        bookingId: b.id,
+        passengerId: b.passenger.id,
+        passengerName: b.passenger.displayName,
+        passengerPhone: b.passenger.phone,
+        passengerAvatar: b.passenger.avatarUrl,
+        seatsRequested: b.seatsRequested,
+        status: b.status.toLowerCase(),
+        totalFare: Number(b.totalCostContribution || 0),
+        requestedAt: b.requestedAt || b.createdAt,
+      }));
+      offered.push(formatted);
     }
   }
 
-  return { active, upcoming, completed };
+  // ----------------------------------------------------
+  // 4. Requested: Active Passenger Bookings
+  // ----------------------------------------------------
+  const requested = [];
+  const activeBookings = await prisma.booking.findMany({
+    where: {
+      passengerId: userId,
+      status: { in: ['PENDING', 'ACCEPTED'] },
+      ride: {
+        status: { in: ['PUBLISHED', 'IN_PROGRESS', 'FULL'] },
+      },
+    },
+    include: {
+      ride: {
+        include: {
+          driver: { include: { user: true } },
+          vehicle: true,
+          pricing: true,
+          stops: true,
+        },
+      },
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+
+  for (const b of activeBookings) {
+    if (!b.ride) continue;
+    const formatted = formatRideForFlutter(b.ride);
+    formatted.bookingId = b.id;
+    formatted.seatsBooked = b.seatsRequested;
+    formatted.bookingStatus = b.status.toLowerCase();
+    formatted.isHost = false;
+    requested.push(formatted);
+  }
+
+  // Apply optional search filter
+  const applySearch = (list) => {
+    if (!search) return list;
+    return list.filter((r) =>
+      (r.origin && r.origin.toLowerCase().includes(search)) ||
+      (r.destination && r.destination.toLowerCase().includes(search)) ||
+      (r.driverName && r.driverName.toLowerCase().includes(search)) ||
+      (r.vehicleName && r.vehicleName.toLowerCase().includes(search))
+    );
+  };
+
+  const filteredHistory = applySearch(history);
+  const filteredRecurring = applySearch(recurring);
+  const filteredOffered = applySearch(offered);
+  const filteredRequested = applySearch(requested);
+
+  // Return tab-specific array if client explicitly requests tab
+  if (tabFilter === 'history') return filteredHistory;
+  if (tabFilter === 'recurring') return filteredRecurring;
+  if (tabFilter === 'offered') return filteredOffered;
+  if (tabFilter === 'requested') return filteredRequested;
+
+  // Single unified response object supporting all Flutter state bindings
+  return {
+    history: filteredHistory,
+    recurring: filteredRecurring,
+    offered: filteredOffered,
+    requested: filteredRequested,
+    myHistoryRides: filteredHistory,
+    recurringRoutes: filteredRecurring,
+    myOfferedRides: filteredOffered,
+    myRequestedRides: filteredRequested,
+    // Backward compatibility aliases
+    active: filteredOffered.length > 0 ? filteredOffered : filteredRequested,
+    upcoming: filteredRequested,
+    completed: filteredHistory.filter((h) => h.status === 'completed'),
+  };
 };
 
 /**

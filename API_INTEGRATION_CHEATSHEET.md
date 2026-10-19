@@ -311,48 +311,56 @@
 
 ---
 
-### 2.4 Search Available Rides (Carpool, Bikepool, Other)
-* **Screen:** `search_rides_screen.dart`, `ride_result_item_card.dart`
+### 2.4 Search Available Rides (Carpool, Bikepool)
+* **Screens:** `SearchRidesScreen`, `RouteSearchCard`, `SearchFilterBar`, `CyclingSearchBar`, `MyRideCard`
 * **Method & Path:** `GET /api/v1/user/rides/search`
-* **Auth Required:** ❌ Optional (Publicly accessible)
+* **Auth Required:** ❌ Optional (Public)
 * **Query Parameters:**
-  * `origin`: (e.g. `Kondapur`)
-  * `destination`: (e.g. `Hitech City`)
-  * `mode`: `carpool`, `bikepool`, `other`, or `all`
-  * `womenOnly`: `true` or `false`
-* **Example URL:** `http://localhost:5000/api/v1/user/rides/search?mode=all`
+  * `origin`: (e.g. `Kondapur, Hyderabad` or `Siddipet`)
+  * `destination`: (e.g. `Hitech City, Hyderabad`)
+  * `mode`: `carpool` | `bikepool` | `all`
+  * `womenOnly`: `true` | `false` (filter rides hosted by verified female commuters)
+  * `verifiedOnly`: `true` | `false` (filter ID & driver verified hosts only)
+  * `date`: `Today` | `Tomorrow` | date string
+  * `search` / `q`: Keyword search string (matches location, vehicle, driver name, notes)
+* **Example URLs:**
+  * `http://192.168.0.100:5000/api/v1/user/rides/search?mode=carpool`
+  * `http://192.168.0.100:5000/api/v1/user/rides/search?mode=bikepool`
+  * `http://192.168.0.100:5000/api/v1/user/rides/search?womenOnly=true`
+  * `http://192.168.0.100:5000/api/v1/user/rides/search?mode=carpool&womenOnly=true`
+  * `http://192.168.0.100:5000/api/v1/user/rides/search?origin=Siddipet&mode=carpool&verifiedOnly=true`
 * **Success Response (`200 OK`):**
 ```json
 {
   "statusCode": 200,
   "data": [
     {
-      "id": "ride_101",
-      "driverId": "drv_1",
-      "driverName": "Ravi Kumar",
-      "driverAvatar": "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=400&q=80",
-      "rating": 4.95,
-      "totalRides": 124,
+      "id": "cmvf6ov920001va5ok288bje8",
+      "driverId": "cmve65iik0003va6sxfbntaad",
+      "driverName": "Sai Charan Gattu",
+      "driverAvatar": "/data/user/0/com.sharing.wala/cache/fbebee3d-e3a8-48f4-b0cf-bcb199ee9ebe/1000043538.jpg_compressed.jpg",
+      "rating": 5.0,
+      "totalRides": 10,
       "isVerified": true,
       "routeMatchPercentage": 95,
-      "origin": "Kondapur Main Road",
-      "destination": "Cyber Towers, Hitech City",
+      "origin": "Siddipet Medak Road, Maruthi Chowk, Ganesh Nagar, Siddipet, Telangana. Pin-502103 (India)",
+      "destination": "Siddipet New Bus Stand",
       "departureTime": "08:30 AM",
       "date": "Today",
       "mode": "carpool",
-      "rideType": "recurring",
-      "availableSeats": 3,
-      "totalSeats": 4,
-      "vehicleName": "Honda City",
-      "vehicleNumber": "TS 07 FA 1024",
-      "vehicleColor": "Silver",
-      "communityName": "Hitech Techies Community",
+      "rideType": "oneTime",
+      "availableSeats": 2,
+      "totalSeats": 3,
+      "vehicleName": "Tata Seira",
+      "vehicleNumber": "TS08D0912",
+      "vehicleColor": "White",
+      "communityName": null,
       "pickupFlexibility": "Flexible within 500m",
-      "notes": "Daily office commute. Clean car, pleasant music, split fuel cost community ride.",
+      "notes": "Daily commute. Looking to connect with co-travelers.",
       "status": "available",
-      "meetingPoint": "Near Kondapur Signal Metro Pillar 42",
+      "meetingPoint": "Siddipet Medak Road, Maruthi Chowk, Ganesh Nagar, Siddipet, Telangana. Pin-502103 (India) Main Point",
       "isWomenOnly": false,
-      "pricePerSeat": 45.0
+      "pricePerSeat": 25.0
     }
   ],
   "message": "Available rides found",
@@ -362,35 +370,70 @@
 
 ---
 
-### 2.5 Get Ride Details
-* **Screen:** `ride_details_screen.dart`
+### 2.5 Get Ride Details & Route Timeline
+* **Screens:** `RideDetailsScreen`, `DriverInfoHeader`, `RouteTimelineView`, `VehicleDetailsCard`
 * **Method & Path:** `GET /api/v1/user/rides/:id`
-* **Auth Required:** ❌ Optional
-* **Success Response (`200 OK`):** Returns the full Ride object plus `stopsTimeline`:
+* **Auth Required:** ❌ Optional (Public)
+* **Example URL:** `http://192.168.0.100:5000/api/v1/user/rides/cmvf6ov920001va5ok288bje8`
+* **Success Response (`200 OK`):** Returns the complete `Ride` model + `stopsTimeline`:
 ```json
 {
   "statusCode": 200,
   "data": {
-    "id": "ride_101",
-    "driverName": "Ravi Kumar",
-    "origin": "Kondapur Main Road",
-    "destination": "Cyber Towers, Hitech City",
-    "availableSeats": 3,
-    "pricePerSeat": 45.0,
+    "id": "cmvf6ov920001va5ok288bje8",
+    "driverId": "cmve65iik0003va6sxfbntaad",
+    "driverName": "Sai Charan Gattu",
+    "driverAvatar": "/data/user/0/com.sharing.wala/cache/fbebee3d-e3a8-48f4-b0cf-bcb199ee9ebe/1000043538.jpg_compressed.jpg",
+    "rating": 5.0,
+    "totalRides": 10,
+    "isVerified": true,
+    "routeMatchPercentage": 95,
+    "origin": "Siddipet Medak Road, Maruthi Chowk, Ganesh Nagar, Siddipet, Telangana. Pin-502103 (India)",
+    "destination": "Siddipet New Bus Stand",
+    "departureTime": "08:30 AM",
+    "date": "Today",
+    "mode": "carpool",
+    "rideType": "oneTime",
+    "availableSeats": 2,
+    "totalSeats": 3,
+    "vehicleName": "Tata Seira",
+    "vehicleNumber": "TS08D0912",
+    "vehicleColor": "White",
+    "communityName": null,
+    "pickupFlexibility": "Flexible within 500m",
+    "notes": "Daily commute. Looking to connect with co-travelers.",
+    "status": "available",
+    "meetingPoint": "Siddipet Medak Road, Maruthi Chowk, Ganesh Nagar, Siddipet, Telangana. Pin-502103 (India) Main Point",
+    "isWomenOnly": false,
+    "pricePerSeat": 25.0,
+    "price": 25.0,
+    "isFree": false,
+    "pricingType": "COST_SHARING",
+    "requestStatus": "pending",
+    "bookingStatus": "pending",
+    "isRequestSent": true,
+    "userBooking": {
+      "bookingId": "cmvfk44lc0005vaycd6zigj04",
+      "status": "pending",
+      "seatsRequested": 1,
+      "totalFare": 25.0,
+      "notes": "Joining from Kondapur Signal with laptop bag.",
+      "requestedAt": "2026-10-20T00:30:00.000Z"
+    },
     "stopsTimeline": [
       {
-        "id": "stop_1",
-        "name": "Kondapur Main Road",
+        "id": "cmvf6ov960003va5obpyq8pf8",
+        "name": "Siddipet Medak Road, Maruthi Chowk, Ganesh Nagar, Siddipet, Telangana. Pin-502103 (India) Main Point",
         "sequence": 1,
         "type": "START",
-        "time": "08:30 AM"
+        "time": "08:30 am"
       },
       {
-        "id": "stop_2",
-        "name": "Cyber Towers, Hitech City",
+        "id": "cmvf6ov960004va5ol5e2t1f8",
+        "name": "Siddipet New Bus Stand",
         "sequence": 2,
         "type": "END",
-        "time": "09:15 AM"
+        "time": "09:15 am"
       }
     ]
   },
@@ -399,19 +442,26 @@
 }
 ```
 
+> **`requestStatus` / `bookingStatus` Logic in Flutter:**
+> - `"none"` → User has not requested. Show default **"Request Seat"** action button.
+> - `"pending"` → Request sent, waiting for driver confirmation. Show **"Request Pending"** (Amber badge).
+> - `"accepted"` → Driver confirmed/accepted the seat! Show **"Booking Confirmed"** (Green badge).
+> - `"rejected"` → Driver declined/rejected the request. Show **"Request Declined"** (Red badge).
+> - `"cancelled"` → Booking was cancelled.
+
 ---
 
-### 2.6 Request a Seat on a Ride
-* **Screen:** `request_seat_bottom_sheet.dart`
+### 2.6 Request a Seat on a Ride (Commuter Booking)
+* **Screens:** `RideDetailsScreen`, `RequestSeatBottomSheet`
 * **Method & Path:** `POST /api/v1/user/rides/:id/request-seat`
-* **Auth Required:** ✅ Yes
+* **Auth Required:** ✅ Yes (`Authorization: Bearer <TOKEN>`)
 * **Request Payload (Body):**
 ```json
 {
   "seats": 1,
   "pickupPoint": "Kondapur Signal",
-  "dropoffPoint": "Cyber Towers Gate 2",
-  "notes": "Daily commute. Carrying laptop bag."
+  "dropoffPoint": "Cyber Towers Gate 1",
+  "notes": "Joining from Kondapur Signal with light laptop bag."
 }
 ```
 * **Success Response (`201 Created`):**
@@ -419,14 +469,14 @@
 {
   "statusCode": 201,
   "data": {
-    "bookingId": "bk_9823...",
-    "rideId": "ride_101",
-    "status": "requestSent",
-    "seatsBooked": 1,
-    "totalFare": 45.0,
-    "message": "Seat request sent to rider."
+    "bookingId": "cmvf...",
+    "rideId": "cmvf6ov920001va5ok288bje8",
+    "status": "PENDING",
+    "seatsRequested": 1,
+    "totalFare": 25.0,
+    "message": "Seat request sent to Sai Charan Gattu! Waiting for host confirmation."
   },
-  "message": "Seat request sent to rider.",
+  "message": "Seat request sent to Sai Charan Gattu! Waiting for host confirmation.",
   "success": true
 }
 ```
@@ -588,14 +638,22 @@
   "destination": "Cyber Towers, Hitech City",
   "departureTime": "08:30 AM",
   "availableSeats": 3,
+  "price": 45.0,
   "pricePerSeat": 45.0,
+  "isFree": false,
+  "pricingType": "COST_SHARING",
   "meetingPoint": "Kondapur Signal Metro Pillar 42",
   "notes": "Daily IT office commute. AC car.",
   "isWomenOnly": false,
   "autoAccept": false
 }
 ```
-* **Success Response (`201 Created`):** Returns published `Ride` object.
+> **Pricing Options:**
+> - **Rider Gives Price / Custom Fare:** Send `price: 35` (or `pricePerSeat: 35`) → sets custom contribution per seat.
+> - **Free Ride Option:** Send `isFree: true` or `price: 0` → sets `pricingType: "FREE"` and price displays as `"Free"` across all cards.
+> - **Default / System Recommended:** If omitted, defaults to ₹45 (carpool) or ₹25 (bikepool).
+
+* **Success Response (`201 Created`):** Returns published `Ride` object with `pricePerSeat`, `price`, `isFree`, and `pricingType`.
 
 ---
 
@@ -633,6 +691,54 @@
 
 ---
 
+### 3.4b Get Passengers & Requests for a Specific Offered Ride
+* **Screen:** `HostTripPassengersSheet`, `MyRideCard` ("View Trip & Passengers List")
+* **Method & Path:** `GET /api/v1/rider/rides/:id/passengers`
+* **Auth Required:** ✅ Yes (`Authorization: Bearer <TOKEN>`)
+* **Example URL:** `http://192.168.0.100:5000/api/v1/rider/rides/cmvfo2d8z0001va1g037wxsdj/passengers`
+* **Logic:**
+  * `passengers`: Contains **ONLY Confirmed/Onboard** passengers traveling on the trip (`isConfirmed: true`). Empty right after submission until host accepts!
+  * `passengerRequests`: Contains **Pending** requests awaiting host action (`status: "Pending"`).
+  * No duplicate rows per passenger (deduplicated by `passengerId`).
+  * Rejected requests do not show as passengers.
+* **Success Response (`200 OK`):**
+```json
+{
+  "statusCode": 200,
+  "data": {
+    "rideId": "cmvfo2d8z0001va1g037wxsdj",
+    "origin": "Ameerpet",
+    "destination": "Ozrit",
+    "totalSeats": 1,
+    "availableSeats": 1,
+    "bookedCount": 0,
+    "totalFareCollected": 0,
+    "summary": "0/1 Seats",
+    "passengers": [],
+    "confirmedPassengers": [],
+    "passengerRequests": [
+      {
+        "id": "cmvfo7kvl0008va1gtiokao8q",
+        "bookingId": "cmvfo7kvl0008va1gtiokao8q",
+        "passengerId": "cmvct89cc0000va64lpsog7qm",
+        "name": "Sai Charan Gattu",
+        "phone": "+917674952516",
+        "seats": 1,
+        "fare": 48.0,
+        "status": "Pending",
+        "statusLabel": "Pending",
+        "isPending": true,
+        "isConfirmed": false
+      }
+    ]
+  },
+  "message": "Passenger bookings retrieved successfully",
+  "success": true
+}
+```
+
+---
+
 ### 3.5 Accept or Decline Passenger Request
 * **Screen:** Host Accept/Reject action
 * **Method & Path:** `PATCH /api/v1/rider/requests/:bookingId/respond`
@@ -661,17 +767,142 @@
 
 ---
 
-### 3.6 Update Ride Status (Start, Complete, Cancel)
-* **Screen:** Host In-Ride Screen
-* **Method & Path:** `PATCH /api/v1/rider/rides/:rideId/status`
+### 3.6 Rider Start Trip API (Live Ride Start)
+* **Screen:** `host_trip_passengers_sheet.dart`, `trip_active_screen.dart`, `my_rides_screen.dart`
+* **Method & Path Options:**
+  - `POST /api/v1/rider/rides/:rideId/start` *(Recommended direct call)*
+  - `POST /api/v1/rider/rides/:rideId/start-trip`
+  - `PATCH /api/v1/rider/rides/:rideId/start`
+  - `PATCH /api/v1/rider/rides/:rideId/status` with `{"status": "IN_PROGRESS"}`
+* **Auth Required:** ✅ Yes (`Bearer <token>`)
+* **Request Payload (Body):** Optional (empty body `{}` is valid)
+* **Success Response (`200 OK`):**
+```json
+{
+  "statusCode": 200,
+  "data": {
+    "id": "cmvfo2d8z0001va1g037wxsdj",
+    "rideId": "cmvfo2d8z0001va1g037wxsdj",
+    "tripId": "cmvfo2d8z0001va1g037wxsdj",
+    "status": "in_progress",
+    "statusLabel": "Trip in Progress",
+    "rawStatus": "IN_PROGRESS",
+    "isStarted": true,
+    "isInProgress": true,
+    "startedAt": "2026-10-19T20:12:56.492Z",
+    "origin": "Ameerpet",
+    "originName": "Ameerpet",
+    "destination": "Ozrit",
+    "destName": "Ozrit",
+    "date": "Oct 20",
+    "departureTime": "08:30 AM",
+    "mode": "bikepool",
+    "vehicleName": "Honda Activa 5g",
+    "vehicleNumber": "TS36D2304",
+    "vehicleColor": "White",
+    "totalSeats": 1,
+    "availableSeats": 0,
+    "bookedCount": 1,
+    "totalFareCollected": 48,
+    "passengers": [
+      {
+        "id": "cmvfo7kvl0008va1gtiokao8q",
+        "bookingId": "cmvfo7kvl0008va1gtiokao8q",
+        "passengerId": "cmvct89cc0000va64lpsog7qm",
+        "name": "Sai Charan Gattu",
+        "phone": "+917674952516",
+        "avatarUrl": "https://...",
+        "seats": 1,
+        "fare": 48,
+        "isPickedUp": false,
+        "isOnboard": false,
+        "status": "Confirmed",
+        "statusLabel": "Confirmed",
+        "rawStatus": "accepted",
+        "pickupLocation": "Flexible near metro pillar",
+        "dropLocation": "Ozrit",
+        "pickupPoint": "Flexible near metro pillar",
+        "dropoffPoint": "Ozrit",
+        "acceptedAt": "2026-10-19T20:00:53.219Z"
+      }
+    ],
+    "passengerCount": 1,
+    "stops": [
+      {
+        "id": "stop_01",
+        "name": "Flexible near metro pillar",
+        "type": "START",
+        "latitude": 17.448293,
+        "longitude": 78.391487,
+        "sequence": 1
+      },
+      {
+        "id": "stop_02",
+        "name": "Ozrit",
+        "type": "END",
+        "latitude": 17.437462,
+        "longitude": 78.365448,
+        "sequence": 2
+      }
+    ],
+    "message": "Trip started successfully! Drive safely."
+  },
+  "message": "Trip started successfully! Drive safely.",
+  "success": true
+}
+```
+
+---
+
+### 3.6b Complete Trip API (Trip Finished)
+* **Screen:** End Trip action / Destination Reached
+* **Method & Path Options:**
+  - `POST /api/v1/rider/rides/:rideId/complete`
+  - `POST /api/v1/rider/rides/:rideId/complete-trip`
+  - `PATCH /api/v1/rider/rides/:rideId/status` with `{"status": "COMPLETED"}`
+* **Auth Required:** ✅ Yes
+* **Success Response (`200 OK`):** Marks ride as `COMPLETED`, updates passenger bookings to `COMPLETED`, and increments driver's total rides count.
+
+---
+
+### 3.7 Update Offered Ride Details & Vehicle
+* **Screen:** Edit Ride / `offer_ride_screen.dart`
+* **Method & Path:** `PUT /api/v1/rider/rides/:id`
 * **Auth Required:** ✅ Yes
 * **Request Payload (Body):**
 ```json
 {
-  "status": "IN_PROGRESS"
+  "vehicleId": "cmvfjk8fd0003va646pfvkdin",
+  "seats": 3,
+  "pricePerSeat": 25,
+  "origin": "Siddipet Medak Road, Maruthi Chowk, Ganesh Nagar, Siddipet, Telangana. Pin-502103 (India)",
+  "destination": "Siddipet New Bus Stand",
+  "departureTime": "08:30 AM",
+  "date": "Today",
+  "meetingPoint": "Siddipet Medak Road, Maruthi Chowk, Ganesh Nagar Main Gate",
+  "notes": "Daily commute. Looking to connect with co-travelers.",
+  "isWomenOnly": false,
+  "autoAccept": true
 }
 ```
-> `status` options: `"IN_PROGRESS"`, `"COMPLETED"`, `"CANCELLED"`.
+* **Success Response (`200 OK`):**
+```json
+{
+  "statusCode": 200,
+  "data": {
+    "id": "cmvf6ov920001va5ok288bje8",
+    "mode": "carpool",
+    "vehicleName": "Tata Seira",
+    "vehicleNumber": "TS08D0912",
+    "vehicleColor": "White",
+    "availableSeats": 3,
+    "totalSeats": 3,
+    "pricePerSeat": 25
+  },
+  "message": "Offered ride updated successfully",
+  "success": true
+}
+```
 
 ---
 

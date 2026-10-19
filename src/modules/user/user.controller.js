@@ -38,12 +38,14 @@ export const deleteTrustedContact = asyncHandler(async (req, res) => {
 });
 
 export const searchRides = asyncHandler(async (req, res) => {
-  const rides = await userService.searchUserRides(req.query);
+  const currentUserId = req.user?.id || req.query.userId || req.query.passengerId;
+  const rides = await userService.searchUserRides(req.query, currentUserId);
   res.status(200).json(new ApiResponse(200, rides, 'Available rides found'));
 });
 
 export const getRideDetails = asyncHandler(async (req, res) => {
-  const ride = await userService.getRideDetails(req.params.id);
+  const currentUserId = req.user?.id || req.query.userId || req.query.passengerId;
+  const ride = await userService.getRideDetails(req.params.id, currentUserId);
   res.status(200).json(new ApiResponse(200, ride, 'Ride details retrieved'));
 });
 
@@ -53,7 +55,7 @@ export const requestSeat = asyncHandler(async (req, res) => {
 });
 
 export const getMyRides = asyncHandler(async (req, res) => {
-  const categorizedRides = await userService.getUserMyRides(req.user.id);
+  const categorizedRides = await userService.getUserMyRides(req.user.id, req.query);
   res.status(200).json(new ApiResponse(200, categorizedRides, 'My rides list retrieved'));
 });
 

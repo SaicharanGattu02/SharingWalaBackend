@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { authenticate } from '../../middlewares/auth.middleware.js';
+import { authenticate, optionalAuthenticate } from '../../middlewares/auth.middleware.js';
 import { validate } from '../../middlewares/validate.middleware.js';
 import {
   updateProfileSchema,
@@ -13,9 +13,9 @@ import * as userController from './user.controller.js';
 
 const router = Router();
 
-// Public ride search
-router.get('/rides/search', validate({ query: searchRidesQuerySchema }), userController.searchRides);
-router.get('/rides/:id', userController.getRideDetails);
+// Public / Semi-authenticated ride search & details
+router.get('/rides/search', optionalAuthenticate, validate({ query: searchRidesQuerySchema }), userController.searchRides);
+router.get('/rides/:id', optionalAuthenticate, userController.getRideDetails);
 
 // Authenticated Passenger / Commuter Routes
 router.use(authenticate);

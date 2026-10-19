@@ -81,15 +81,31 @@ const formatVehicle = (v) => ({
   capacity: v.seatCapacity,
 });
 
-export const getRiderVehicles = async (userId) => {
+export const getRiderVehicles = async (userId, query = {}) => {
   const driver = await prisma.driverProfile.findUnique({
     where: { userId },
-    include: { vehicles: true },
   });
 
   if (!driver) return [];
 
-  return driver.vehicles.map(formatVehicle);
+  const rawType = (query.type || query.vehicleType || query.mode || '').trim().toLowerCase();
+  let vehicleTypeCondition;
+  if (rawType === 'bike' || rawType === 'bikepool') {
+    vehicleTypeCondition = 'BIKE';
+  } else if (rawType === 'car' || rawType === 'carpool') {
+    vehicleTypeCondition = 'CAR';
+  }
+
+  const vehicles = await prisma.vehicle.findMany({
+    where: {
+      driverId: driver.id,
+      deletedAt: null,
+      ...(vehicleTypeCondition ? { vehicleType: vehicleTypeCondition } : {}),
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+
+  return vehicles.map(formatVehicle);
 };
 
 export const addRiderVehicle = async (userId, { type, name, numberPlate, color, capacity }) => {
@@ -398,9 +414,24 @@ export const offerRide = async (userId, data) => {
     recurringRideId = recurring.id;
   }
 
-  const baseFare = data.pricePerSeat !== undefined
-    ? Number(data.pricePerSeat)
-    : (isBike ? 25.0 : 45.0);
+  let baseFare;
+  if (data.isFree === true || data.is_free === true || (typeof data.pricingType === 'string' && data.pricingType.toUpperCase() === 'FREE') || (typeof data.pricing_type === 'string' && data.pricing_type.toUpperCase() === 'FREE')) {
+    baseFare = 0.0;
+  } else if (data.pricePerSeat !== undefined && data.pricePerSeat !== null) {
+    baseFare = Number(data.pricePerSeat);
+  } else if (data.price !== undefined && data.price !== null) {
+    baseFare = Number(data.price);
+  } else if (data.price_per_seat !== undefined && data.price_per_seat !== null) {
+    baseFare = Number(data.price_per_seat);
+  } else if (data.costPerSeat !== undefined && data.costPerSeat !== null) {
+    baseFare = Number(data.costPerSeat);
+  } else if (data.cost_per_seat !== undefined && data.cost_per_seat !== null) {
+    baseFare = Number(data.cost_per_seat);
+  } else {
+    baseFare = isBike ? 25.0 : 45.0;
+  }
+
+  const pricingType = baseFare === 0 ? 'FREE' : 'COST_SHARING';
   const notes = (data.notes || data.pickupFlexibility || 'Daily commute connection').trim();
   const meetingPoint = (data.meetingPoint || data.pickupFlexibility || `${data.origin} Main Point`).trim();
 
@@ -426,7 +457,7 @@ export const offerRide = async (userId, data) => {
       notes,
       pricing: {
         create: {
-          pricingType: 'COST_SHARING',
+          pricingType,
           costPerSeat: baseFare,
           totalCost: baseFare * totalSeats,
           currency: 'INR',
@@ -481,15 +512,31 @@ export const offerRide = async (userId, data) => {
 /**
  * 5. Get My Offered Rides (with incoming passenger seat requests)
  */
-export const getMyOfferedRides = async (userId) => {
+export const getMyOfferedRides = async (userId, query = {}) => {
   const driver = await prisma.driverProfile.findUnique({
     where: { userId },
   });
 
   if (!driver) return [];
 
+  const statusParam = (query.status || 'active').toLowerCase();
+  let statusCondition;
+  if (statusParam === 'all') {
+    statusCondition = undefined;
+  } else if (statusParam === 'cancelled') {
+    statusCondition = 'CANCELLED';
+  } else if (statusParam === 'completed') {
+    statusCondition = 'COMPLETED';
+  } else {
+    // Default: 'active' offered rides only (excludes cancelled and completed)
+    statusCondition = { in: ['PUBLISHED', 'IN_PROGRESS', 'FULL'] };
+  }
+
   const rides = await prisma.ride.findMany({
-    where: { driverId: driver.id },
+    where: {
+      driverId: driver.id,
+      ...(statusCondition ? { status: statusCondition } : {}),
+    },
     include: {
       vehicle: true,
       pricing: true,
@@ -503,11 +550,12 @@ export const getMyOfferedRides = async (userId) => {
         orderBy: { createdAt: 'desc' },
       },
     },
-    orderBy: { createdAt: 'desc' },
+    orderBy: { departureAt: 'asc' },
   });
 
   return rides.map((r) => {
     const formatted = formatRideForFlutter(r);
+    formatted.isHost = true;
     formatted.passengerRequests = r.bookings.map((b) => ({
       bookingId: b.id,
       passengerId: b.passenger.id,
@@ -533,6 +581,9 @@ export const getOfferedRidePassengers = async (userId, rideId) => {
   const ride = await prisma.ride.findFirst({
     where: { id: rideId, driverId: driver.id },
     include: {
+      vehicle: true,
+      pricing: true,
+      stops: { orderBy: { sequence: 'asc' } },
       bookings: {
         include: {
           passenger: {
@@ -557,30 +608,78 @@ export const getOfferedRidePassengers = async (userId, rideId) => {
     : ride.endLocationName;
   const departureDate = new Date(ride.departureAt);
   const formattedTime = departureDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+  const formattedDate = departureDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 
-  const passengers = ride.bookings.map((b) => {
+  let totalFareCollected = 0;
+
+  // Deduplicate bookings by passengerId, keeping only the most recent booking per passenger
+  const latestBookingsMap = new Map();
+  for (const b of ride.bookings) {
+    if (!latestBookingsMap.has(b.passengerId)) {
+      latestBookingsMap.set(b.passengerId, b);
+    }
+  }
+  const uniqueBookings = Array.from(latestBookingsMap.values());
+
+  const allMapped = uniqueBookings.map((b) => {
     const isAccepted = b.status === 'ACCEPTED';
     const isPending = b.status === 'PENDING';
-    const statusLabel = isAccepted ? 'Confirmed' : isPending ? 'Pending' : b.status.toLowerCase();
+    const isOnboard = Boolean(b.passengerNotes && b.passengerNotes.includes('[ONBOARD]'));
+    const isCompleted = b.status === 'COMPLETED' || ride.status === 'COMPLETED';
+
+    let passengerStatus = 'Pending';
+    if (isOnboard) {
+      passengerStatus = 'Onboard';
+    } else if (isCompleted) {
+      passengerStatus = 'Trip Completed';
+    } else if (isAccepted) {
+      passengerStatus = 'Confirmed';
+    } else if (b.status === 'REJECTED') {
+      passengerStatus = 'Rejected';
+    } else if (b.status === 'CANCELLED') {
+      passengerStatus = 'Cancelled';
+    }
+
+    const fare = Number(b.totalCostContribution || 0);
+    if (isAccepted || isOnboard || isCompleted) {
+      totalFareCollected += fare;
+    }
+
+    const cleanNotes = (b.passengerNotes || '').replace(/\[ONBOARD\]/g, '').trim();
 
     return {
+      id: b.id,
       bookingId: b.id,
       passengerId: b.passenger.id,
       name: b.passenger.displayName || 'Passenger',
       phone: b.passenger.phone || '',
-      avatarUrl: b.passenger.avatarUrl || 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=200&q=80',
+      avatarUrl:
+        b.passenger.avatarUrl ||
+        'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=200&q=80',
       seats: b.seatsRequested,
-      pickupPoint: b.pickupStop?.name || b.passengerNotes || `${ride.startLocationName} Point`,
-      dropoffPoint: b.dropoffStop?.name || ride.endLocationName,
-      status: b.status.toLowerCase(),
-      statusLabel,
+      fare,
+      isPickedUp: isOnboard,
+      isOnboard,
+      status: passengerStatus,
+      statusLabel: passengerStatus,
+      rawStatus: b.status.toLowerCase(),
       isPending,
-      isConfirmed: isAccepted,
-      fare: Number(b.totalCostContribution || 0),
+      isConfirmed: isAccepted || isOnboard || isCompleted,
+      rating: 4.9,
+      pickupLocation: b.pickupStop?.name || cleanNotes || `${ride.startLocationName} Point`,
+      dropLocation: b.dropoffStop?.name || ride.endLocationName,
+      pickupPoint: b.pickupStop?.name || cleanNotes || `${ride.startLocationName} Point`,
+      dropoffPoint: b.dropoffStop?.name || ride.endLocationName,
       requestedAt: b.requestedAt || b.createdAt,
       acceptedAt: b.acceptedAt,
     };
   });
+
+  // Confirmed passengers traveling on this ride (Accepted, Onboard, Completed)
+  const confirmedPassengers = allMapped.filter((p) => p.isConfirmed);
+
+  // Incoming pending requests awaiting host accept/reject action
+  const pendingRequests = allMapped.filter((p) => p.isPending);
 
   return {
     rideId: ride.id,
@@ -588,24 +687,39 @@ export const getOfferedRidePassengers = async (userId, rideId) => {
     originName,
     destination: ride.endLocationName,
     destName,
+    date: formattedDate,
     departureTime: formattedTime,
+    mode: ride.vehicle?.vehicleType === 'BIKE' ? 'bikepool' : 'carpool',
+    vehicleName: ride.vehicle ? `${ride.vehicle.make} ${ride.vehicle.model}`.trim() : 'Vehicle',
+    vehicleNumber: ride.vehicle?.registrationNumber || '',
+    vehicleColor: ride.vehicle?.color || '',
     totalSeats: ride.totalSeats,
     availableSeats: ride.availableSeats,
-    bookedCount: Math.max(0, bookedCount),
-    summary: `${Math.max(0, bookedCount)}/${ride.totalSeats} Seats`,
-    passengers,
+    bookedCount: confirmedPassengers.length,
+    totalFareCollected: Math.round(totalFareCollected),
+    summary: `${confirmedPassengers.length}/${ride.totalSeats} Seats`,
+    passengers: confirmedPassengers,
+    confirmedPassengers,
+    passengerRequests: pendingRequests,
+    requests: pendingRequests,
+    allPassengers: allMapped.filter((p) => !['rejected', 'cancelled'].includes(p.rawStatus)),
   };
 };
 
 /**
- * 6. Accept or Decline Passenger Request
+ * 6. Accept, Decline, or Onboard Passenger Request
+ * Actions supported:
+ * - ACCEPT / APPROVE
+ * - DECLINE / REJECT
+ * - ONBOARD / PICKUP / PICKED_UP
+ * - OFFBOARD / DROPOFF
  */
 export const respondToPassengerRequest = async (userId, bookingId, actionOrStatus) => {
   return await prisma.$transaction(async (tx) => {
     const booking = await tx.booking.findUnique({
       where: { id: bookingId },
       include: {
-        passenger: { select: { id: true, displayName: true } },
+        passenger: { select: { id: true, displayName: true, phone: true } },
         ride: { include: { driver: true } },
       },
     });
@@ -621,27 +735,105 @@ export const respondToPassengerRequest = async (userId, bookingId, actionOrStatu
     const raw = (actionOrStatus || '').toUpperCase();
     const isAccept = ['ACCEPT', 'ACCEPTED', 'APPROVE'].includes(raw);
     const isReject = ['REJECT', 'REJECTED', 'DECLINE', 'DECLINED'].includes(raw);
+    const isOnboard = ['ONBOARD', 'PICKUP', 'PICKED_UP', 'ONBOARDED'].includes(raw);
+    const isOffboard = ['OFFBOARD', 'DROPOFF', 'DROPPED_OFF'].includes(raw);
 
-    if (!isAccept && !isReject) {
-      throw new ApiError(400, 'Invalid action. Must be ACCEPT or DECLINE/REJECT');
+    if (!isAccept && !isReject && !isOnboard && !isOffboard) {
+      throw new ApiError(400, 'Invalid action. Must be ACCEPT, DECLINE/REJECT, ONBOARD, or OFFBOARD');
     }
 
     const passengerName = booking.passenger?.displayName || 'Passenger';
     const seats = booking.seatsRequested;
+    let currentRide = booking.ride;
 
+    // --- Action: ONBOARD ---
+    if (isOnboard) {
+      let notes = booking.passengerNotes || '';
+      if (!notes.includes('[ONBOARD]')) {
+        notes = `${notes} [ONBOARD]`.trim();
+      }
+
+      // If booking was still pending, accept it as well
+      if (booking.status === 'PENDING') {
+        if (booking.ride.availableSeats < seats) {
+          throw new ApiError(400, `Cannot onboard: Only ${booking.ride.availableSeats} seat(s) remaining.`);
+        }
+        currentRide = await tx.ride.update({
+          where: { id: booking.rideId },
+          data: {
+            availableSeats: { decrement: seats },
+            ...(booking.ride.availableSeats - seats === 0 ? { status: 'FULL' } : {}),
+          },
+        });
+      }
+
+      const updated = await tx.booking.update({
+        where: { id: bookingId },
+        data: {
+          status: 'ACCEPTED',
+          acceptedAt: booking.acceptedAt || new Date(),
+          passengerNotes: notes,
+        },
+      });
+
+      return {
+        bookingId: updated.id,
+        rideId: booking.rideId,
+        passengerId: booking.passenger.id,
+        passengerName,
+        status: 'Onboard',
+        statusLabel: 'Onboard',
+        bookingStatus: 'ACCEPTED',
+        isPickedUp: true,
+        isOnboard: true,
+        seats,
+        availableSeats: currentRide.availableSeats,
+        totalSeats: currentRide.totalSeats,
+        bookedCount: currentRide.totalSeats - currentRide.availableSeats,
+        message: `${passengerName} is now marked Onboard!`,
+      };
+    }
+
+    // --- Action: OFFBOARD ---
+    if (isOffboard) {
+      const cleanNotes = (booking.passengerNotes || '').replace(/\[ONBOARD\]/g, '').trim();
+      const updated = await tx.booking.update({
+        where: { id: bookingId },
+        data: { passengerNotes: cleanNotes },
+      });
+
+      return {
+        bookingId: updated.id,
+        rideId: booking.rideId,
+        passengerId: booking.passenger.id,
+        passengerName,
+        status: 'Confirmed',
+        statusLabel: 'Confirmed',
+        bookingStatus: 'ACCEPTED',
+        isPickedUp: false,
+        isOnboard: false,
+        seats,
+        availableSeats: currentRide.availableSeats,
+        totalSeats: currentRide.totalSeats,
+        message: `${passengerName} marked offboard.`,
+      };
+    }
+
+    // --- Action: ACCEPT ---
     if (isAccept) {
       if (booking.status === 'ACCEPTED') {
         return {
           bookingId: booking.id,
           rideId: booking.rideId,
-          status: 'confirmed',
+          status: 'Confirmed',
+          statusLabel: 'Confirmed',
           bookingStatus: 'ACCEPTED',
           passengerName,
           seats,
           availableSeats: booking.ride.availableSeats,
           totalSeats: booking.ride.totalSeats,
           bookedCount: booking.ride.totalSeats - booking.ride.availableSeats,
-          message: `Booking request approved for ${passengerName}!`,
+          message: `Booking request already approved for ${passengerName}!`,
         };
       }
 
@@ -661,20 +853,16 @@ export const respondToPassengerRequest = async (userId, bookingId, actionOrStatu
         where: { id: booking.rideId },
         data: {
           availableSeats: { decrement: seats },
+          ...(booking.ride.availableSeats - seats === 0 ? { status: 'FULL' } : {}),
         },
       });
-
-      if (updatedRide.availableSeats === 0) {
-        await tx.ride.update({
-          where: { id: booking.rideId },
-          data: { status: 'FULL' },
-        });
-      }
 
       return {
         bookingId: updatedBooking.id,
         rideId: booking.rideId,
-        status: 'confirmed',
+        passengerId: booking.passenger.id,
+        status: 'Confirmed',
+        statusLabel: 'Confirmed',
         bookingStatus: 'ACCEPTED',
         passengerName,
         seats,
@@ -683,46 +871,295 @@ export const respondToPassengerRequest = async (userId, bookingId, actionOrStatu
         bookedCount: updatedRide.totalSeats - updatedRide.availableSeats,
         message: `Booking request approved for ${passengerName}!`,
       };
-    } else {
-      let currentRide = booking.ride;
-      if (booking.status === 'ACCEPTED') {
-        currentRide = await tx.ride.update({
-          where: { id: booking.rideId },
-          data: {
-            availableSeats: { increment: seats },
-            ...(booking.ride.status === 'FULL' ? { status: 'PUBLISHED' } : {}),
-          },
-        });
-      }
+    }
 
-      const updatedBooking = await tx.booking.update({
-        where: { id: bookingId },
+    // --- Action: DECLINE / REJECT ---
+    if (booking.status === 'ACCEPTED') {
+      currentRide = await tx.ride.update({
+        where: { id: booking.rideId },
         data: {
-          status: 'REJECTED',
-          rejectedAt: new Date(),
+          availableSeats: { increment: seats },
+          ...(booking.ride.status === 'FULL' ? { status: 'PUBLISHED' } : {}),
         },
       });
-
-      return {
-        bookingId: updatedBooking.id,
-        rideId: booking.rideId,
-        status: 'declined',
-        bookingStatus: 'REJECTED',
-        passengerName,
-        seats,
-        availableSeats: currentRide.availableSeats,
-        totalSeats: currentRide.totalSeats,
-        bookedCount: currentRide.totalSeats - currentRide.availableSeats,
-        message: `Booking declined for ${passengerName}.`,
-      };
     }
+
+    const updatedBooking = await tx.booking.update({
+      where: { id: bookingId },
+      data: {
+        status: 'REJECTED',
+        rejectedAt: new Date(),
+        passengerNotes: (booking.passengerNotes || '').replace(/\[ONBOARD\]/g, '').trim(),
+      },
+    });
+
+    return {
+      bookingId: updatedBooking.id,
+      rideId: booking.rideId,
+      passengerId: booking.passenger.id,
+      status: 'Rejected',
+      statusLabel: 'Rejected',
+      bookingStatus: 'REJECTED',
+      passengerName,
+      seats,
+      availableSeats: currentRide.availableSeats,
+      totalSeats: currentRide.totalSeats,
+      bookedCount: currentRide.totalSeats - currentRide.availableSeats,
+      message: `Booking declined for ${passengerName}.`,
+    };
   });
 };
 
+export const onboardPassenger = async (userId, bookingId, isPickedUp = true) => {
+  return respondToPassengerRequest(userId, bookingId, isPickedUp ? 'ONBOARD' : 'OFFBOARD');
+};
+
 /**
- * 7. Change Ride Status (Start, Complete, Cancel)
+ * 7. Start Trip (Rider starts the offered ride)
  */
-export const updateOfferedRideStatus = async (userId, rideId, status) => {
+export const startTrip = async (userId, rideId, options = {}) => {
+  const driver = await prisma.driverProfile.findUnique({ where: { userId } });
+  if (!driver) throw new ApiError(403, 'Unauthorized: Driver profile not found');
+
+  const ride = await prisma.ride.findFirst({
+    where: { id: rideId, driverId: driver.id },
+    include: {
+      vehicle: true,
+      pricing: true,
+      stops: { orderBy: { sequence: 'asc' } },
+      bookings: {
+        include: {
+          passenger: {
+            select: { id: true, displayName: true, phone: true, avatarUrl: true },
+          },
+          pickupStop: true,
+          dropoffStop: true,
+        },
+        orderBy: { createdAt: 'desc' },
+      },
+    },
+  });
+
+  if (!ride) throw new ApiError(404, 'Offered ride not found');
+
+  if (ride.status === 'CANCELLED') {
+    throw new ApiError(400, 'Cannot start a ride that has been cancelled');
+  }
+
+  if (ride.status === 'COMPLETED') {
+    throw new ApiError(400, 'Ride is already completed');
+  }
+
+  // Update status to IN_PROGRESS if not already
+  let currentRide = ride;
+  if (ride.status !== 'IN_PROGRESS') {
+    currentRide = await prisma.ride.update({
+      where: { id: rideId },
+      data: {
+        status: 'IN_PROGRESS',
+      },
+      include: {
+        vehicle: true,
+        pricing: true,
+        stops: { orderBy: { sequence: 'asc' } },
+        bookings: {
+          include: {
+            passenger: {
+              select: { id: true, displayName: true, phone: true, avatarUrl: true },
+            },
+            pickupStop: true,
+            dropoffStop: true,
+          },
+          orderBy: { createdAt: 'desc' },
+        },
+      },
+    });
+  }
+
+  const departureDate = new Date(currentRide.departureAt);
+  const formattedTime = departureDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+  const formattedDate = departureDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
+  // Deduplicate bookings by passengerId, keeping only the most recent booking per passenger
+  const latestBookingsMap = new Map();
+  for (const b of currentRide.bookings) {
+    if (!latestBookingsMap.has(b.passengerId)) {
+      latestBookingsMap.set(b.passengerId, b);
+    }
+  }
+  const uniqueBookings = Array.from(latestBookingsMap.values());
+
+  let totalFareCollected = 0;
+  const confirmedPassengers = uniqueBookings
+    .filter(
+      (b) =>
+        b.status === 'ACCEPTED' ||
+        b.status === 'COMPLETED' ||
+        (b.passengerNotes && b.passengerNotes.includes('[ONBOARD]'))
+    )
+    .map((b) => {
+      const isOnboard = Boolean(b.passengerNotes && b.passengerNotes.includes('[ONBOARD]'));
+      const fare = Number(b.totalCostContribution || 0);
+      totalFareCollected += fare;
+      const cleanNotes = (b.passengerNotes || '').replace(/\[ONBOARD\]/g, '').trim();
+
+      return {
+        id: b.id,
+        bookingId: b.id,
+        passengerId: b.passenger.id,
+        name: b.passenger.displayName || 'Passenger',
+        phone: b.passenger.phone || '',
+        avatarUrl:
+          b.passenger.avatarUrl ||
+          'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=200&q=80',
+        seats: b.seatsRequested,
+        fare,
+        isPickedUp: isOnboard,
+        isOnboard,
+        status: isOnboard ? 'Onboard' : 'Confirmed',
+        statusLabel: isOnboard ? 'Onboard' : 'Confirmed',
+        rawStatus: b.status.toLowerCase(),
+        pickupLocation: b.pickupStop?.name || cleanNotes || `${currentRide.startLocationName} Point`,
+        dropLocation: b.dropoffStop?.name || currentRide.endLocationName,
+        pickupPoint: b.pickupStop?.name || cleanNotes || `${currentRide.startLocationName} Point`,
+        dropoffPoint: b.dropoffStop?.name || currentRide.endLocationName,
+        acceptedAt: b.acceptedAt,
+      };
+    });
+
+  const bookedCount = currentRide.totalSeats - currentRide.availableSeats;
+  const originName = currentRide.startLocationName.includes(',')
+    ? currentRide.startLocationName.split(',')[0].trim()
+    : currentRide.startLocationName;
+  const destName = currentRide.endLocationName.includes(',')
+    ? currentRide.endLocationName.split(',')[0].trim()
+    : currentRide.endLocationName;
+
+  return {
+    id: currentRide.id,
+    rideId: currentRide.id,
+    tripId: currentRide.id,
+    status: 'in_progress',
+    statusLabel: 'Trip in Progress',
+    rawStatus: currentRide.status,
+    isStarted: true,
+    isInProgress: true,
+    startedAt: new Date().toISOString(),
+    origin: currentRide.startLocationName,
+    originName,
+    destination: currentRide.endLocationName,
+    destName,
+    date: formattedDate,
+    departureTime: formattedTime,
+    mode: currentRide.vehicle?.vehicleType === 'BIKE' ? 'bikepool' : 'carpool',
+    vehicleName: currentRide.vehicle ? `${currentRide.vehicle.make} ${currentRide.vehicle.model}` : 'Vehicle',
+    vehicleNumber: currentRide.vehicle?.registrationNumber || '',
+    vehicleColor: currentRide.vehicle?.color || '',
+    totalSeats: currentRide.totalSeats,
+    availableSeats: currentRide.availableSeats,
+    bookedCount,
+    totalFareCollected,
+    passengers: confirmedPassengers,
+    passengerCount: confirmedPassengers.length,
+    stops: currentRide.stops.map((s) => ({
+      id: s.id,
+      name: s.name,
+      type: s.stopType,
+      latitude: Number(s.latitude),
+      longitude: Number(s.longitude),
+      sequence: s.sequence,
+    })),
+    message: 'Trip started successfully! Drive safely.',
+  };
+};
+
+/**
+ * 7b. Complete Trip (Rider marks the trip as completed)
+ */
+export const completeTrip = async (userId, rideId, options = {}) => {
+  const driver = await prisma.driverProfile.findUnique({ where: { userId } });
+  if (!driver) throw new ApiError(403, 'Unauthorized: Driver profile not found');
+
+  const ride = await prisma.ride.findFirst({
+    where: { id: rideId, driverId: driver.id },
+    include: {
+      vehicle: true,
+      pricing: true,
+      bookings: {
+        where: { status: 'ACCEPTED' },
+      },
+    },
+  });
+
+  if (!ride) throw new ApiError(404, 'Offered ride not found');
+
+  if (ride.status === 'COMPLETED') {
+    return {
+      id: ride.id,
+      rideId: ride.id,
+      tripId: ride.id,
+      status: 'completed',
+      statusLabel: 'Completed',
+      rawStatus: 'COMPLETED',
+      isCompleted: true,
+      message: 'Ride is already completed',
+    };
+  }
+
+  // Update ride and bookings
+  const completedRide = await prisma.$transaction(async (tx) => {
+    await tx.booking.updateMany({
+      where: { rideId, status: 'ACCEPTED' },
+      data: { status: 'COMPLETED', completedAt: new Date() },
+    });
+
+    const r = await tx.ride.update({
+      where: { id: rideId },
+      data: { status: 'COMPLETED' },
+      include: { vehicle: true, bookings: true },
+    });
+
+    await tx.driverProfile.update({
+      where: { id: driver.id },
+      data: {
+        totalRidesOffered: { increment: 1 },
+      },
+    });
+
+    return r;
+  });
+
+  return {
+    id: completedRide.id,
+    rideId: completedRide.id,
+    tripId: completedRide.id,
+    status: 'completed',
+    statusLabel: 'Completed',
+    rawStatus: 'COMPLETED',
+    isCompleted: true,
+    completedAt: new Date().toISOString(),
+    message: 'Trip completed successfully! Thank you for sharing your ride.',
+  };
+};
+
+/**
+ * 7c. General Change Ride Status (Start, Complete, Cancel)
+ */
+export const updateOfferedRideStatus = async (userId, rideId, rawStatus) => {
+  const normalized = (rawStatus || '').toUpperCase().trim();
+
+  if (['IN_PROGRESS', 'START', 'STARTED', 'START_TRIP'].includes(normalized)) {
+    return startTrip(userId, rideId);
+  }
+
+  if (['COMPLETED', 'COMPLETE', 'END', 'END_TRIP', 'FINISH'].includes(normalized)) {
+    return completeTrip(userId, rideId);
+  }
+
+  if (['CANCELLED', 'CANCEL'].includes(normalized)) {
+    return cancelOfferedRide(userId, rideId, 'Cancelled by rider');
+  }
+
   const driver = await prisma.driverProfile.findUnique({ where: { userId } });
   if (!driver) throw new ApiError(403, 'Unauthorized');
 
@@ -734,12 +1171,14 @@ export const updateOfferedRideStatus = async (userId, rideId, status) => {
 
   const updated = await prisma.ride.update({
     where: { id: rideId },
-    data: { status },
+    data: { status: normalized || 'IN_PROGRESS' },
   });
 
   return {
+    id: updated.id,
     rideId: updated.id,
     status: updated.status.toLowerCase(),
+    rawStatus: updated.status,
     message: `Ride marked as ${updated.status.toLowerCase()}`,
   };
 };
@@ -776,20 +1215,28 @@ export const updateOfferedRide = async (userId, rideId, data) => {
 
   // Vehicle resolution
   let vehicleId = ride.vehicleId;
-  if (data.vehicleId && data.vehicleId !== 'v_default') {
-    const v = await prisma.vehicle.findFirst({
-      where: { id: data.vehicleId, driverId: driver.id },
+  const inputVehicleId = data.vehicleId || data.vehicle_id;
+  const inputVehicleNumber = data.vehicleNumber || data.vehicle_number;
+  let resolvedVehicle = null;
+
+  if (inputVehicleId && inputVehicleId !== 'v_default') {
+    resolvedVehicle = await prisma.vehicle.findFirst({
+      where: { id: inputVehicleId, driverId: driver.id },
     });
-    if (v) vehicleId = v.id;
-  } else if (data.vehicleNumber) {
-    const v = await prisma.vehicle.findFirst({
-      where: { driverId: driver.id, registrationNumber: data.vehicleNumber.trim().toUpperCase() },
+    if (resolvedVehicle) vehicleId = resolvedVehicle.id;
+  } else if (inputVehicleNumber) {
+    resolvedVehicle = await prisma.vehicle.findFirst({
+      where: { driverId: driver.id, registrationNumber: inputVehicleNumber.trim().toUpperCase() },
     });
-    if (v) vehicleId = v.id;
+    if (resolvedVehicle) vehicleId = resolvedVehicle.id;
   }
 
-  // Seats calculation
-  const newTotalSeats = data.seats || data.availableSeats || ride.totalSeats;
+  // Seats calculation: default to vehicle capacity if changing vehicle without explicit seats
+  const newTotalSeats =
+    data.seats ||
+    data.availableSeats ||
+    data.available_seats ||
+    (resolvedVehicle ? resolvedVehicle.seatCapacity : ride.totalSeats);
   const bookedSeats = ride.totalSeats - ride.availableSeats;
   const newAvailableSeats = Math.max(0, newTotalSeats - bookedSeats);
 
@@ -805,9 +1252,24 @@ export const updateOfferedRide = async (userId, rideId, data) => {
   const isWomenOnly = data.isWomenOnly !== undefined ? Boolean(data.isWomenOnly) : ride.womenOnly;
   const autoAccept = data.autoAccept !== undefined ? Boolean(data.autoAccept) : ride.autoAccept;
 
-  const newPricePerSeat = data.pricePerSeat !== undefined
-    ? Number(data.pricePerSeat)
-    : (ride.pricing ? Number(ride.pricing.costPerSeat) : null);
+  let newPricePerSeat = null;
+  if (data.isFree === true || data.is_free === true || (typeof data.pricingType === 'string' && data.pricingType.toUpperCase() === 'FREE') || (typeof data.pricing_type === 'string' && data.pricing_type.toUpperCase() === 'FREE')) {
+    newPricePerSeat = 0.0;
+  } else if (data.pricePerSeat !== undefined && data.pricePerSeat !== null) {
+    newPricePerSeat = Number(data.pricePerSeat);
+  } else if (data.price !== undefined && data.price !== null) {
+    newPricePerSeat = Number(data.price);
+  } else if (data.price_per_seat !== undefined && data.price_per_seat !== null) {
+    newPricePerSeat = Number(data.price_per_seat);
+  } else if (data.costPerSeat !== undefined && data.costPerSeat !== null) {
+    newPricePerSeat = Number(data.costPerSeat);
+  } else if (data.cost_per_seat !== undefined && data.cost_per_seat !== null) {
+    newPricePerSeat = Number(data.cost_per_seat);
+  } else if (ride.pricing) {
+    newPricePerSeat = Number(ride.pricing.costPerSeat);
+  }
+
+  const updatePricingType = newPricePerSeat === 0 ? 'FREE' : 'COST_SHARING';
 
   await prisma.$transaction(async (tx) => {
     await tx.ride.update({
@@ -834,12 +1296,13 @@ export const updateOfferedRide = async (userId, rideId, data) => {
       await tx.ridePricing.upsert({
         where: { rideId },
         update: {
+          pricingType: updatePricingType,
           costPerSeat: newPricePerSeat,
           totalCost: newPricePerSeat * newTotalSeats,
         },
         create: {
           rideId,
-          pricingType: 'COST_SHARING',
+          pricingType: updatePricingType,
           costPerSeat: newPricePerSeat,
           totalCost: newPricePerSeat * newTotalSeats,
           currency: 'INR',
@@ -890,7 +1353,7 @@ export const updateOfferedRide = async (userId, rideId, data) => {
 /**
  * 9. Delete / Cancel Offered Ride
  */
-export const deleteOfferedRide = async (userId, rideId) => {
+export const deleteOfferedRide = async (userId, rideId, { permanent = false, reason = 'Cancelled by driver' } = {}) => {
   const driver = await prisma.driverProfile.findUnique({ where: { userId } });
   if (!driver) throw new ApiError(403, 'Unauthorized: No driver profile found');
 
@@ -899,35 +1362,72 @@ export const deleteOfferedRide = async (userId, rideId) => {
   });
 
   if (!ride) {
-    return { id: rideId, deleted: true, message: 'Offered ride already deleted' };
+    return { id: rideId, deleted: true, status: 'cancelled', message: 'Offered ride already deleted' };
   }
 
   if (ride.driverId !== driver.id) {
     throw new ApiError(403, 'Unauthorized: Ride belongs to another driver');
   }
 
+  if (permanent) {
+    await prisma.$transaction(async (tx) => {
+      // 1. Delete associated bookings
+      await tx.booking.deleteMany({ where: { rideId } });
+
+      // 2. Delete route and points if exist
+      const route = await tx.rideRoute.findUnique({ where: { rideId } });
+      if (route) {
+        await tx.rideRoutePoint.deleteMany({ where: { rideRouteId: route.id } });
+        await tx.rideRoute.delete({ where: { id: route.id } });
+      }
+
+      // 3. Delete stops and pricing
+      await tx.rideStop.deleteMany({ where: { rideId } });
+      await tx.ridePricing.deleteMany({ where: { rideId } });
+
+      // 4. Delete the ride
+      await tx.ride.delete({ where: { id: rideId } });
+    });
+
+    return {
+      id: rideId,
+      deleted: true,
+      permanent: true,
+      message: 'Offered ride permanently deleted',
+    };
+  }
+
+  // Soft cancel: Update ride status to CANCELLED so it moves to History tab!
   await prisma.$transaction(async (tx) => {
-    // 1. Delete associated bookings
-    await tx.booking.deleteMany({ where: { rideId } });
+    await tx.ride.update({
+      where: { id: rideId },
+      data: {
+        status: 'CANCELLED',
+        cancelledAt: new Date(),
+        cancellationReason: reason,
+      },
+    });
 
-    // 2. Delete route and points if exist
-    const route = await tx.rideRoute.findUnique({ where: { rideId } });
-    if (route) {
-      await tx.rideRoutePoint.deleteMany({ where: { rideRouteId: route.id } });
-      await tx.rideRoute.delete({ where: { id: route.id } });
-    }
-
-    // 3. Delete stops and pricing
-    await tx.rideStop.deleteMany({ where: { rideId } });
-    await tx.ridePricing.deleteMany({ where: { rideId } });
-
-    // 4. Delete the ride
-    await tx.ride.delete({ where: { id: rideId } });
+    // Mark pending or accepted bookings as CANCELLED
+    await tx.booking.updateMany({
+      where: {
+        rideId,
+        status: { in: ['PENDING', 'ACCEPTED'] },
+      },
+      data: {
+        status: 'CANCELLED',
+      },
+    });
   });
 
   return {
     id: rideId,
     deleted: true,
-    message: 'Offered ride deleted successfully',
+    status: 'cancelled',
+    message: 'Offered ride cancelled successfully and moved to history',
   };
+};
+
+export const cancelOfferedRide = async (userId, rideId, reason) => {
+  return deleteOfferedRide(userId, rideId, { permanent: false, reason });
 };

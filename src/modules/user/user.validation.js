@@ -44,9 +44,14 @@ export const searchRidesQuerySchema = z.object({
   destination: z.string().optional(),
   date: z.string().optional(),
   mode: z.enum(['carpool', 'bikepool', 'other', 'all']).optional(),
-  womenOnly: z.enum(['true', 'false']).optional(),
+  womenOnly: z.union([z.enum(['true', 'false']), z.boolean()]).optional(),
+  verifiedOnly: z.union([z.enum(['true', 'false']), z.boolean()]).optional(),
+  search: z.string().optional(),
+  q: z.string().optional(),
+  time: z.string().optional(),
+  timeWindow: z.string().optional(),
   seatsNeeded: z.coerce.number().int().min(1).default(1),
-});
+}).passthrough();
 
 export const requestSeatSchema = {
   body: z.object({

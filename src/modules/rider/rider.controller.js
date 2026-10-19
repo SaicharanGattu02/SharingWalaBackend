@@ -1,6 +1,7 @@
 import { asyncHandler } from '../../utils/asyncHandler.js';
 import { ApiResponse } from '../../utils/apiResponse.js';
 import * as riderService from './rider.service.js';
+import * as userService from '../user/user.service.js';
 
 export const getStatus = asyncHandler(async (req, res) => {
   const status = await riderService.getRiderStatus(req.user.id);
@@ -13,7 +14,7 @@ export const apply = asyncHandler(async (req, res) => {
 });
 
 export const getVehicles = asyncHandler(async (req, res) => {
-  const vehicles = await riderService.getRiderVehicles(req.user.id);
+  const vehicles = await riderService.getRiderVehicles(req.user.id, req.query);
   res.status(200).json(new ApiResponse(200, vehicles, 'Vehicles retrieved'));
 });
 
@@ -38,8 +39,13 @@ export const offerRide = asyncHandler(async (req, res) => {
 });
 
 export const getMyOfferedRides = asyncHandler(async (req, res) => {
-  const rides = await riderService.getMyOfferedRides(req.user.id);
+  const rides = await riderService.getMyOfferedRides(req.user.id, req.query);
   res.status(200).json(new ApiResponse(200, rides, 'Offered rides retrieved'));
+});
+
+export const getMyRides = asyncHandler(async (req, res) => {
+  const result = await userService.getUserMyRides(req.user.id, req.query);
+  res.status(200).json(new ApiResponse(200, result, 'My rides list retrieved'));
 });
 
 export const getRidePassengers = asyncHandler(async (req, res) => {
@@ -49,13 +55,37 @@ export const getRidePassengers = asyncHandler(async (req, res) => {
 
 export const respondToRequest = asyncHandler(async (req, res) => {
   const bookingId = req.params.bookingId || req.params.id;
-  const actionOrStatus = req.body.action || req.body.status;
+  const actionOrStatus =
+    req.body.action ||
+    req.body.status ||
+    (req.body.isPickedUp === true ? 'ONBOARD' : req.body.isPickedUp === false ? 'OFFBOARD' : null);
   const result = await riderService.respondToPassengerRequest(req.user.id, bookingId, actionOrStatus);
   res.status(200).json(new ApiResponse(200, result, result.message));
 });
 
+export const onboardPassenger = asyncHandler(async (req, res) => {
+  const bookingId = req.params.bookingId || req.params.id;
+  const isPickedUp = req.body.isPickedUp !== undefined ? Boolean(req.body.isPickedUp) : true;
+  const result = await riderService.onboardPassenger(req.user.id, bookingId, isPickedUp);
+  res.status(200).json(new ApiResponse(200, result, result.message));
+});
+
+export const startTrip = asyncHandler(async (req, res) => {
+  const rideId = req.params.rideId || req.params.id || req.body.rideId || req.body.id;
+  const result = await riderService.startTrip(req.user.id, rideId, req.body);
+  res.status(200).json(new ApiResponse(200, result, result.message));
+});
+
+export const completeTrip = asyncHandler(async (req, res) => {
+  const rideId = req.params.rideId || req.params.id || req.body.rideId || req.body.id;
+  const result = await riderService.completeTrip(req.user.id, rideId, req.body);
+  res.status(200).json(new ApiResponse(200, result, result.message));
+});
+
 export const updateRideStatus = asyncHandler(async (req, res) => {
-  const result = await riderService.updateOfferedRideStatus(req.user.id, req.params.rideId, req.body.status);
+  const rideId = req.params.rideId || req.params.id || req.body.rideId || req.body.id;
+  const status = req.body.status || req.body.action;
+  const result = await riderService.updateOfferedRideStatus(req.user.id, rideId, status);
   res.status(200).json(new ApiResponse(200, result, result.message));
 });
 
@@ -65,6 +95,19 @@ export const updateOfferRide = asyncHandler(async (req, res) => {
 });
 
 export const deleteOfferRide = asyncHandler(async (req, res) => {
-  const result = await riderService.deleteOfferedRide(req.user.id, req.params.id || req.params.rideId);
+  const permanent = req.query.permanent === 'true' || req.query.hard === 'true';
+  const result = await riderService.deleteOfferedRide(req.user.id, req.params.id || req.params.rideId, {
+    permanent,
+    reason: req.body?.reason || 'Cancelled by driver',
+  });
+  res.status(200).json(new ApiResponse(200, result, result.message));
+});
+
+export const cancelOfferRide = asyncHandler(async (req, res) => {
+  const result = await riderService.cancelOfferedRide(
+    req.user.id,
+    req.params.id || req.params.rideId,
+    req.body?.reason || 'Cancelled by driver'
+  );
   res.status(200).json(new ApiResponse(200, result, result.message));
 });
