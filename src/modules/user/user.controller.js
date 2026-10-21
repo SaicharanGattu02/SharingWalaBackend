@@ -63,3 +63,14 @@ export const getActiveRideTracking = asyncHandler(async (req, res) => {
   const liveInfo = await userService.getActiveRideTracking(req.user.id, req.params.id);
   res.status(200).json(new ApiResponse(200, liveInfo, 'Active ride live tracking info'));
 });
+
+export const submitRideFeedback = asyncHandler(async (req, res) => {
+  const result = await userService.submitRideFeedback(req.user.id, req.params.id, req.body);
+  res.status(201).json(new ApiResponse(201, result, result.message));
+});
+
+export const getRideFeedback = asyncHandler(async (req, res) => {
+  const result = await userService.getRideFeedback(req.user.id, req.params.id);
+  res.status(200).json(new ApiResponse(200, result, 'Ride feedback retrieved'));
+});
+

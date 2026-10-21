@@ -713,6 +713,30 @@ export const getRideDetails = async (rideId, currentUserId = null) => {
   });
 
   if (!ride) {
+    // Check if it's a stranger trip
+    try {
+      const { getStrangerTripById, formatStrangerTripForOffered } = await import('../stranger/stranger.service.js');
+      const st = await getStrangerTripById(rideId);
+      if (st) {
+        return {
+          ...formatStrangerTripForOffered(st),
+          requestStatus: 'none',
+          bookingStatus: 'none',
+          isRequestSent: false,
+          userBooking: null,
+          isFeedbackSubmitted: false,
+          hasSubmittedFeedback: false,
+          hasRated: false,
+          canSubmitFeedback: false,
+          userFeedback: null,
+          stopsTimeline: [
+            { id: 'stop_1', name: st.origin, sequence: 1, type: 'START', time: st.time },
+            { id: 'stop_2', name: st.destination, sequence: 2, type: 'END', time: '11:30 AM' },
+          ],
+        };
+      }
+    } catch (e) {}
+
     const mockRide = defaultMockRides.find((r) => r.id === rideId);
     if (mockRide) {
       return {
@@ -721,6 +745,11 @@ export const getRideDetails = async (rideId, currentUserId = null) => {
         bookingStatus: 'none',
         isRequestSent: false,
         userBooking: null,
+        isFeedbackSubmitted: false,
+        hasSubmittedFeedback: false,
+        hasRated: false,
+        canSubmitFeedback: mockRide.status === 'completed',
+        userFeedback: null,
         stopsTimeline: [
           { id: 'stop_1', name: mockRide.origin, sequence: 1, type: 'START', time: mockRide.departureTime },
           { id: 'stop_2', name: mockRide.destination, sequence: 2, type: 'END', time: '09:15 AM' },
@@ -739,13 +768,69 @@ export const getRideDetails = async (rideId, currentUserId = null) => {
     time: s.estimatedArrivalAt ? new Date(s.estimatedArrivalAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : null,
   }));
 
-  return enrichRideWithUserBooking(formatted, ride.bookings, currentUserId);
+  const enriched = enrichRideWithUserBooking(formatted, ride.bookings, currentUserId);
+
+  // Check if current user has already submitted feedback / rating for this ride
+  let existingRating = null;
+  if (currentUserId) {
+    try {
+      existingRating = await prisma.rating.findFirst({
+        where: {
+          rideId: ride.id,
+          fromUserId: currentUserId,
+        },
+      });
+    } catch (e) {}
+  }
+
+  let feedbackText = existingRating?.comment || '';
+  let feedbackTags = [];
+  if (existingRating && feedbackText) {
+    try {
+      if (feedbackText.startsWith('{') && feedbackText.endsWith('}')) {
+        const parsed = JSON.parse(feedbackText);
+        feedbackText = parsed.text || '';
+        feedbackTags = Array.isArray(parsed.tags) ? parsed.tags : [];
+      }
+    } catch (e) {}
+  }
+
+  const isCompleted = ride.status === 'COMPLETED';
+  const isFeedbackSubmitted = Boolean(existingRating);
+  const canSubmitFeedback = isCompleted && !isFeedbackSubmitted;
+
+  enriched.isFeedbackSubmitted = isFeedbackSubmitted;
+  enriched.hasSubmittedFeedback = isFeedbackSubmitted;
+  enriched.hasRated = isFeedbackSubmitted;
+  enriched.canSubmitFeedback = canSubmitFeedback;
+  enriched.userFeedback = existingRating
+    ? {
+        id: existingRating.id,
+        ratingId: existingRating.id,
+        rating: existingRating.rating,
+        comment: feedbackText,
+        feedback: feedbackText,
+        tags: feedbackTags,
+        submittedAt: existingRating.createdAt,
+      }
+    : null;
+
+  return enriched;
 };
 
 /**
  * 6. Request a Seat on a Ride
  */
-export const requestSeatOnRide = async (passengerUserId, rideId, { seats = 1, pickupPoint, dropoffPoint, notes }) => {
+export const requestSeatOnRide = async (passengerUserId, rideId, { seats = 1, pickupPoint, dropoffPoint, notes } = {}) => {
+  if (rideId && rideId.startsWith('stranger_')) {
+    try {
+      const { joinStrangerTrip } = await import('../stranger/stranger.service.js');
+      return await joinStrangerTrip(passengerUserId, rideId, { seats, pickupPoint, dropoffPoint, notes });
+    } catch (e) {
+      if (e.statusCode) throw e;
+    }
+  }
+
   return await prisma.$transaction(async (tx) => {
     const ride = await tx.ride.findUnique({
       where: { id: rideId },
@@ -753,7 +838,17 @@ export const requestSeatOnRide = async (passengerUserId, rideId, { seats = 1, pi
     });
 
     if (!ride) {
+      try {
+        const { joinStrangerTrip } = await import('../stranger/stranger.service.js');
+        return await joinStrangerTrip(passengerUserId, rideId, { seats, pickupPoint, dropoffPoint, notes });
+      } catch (e) {
+        if (e.statusCode) throw e;
+      }
       throw new ApiError(404, 'Ride not found');
+    }
+
+    if (ride.driver && ride.driver.userId === passengerUserId) {
+      throw new ApiError(400, 'You cannot book your own ride as a passenger');
     }
 
     if (ride.availableSeats < seats) {
@@ -855,13 +950,28 @@ export const getUserMyRides = async (userId, query = {}) => {
   const search = (query.search || query.q || '').trim().toLowerCase();
   const tabFilter = (query.type || query.tab || query.filter || '').trim().toLowerCase();
 
+  // Role filtering support (via query: role=host/guest, activeRole=host/guest, isHost=true/false)
+  const rawRole = (query.role || query.activeRole || query.userRole || query.mode || '').trim().toLowerCase();
+  const filterHostOnly =
+    rawRole === 'host' ||
+    rawRole === 'driver' ||
+    rawRole === 'rider' ||
+    query.isHost === true ||
+    query.isHost === 'true';
+  const filterGuestOnly =
+    rawRole === 'guest' ||
+    rawRole === 'passenger' ||
+    rawRole === 'user' ||
+    query.isHost === false ||
+    query.isHost === 'false';
+
   // ----------------------------------------------------
   // 1. History: Completed & Cancelled trips (Driver + Passenger)
   // ----------------------------------------------------
   const history = [];
 
-  // 1a. Hosted rides that are COMPLETED or CANCELLED
-  if (driver) {
+  // 1a. Hosted rides that are COMPLETED or CANCELLED (Host perspective)
+  if (driver && !filterGuestOnly) {
     const hostedHistory = await prisma.ride.findMany({
       where: {
         driverId: driver.id,
@@ -903,39 +1013,51 @@ export const getUserMyRides = async (userId, query = {}) => {
     }
   }
 
-  // 1b. Passenger bookings that are COMPLETED or CANCELLED or REJECTED
-  const passengerHistoryBookings = await prisma.booking.findMany({
-    where: {
-      passengerId: userId,
-      OR: [
-        { status: { in: ['COMPLETED', 'CANCELLED', 'REJECTED'] } },
-        { ride: { status: { in: ['COMPLETED', 'CANCELLED'] } } },
-      ],
-    },
-    include: {
-      ride: {
-        include: {
-          driver: { include: { user: true } },
-          vehicle: true,
-          pricing: true,
-          stops: true,
+  // 1b. Passenger bookings that are COMPLETED or CANCELLED or REJECTED (Guest perspective)
+  if (!filterHostOnly) {
+    const passengerHistoryBookings = await prisma.booking.findMany({
+      where: {
+        passengerId: userId,
+        // Exclude bookings where the user was the host/driver of the ride
+        ride: {
+          driver: {
+            userId: { not: userId },
+          },
+        },
+        OR: [
+          { status: { in: ['COMPLETED', 'CANCELLED', 'REJECTED'] } },
+          { ride: { status: { in: ['COMPLETED', 'CANCELLED'] } } },
+        ],
+      },
+      include: {
+        ride: {
+          include: {
+            driver: { include: { user: true } },
+            vehicle: true,
+            pricing: true,
+            stops: true,
+          },
         },
       },
-    },
-    orderBy: { createdAt: 'desc' },
-  });
+      orderBy: { createdAt: 'desc' },
+    });
 
-  for (const b of passengerHistoryBookings) {
-    if (!b.ride) continue;
-    const formatted = formatRideForFlutter(b.ride);
-    formatted.bookingId = b.id;
-    formatted.seatsBooked = b.seatsRequested;
-    formatted.bookingStatus = b.status.toLowerCase();
-    formatted.isHost = false;
-    const isCancelled = b.status === 'CANCELLED' || b.status === 'REJECTED' || b.ride.status === 'CANCELLED';
-    formatted.status = isCancelled ? 'cancelled' : 'completed';
-    formatted.cancellationReason = b.ride.cancellationReason || (isCancelled ? 'Trip cancelled' : null);
-    history.push(formatted);
+    for (const b of passengerHistoryBookings) {
+      if (!b.ride) continue;
+      // Safety deduplication: if the user is the driver or ride already present in history, do not duplicate
+      if (b.ride.driver?.userId === userId || history.some((h) => h.id === b.ride.id)) {
+        continue;
+      }
+      const formatted = formatRideForFlutter(b.ride);
+      formatted.bookingId = b.id;
+      formatted.seatsBooked = b.seatsRequested;
+      formatted.bookingStatus = b.status.toLowerCase();
+      formatted.isHost = false;
+      const isCancelled = b.status === 'CANCELLED' || b.status === 'REJECTED' || b.ride.status === 'CANCELLED';
+      formatted.status = isCancelled ? 'cancelled' : 'completed';
+      formatted.cancellationReason = b.ride.cancellationReason || (isCancelled ? 'Trip cancelled' : null);
+      history.push(formatted);
+    }
   }
 
   // Sort all history by departure date descending
@@ -1031,6 +1153,17 @@ export const getUserMyRides = async (userId, query = {}) => {
     }
   }
 
+  // Include Stranger Trips posted by this host
+  try {
+    const { getStrangerTripsByHost, formatStrangerTripForOffered } = await import('../stranger/stranger.service.js');
+    const hostStrangerTrips = getStrangerTripsByHost(userId);
+    for (const st of hostStrangerTrips) {
+      if (!offered.some((o) => o.id === st.id)) {
+        offered.push(formatStrangerTripForOffered(st));
+      }
+    }
+  } catch (err) {}
+
   // ----------------------------------------------------
   // 4. Requested: Active Passenger Bookings
   // ----------------------------------------------------
@@ -1041,6 +1174,9 @@ export const getUserMyRides = async (userId, query = {}) => {
       status: { in: ['PENDING', 'ACCEPTED'] },
       ride: {
         status: { in: ['PUBLISHED', 'IN_PROGRESS', 'FULL'] },
+        driver: {
+          userId: { not: userId },
+        },
       },
     },
     include: {
@@ -1057,7 +1193,7 @@ export const getUserMyRides = async (userId, query = {}) => {
   });
 
   for (const b of activeBookings) {
-    if (!b.ride) continue;
+    if (!b.ride || b.ride.driver?.userId === userId) continue;
     const formatted = formatRideForFlutter(b.ride);
     formatted.bookingId = b.id;
     formatted.seatsBooked = b.seatsRequested;
@@ -1181,7 +1317,7 @@ export const getActiveRideTracking = async (userId, rideId) => {
     ? Number(ride.pricing.costPerSeat ?? 45.0)
     : 45.0;
 
-  return {
+  const result = {
     hasActiveRide: true,
     rideId: ride.id,
     id: ride.id,
@@ -1236,4 +1372,203 @@ export const getActiveRideTracking = async (userId, rideId) => {
     })),
     emergencyContacts: await getTrustedContacts(userId),
   };
+
+  // Check if current user has already submitted feedback / rating for this ride
+  let existingRating = null;
+  if (userId) {
+    try {
+      existingRating = await prisma.rating.findFirst({
+        where: {
+          rideId: ride.id,
+          fromUserId: userId,
+        },
+      });
+    } catch (e) {}
+  }
+
+  const isCompleted = ride.status === 'COMPLETED';
+  const isFeedbackSubmitted = Boolean(existingRating);
+  const canSubmitFeedback = isCompleted && !isFeedbackSubmitted;
+
+  result.isFeedbackSubmitted = isFeedbackSubmitted;
+  result.hasSubmittedFeedback = isFeedbackSubmitted;
+  result.hasRated = isFeedbackSubmitted;
+  result.canSubmitFeedback = canSubmitFeedback;
+  result.userFeedback = existingRating
+    ? {
+        id: existingRating.id,
+        ratingId: existingRating.id,
+        rating: existingRating.rating,
+        comment: existingRating.comment,
+        feedback: existingRating.comment,
+        submittedAt: existingRating.createdAt,
+      }
+    : null;
+
+  return result;
 };
+
+/**
+ * 9. Submit Trip Feedback & Rating (User / Passenger after trip completion)
+ */
+export const submitRideFeedback = async (userId, rideId, data) => {
+  const ratingValue = Math.round(Number(data.rating));
+  if (isNaN(ratingValue) || ratingValue < 1 || ratingValue > 5) {
+    throw new ApiError(400, 'Rating must be an integer between 1 and 5');
+  }
+
+  // 1. One-time feedback check: reject duplicate submissions for the same trip
+  const existingRating = await prisma.rating.findFirst({
+    where: {
+      rideId,
+      fromUserId: userId,
+    },
+  });
+
+  if (existingRating) {
+    throw new ApiError(400, 'Feedback has already been submitted for this ride');
+  }
+
+  const commentText = (data.comment || data.feedback || data.review || '').trim();
+  const tags = Array.isArray(data.tags) ? data.tags : [];
+
+  let targetToUserId = data.toUserId || null;
+  const ride = await prisma.ride.findUnique({
+    where: { id: rideId },
+    include: {
+      driver: { include: { user: true } },
+      bookings: { include: { passenger: true } },
+    },
+  });
+
+  if (!ride) {
+    throw new ApiError(404, 'Ride not found');
+  }
+
+  // Resolve target recipient user ID to a valid user in the users table
+  if (!targetToUserId) {
+    if (ride.driver?.userId && ride.driver.userId !== userId) {
+      // Passenger rating driver
+      targetToUserId = ride.driver.userId;
+    } else if (ride.bookings && ride.bookings.length > 0) {
+      // Driver rating passenger
+      const targetBooking = ride.bookings.find((b) => b.passengerId !== userId);
+      targetToUserId = targetBooking ? targetBooking.passengerId : (ride.driver?.userId || userId);
+    } else {
+      targetToUserId = ride.driver?.userId || userId;
+    }
+  }
+
+  // Fallback to avoid foreign key failure
+  if (!targetToUserId) {
+    targetToUserId = userId;
+  }
+
+  // Store tags with comment if tags are provided
+  const commentPayload = tags.length > 0
+    ? JSON.stringify({ text: commentText, tags })
+    : commentText;
+
+  // Save rating in database
+  const savedRating = await prisma.rating.create({
+    data: {
+      rideId,
+      fromUserId: userId,
+      toUserId: targetToUserId,
+      rating: ratingValue,
+      comment: commentPayload,
+    },
+  });
+
+  // Update recipient's driver average rating if recipient is a driver
+  try {
+    const driverProfile = await prisma.driverProfile.findUnique({
+      where: { userId: targetToUserId },
+    });
+
+    if (driverProfile) {
+      const allRatings = await prisma.rating.findMany({
+        where: { toUserId: targetToUserId },
+        select: { rating: true },
+      });
+
+      if (allRatings.length > 0) {
+        const avg = allRatings.reduce((sum, r) => sum + r.rating, 0) / allRatings.length;
+        await prisma.driverProfile.update({
+          where: { id: driverProfile.id },
+          data: { averageRating: Number(avg.toFixed(2)) },
+        });
+      }
+    }
+  } catch (err) {
+    // Non-fatal if rating aggregation fails
+  }
+
+  return {
+    id: savedRating.id,
+    ratingId: savedRating.id,
+    rideId,
+    fromUserId: userId,
+    toUserId: targetToUserId,
+    rating: ratingValue,
+    comment: commentText,
+    feedback: commentText,
+    tags,
+    submittedAt: savedRating.createdAt.toISOString(),
+    status: 'submitted',
+    message: 'Thank you for your feedback! Your rating helps keep SHARE2GO trusted and safe.',
+  };
+};
+
+/**
+ * 9b. Get Ride Feedback & Rating
+ */
+export const getRideFeedback = async (userId, rideId) => {
+  let existing = null;
+  try {
+    existing = await prisma.rating.findFirst({
+      where: {
+        rideId,
+        fromUserId: userId,
+      },
+    });
+  } catch (e) {}
+
+  if (!existing) {
+    return {
+      hasRated: false,
+      isFeedbackSubmitted: false,
+      hasSubmittedFeedback: false,
+      rideId,
+      rating: null,
+      feedback: null,
+      tags: [],
+    };
+  }
+
+  let feedbackText = existing.comment || '';
+  let feedbackTags = [];
+  try {
+    if (feedbackText.startsWith('{') && feedbackText.endsWith('}')) {
+      const parsed = JSON.parse(feedbackText);
+      feedbackText = parsed.text || '';
+      feedbackTags = Array.isArray(parsed.tags) ? parsed.tags : [];
+    }
+  } catch (e) {}
+
+  return {
+    hasRated: true,
+    isFeedbackSubmitted: true,
+    hasSubmittedFeedback: true,
+    ratingId: existing.id,
+    id: existing.id,
+    rideId: existing.rideId,
+    rating: existing.rating,
+    comment: feedbackText,
+    feedback: feedbackText,
+    tags: feedbackTags,
+    createdAt: existing.createdAt,
+    submittedAt: existing.createdAt,
+  };
+};
+

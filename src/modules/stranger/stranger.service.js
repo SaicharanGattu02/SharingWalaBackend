@@ -1,10 +1,43 @@
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { prisma } from '../../config/db.js';
 import { ApiError } from '../../utils/apiError.js';
 
-// --- In-Memory Dynamic Store with Rich Real Production Seed Data ---
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const storeFilePath = path.join(__dirname, 'stranger_store.json');
+
+// --- Persistent Dynamic Store with Real Production Seed Data ---
 // Allows instant, friction-free CRUD matching Flutter UI 100%
 
 let strangerTrips = [
+  {
+    id: 'stranger_1792606140308',
+    hostId: 'cmvidzcly0000vaaswh1rsxtf',
+    hostName: 'saicharan',
+    hostAvatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=400&q=80',
+    hostRating: 5.0,
+    totalTrips: 1,
+    isVerified: true,
+    origin: 'Hyderabad',
+    destination: 'Bengaluru',
+    date: 'Fri, 23 Oct 2026',
+    time: '7:30 AM',
+    mode: 'bikepool',
+    vibe: 'weekendGetaway',
+    availableSeats: 1,
+    totalSeats: 1,
+    pricePerPerson: 750.0,
+    notes: 'Heading for a weekend trip! Happy to share ride & playlists.',
+    interests: ['Music', 'Tech', 'Food'],
+    imageUrl: 'https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?auto=format&fit=crop&w=800&q=80',
+    isWomenOnly: false,
+    isConnected: true,
+    status: 'PUBLISHED',
+    passengers: [],
+    passengerRequests: [],
+  },
   {
     id: 'stranger_1',
     hostId: 'host_101',
@@ -372,28 +405,309 @@ let strangerReels = [
   },
 ];
 
-// --- 1. STRANGER TRIPS ---
-export const getStrangerTrips = async ({ vibe, isWomenOnly, search } = {}) => {
-  let list = [...strangerTrips];
-  if (vibe) list = list.filter((t) => t.vibe === vibe);
-  if (isWomenOnly === 'true') list = list.filter((t) => t.isWomenOnly);
-  if (search) {
-    const s = search.toLowerCase();
-    list = list.filter((t) => t.origin.toLowerCase().includes(s) || t.destination.toLowerCase().includes(s));
-  }
-  return list;
+const saveStore = () => {
+  try {
+    fs.writeFileSync(
+      storeFilePath,
+      JSON.stringify({ strangerTrips, strangerMeetups, strangerPlans }, null, 2)
+    );
+  } catch (e) {}
 };
 
-export const getStrangerTripById = async (id) => {
-  const trip = strangerTrips.find((t) => t.id === id);
-  if (!trip) throw new ApiError(404, 'Stranger trip not found');
-  return trip;
+const loadStore = () => {
+  try {
+    if (fs.existsSync(storeFilePath)) {
+      const data = JSON.parse(fs.readFileSync(storeFilePath, 'utf8'));
+      if (Array.isArray(data.strangerTrips) && data.strangerTrips.length > 0) {
+        const hasSai = data.strangerTrips.some((t) => t.id === 'stranger_1792606140308');
+        if (!hasSai) {
+          data.strangerTrips.unshift(strangerTrips[0]);
+        }
+        strangerTrips = data.strangerTrips;
+      }
+      if (Array.isArray(data.strangerMeetups)) strangerMeetups = data.strangerMeetups;
+      if (Array.isArray(data.strangerPlans)) strangerPlans = data.strangerPlans;
+    } else {
+      saveStore();
+    }
+  } catch (e) {}
+};
+
+loadStore();
+
+// --- 1. STRANGER TRIPS ---
+export const getStrangerTrips = async ({ vibe, isWomenOnly, mode, search, host } = {}, currentUserId = null) => {
+  let list = strangerTrips.filter((t) => t.status !== 'CANCELLED');
+  if (vibe) {
+    list = list.filter((t) => t.vibe && t.vibe.toLowerCase() === vibe.toLowerCase());
+  }
+  if (isWomenOnly !== undefined) {
+    const isWomenBool = isWomenOnly === 'true' || isWomenOnly === true;
+    if (isWomenBool) {
+      list = list.filter((t) => Boolean(t.isWomenOnly));
+    }
+  }
+  if (mode) {
+    list = list.filter((t) => (t.mode || '').toLowerCase() === mode.toLowerCase());
+  }
+  if (host) {
+    const h = host.toLowerCase();
+    list = list.filter((t) => t.hostName && t.hostName.toLowerCase().includes(h));
+  }
+  if (search) {
+    const s = search.toLowerCase();
+    list = list.filter((t) =>
+      (t.origin && t.origin.toLowerCase().includes(s)) ||
+      (t.destination && t.destination.toLowerCase().includes(s)) ||
+      (t.hostName && t.hostName.toLowerCase().includes(s))
+    );
+  }
+
+  return list.map((t) => {
+    const isHost = currentUserId ? t.hostId === currentUserId : false;
+    const passengerRequests = t.passengerRequests || [];
+    const passengers = t.passengers || [];
+    const userRequest = currentUserId
+      ? passengerRequests.find((r) => r.passengerId === currentUserId)
+      : null;
+    const isConfirmed = currentUserId
+      ? passengers.some((p) => p.passengerId === currentUserId && (p.isConfirmed || p.status === 'Confirmed' || p.status === 'accepted'))
+      : false;
+
+    return {
+      ...t,
+      availableSeats: t.availableSeats !== undefined ? t.availableSeats : t.totalSeats,
+      passengers,
+      passengerRequests,
+      isHost,
+      hasRequested: Boolean(userRequest),
+      userRequestStatus: userRequest ? userRequest.status : (isConfirmed ? 'confirmed' : 'none'),
+      userRequest: userRequest || null,
+      isConfirmedPassenger: isConfirmed,
+      isConnected: isHost || Boolean(userRequest) || isConfirmed,
+      canRequest: !isHost && !userRequest && !isConfirmed && (t.availableSeats > 0),
+    };
+  });
+};
+
+export const getStrangerTripById = async (id, currentUserId = null) => {
+  const t = strangerTrips.find((item) => item.id === id);
+  if (!t) throw new ApiError(404, 'Stranger trip not found');
+
+  const isHost = currentUserId ? t.hostId === currentUserId : false;
+  const passengerRequests = t.passengerRequests || [];
+  const passengers = t.passengers || [];
+  const userRequest = currentUserId
+    ? passengerRequests.find((r) => r.passengerId === currentUserId)
+    : null;
+  const isConfirmed = currentUserId
+    ? passengers.some((p) => p.passengerId === currentUserId && (p.isConfirmed || p.status === 'Confirmed' || p.status === 'accepted'))
+    : false;
+
+  return {
+    ...t,
+    availableSeats: t.availableSeats !== undefined ? t.availableSeats : t.totalSeats,
+    passengers,
+    passengerRequests,
+    isHost,
+    hasRequested: Boolean(userRequest),
+    userRequestStatus: userRequest ? userRequest.status : (isConfirmed ? 'confirmed' : 'none'),
+    userRequest: userRequest || null,
+    isConfirmedPassenger: isConfirmed,
+    isConnected: isHost || Boolean(userRequest) || isConfirmed,
+    canRequest: !isHost && !userRequest && !isConfirmed && (t.availableSeats > 0),
+  };
+};
+
+export const getStrangerTripsByHost = (hostId) => {
+  return strangerTrips.filter((t) => t.hostId === hostId);
+};
+
+export const formatStrangerTripForOffered = (t) => {
+  const price = Number(t.pricePerPerson || 0);
+  return {
+    id: t.id,
+    rideId: t.id,
+    driverId: t.hostId,
+    driverName: t.hostName,
+    driverAvatar: t.hostAvatar,
+    driverPhone: '',
+    rating: Number(t.hostRating || 5.0),
+    totalRides: t.totalTrips || 1,
+    isVerified: t.isVerified ?? true,
+    routeMatchPercentage: 100,
+    origin: t.origin,
+    originName: t.origin.includes(',') ? t.origin.split(',')[0].trim() : t.origin,
+    destination: t.destination,
+    destName: t.destination.includes(',') ? t.destination.split(',')[0].trim() : t.destination,
+    departureTime: t.time,
+    date: t.date,
+    mode: t.mode || 'carpool',
+    rideType: 'strangerTrip',
+    vibe: t.vibe || 'weekendGetaway',
+    availableSeats: t.availableSeats ?? t.totalSeats,
+    totalSeats: t.totalSeats,
+    vehicleName: t.mode === 'bikepool' ? 'Motorcycle (Stranger Trip)' : 'Car (Stranger Trip)',
+    vehicleNumber: 'Stranger Pass',
+    vehicleColor: '',
+    communityName: 'Stranger Long Trips',
+    pickupFlexibility: 'Flexible pickup',
+    notes: t.notes || '',
+    status: 'available',
+    meetingPoint: t.origin,
+    isWomenOnly: Boolean(t.isWomenOnly),
+    pricePerSeat: price,
+    price: price,
+    isFree: price === 0,
+    pricingType: price === 0 ? 'FREE' : 'COST_SHARING',
+    isHost: true,
+    isStrangerTrip: true,
+    imageUrl: t.imageUrl,
+    passengerRequests: [],
+    passengers: [],
+  };
+};
+
+export const getStrangerTripPassengers = (userId, tripId) => {
+  const trip = strangerTrips.find((t) => t.id === tripId);
+  if (!trip) return null;
+
+  const originName = trip.origin.includes(',') ? trip.origin.split(',')[0].trim() : trip.origin;
+  const destName = trip.destination.includes(',') ? trip.destination.split(',')[0].trim() : trip.destination;
+  const totalSeats = Number(trip.totalSeats || 1);
+  const availableSeats = trip.availableSeats !== undefined ? Number(trip.availableSeats) : totalSeats;
+  const bookedCount = Math.max(0, totalSeats - availableSeats);
+
+  const passengers = trip.passengers || [];
+  const confirmed = passengers.filter(
+    (p) => p.isConfirmed || p.status === 'Confirmed' || p.status === 'Onboard' || p.status === 'Trip Completed'
+  );
+  const requests = trip.passengerRequests || [];
+
+  let totalFareCollected = 0;
+  for (const p of confirmed) {
+    totalFareCollected += Number(p.fare || trip.pricePerPerson || 0);
+  }
+
+  const isBike = (trip.mode || '').toLowerCase() === 'bikepool';
+
+  return {
+    rideId: trip.id,
+    origin: trip.origin,
+    originName,
+    destination: trip.destination,
+    destName,
+    date: trip.date,
+    departureTime: trip.time,
+    mode: isBike ? 'bikepool' : 'carpool',
+    vehicleName: isBike ? 'Honda Activa (Stranger Trip)' : 'Car (Stranger Trip)',
+    vehicleNumber: 'Stranger Pass',
+    vehicleColor: 'White',
+    totalSeats,
+    availableSeats,
+    bookedCount,
+    totalFareCollected: Math.round(totalFareCollected),
+    summary: `${bookedCount}/${totalSeats} Seats`,
+    passengers: confirmed,
+    confirmedPassengers: confirmed,
+    passengerRequests: requests,
+    requests: requests,
+    allPassengers: [...confirmed, ...requests],
+  };
+};
+
+export const startStrangerTrip = (userId, tripId) => {
+  const trip = strangerTrips.find((t) => t.id === tripId);
+  if (!trip) return null;
+  trip.status = 'IN_PROGRESS';
+  saveStore();
+  const originName = trip.origin.includes(',') ? trip.origin.split(',')[0].trim() : trip.origin;
+  const destName = trip.destination.includes(',') ? trip.destination.split(',')[0].trim() : trip.destination;
+  const totalSeats = Number(trip.totalSeats || 1);
+  const availableSeats = trip.availableSeats !== undefined ? Number(trip.availableSeats) : totalSeats;
+  const bookedCount = Math.max(0, totalSeats - availableSeats);
+  const isBike = (trip.mode || '').toLowerCase() === 'bikepool';
+
+  return {
+    id: trip.id,
+    rideId: trip.id,
+    tripId: trip.id,
+    status: 'in_progress',
+    statusLabel: 'Trip in Progress',
+    rawStatus: 'IN_PROGRESS',
+    isStarted: true,
+    isInProgress: true,
+    startedAt: new Date().toISOString(),
+    origin: trip.origin,
+    originName,
+    destination: trip.destination,
+    destName,
+    date: trip.date,
+    departureTime: trip.time,
+    mode: isBike ? 'bikepool' : 'carpool',
+    vehicleName: isBike ? 'Honda Activa (Stranger Trip)' : 'Car (Stranger Trip)',
+    vehicleNumber: 'Stranger Pass',
+    vehicleColor: 'White',
+    totalSeats,
+    availableSeats,
+    bookedCount,
+    totalFareCollected: Math.round(bookedCount * Number(trip.pricePerPerson || 0)),
+    passengers: trip.passengers || [],
+    passengerCount: (trip.passengers || []).length,
+    stops: [
+      { id: 'stop_1', name: trip.origin, type: 'START', latitude: 17.448293, longitude: 78.391487, sequence: 1 },
+      { id: 'stop_2', name: trip.destination, type: 'END', latitude: 12.971598, longitude: 77.594562, sequence: 2 },
+    ],
+    message: 'Stranger trip started successfully! Drive safely.',
+  };
+};
+
+export const completeStrangerTrip = (userId, tripId) => {
+  const trip = strangerTrips.find((t) => t.id === tripId);
+  if (!trip) return null;
+  trip.status = 'COMPLETED';
+  saveStore();
+  return {
+    id: trip.id,
+    rideId: trip.id,
+    tripId: trip.id,
+    status: 'completed',
+    statusLabel: 'Completed',
+    rawStatus: 'COMPLETED',
+    isCompleted: true,
+    completedAt: new Date().toISOString(),
+    message: 'Stranger trip completed successfully! Thank you for sharing your ride.',
+  };
+};
+
+export const cancelStrangerTrip = (userId, tripId) => {
+  const trip = strangerTrips.find((t) => t.id === tripId);
+  if (!trip) return null;
+  trip.status = 'CANCELLED';
+  saveStore();
+  return {
+    id: trip.id,
+    rideId: trip.id,
+    deleted: true,
+    status: 'cancelled',
+    statusLabel: 'Cancelled',
+    rawStatus: 'CANCELLED',
+    isCancelled: true,
+    cancelledAt: new Date().toISOString(),
+    message: 'Stranger trip cancelled successfully',
+  };
 };
 
 export const createStrangerTrip = async (userId, data) => {
-  const user = await prisma.user.findUnique({ where: { id: userId } });
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    include: { driverProfile: { include: { vehicles: true } } },
+  });
+
+  const tripId = `stranger_${Date.now()}`;
+  const totalSeats = Number(data.totalSeats || 1);
   const newTrip = {
-    id: `stranger_${Date.now()}`,
+    id: tripId,
     hostId: userId,
     hostName: user?.displayName || 'Traveler',
     hostAvatar: user?.avatarUrl || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=400&q=80',
@@ -404,37 +718,359 @@ export const createStrangerTrip = async (userId, data) => {
     destination: data.destination,
     date: data.date,
     time: data.time,
-    mode: data.mode,
-    vibe: data.vibe,
-    availableSeats: data.totalSeats,
-    totalSeats: data.totalSeats,
-    pricePerPerson: data.pricePerPerson,
+    mode: data.mode || 'carpool',
+    vibe: data.vibe || 'weekendGetaway',
+    availableSeats: totalSeats,
+    totalSeats,
+    pricePerPerson: Number(data.pricePerPerson || 0),
     notes: data.notes || '',
     interests: data.interests || [],
     imageUrl: data.imageUrl || 'https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?auto=format&fit=crop&w=800&q=80',
-    isWomenOnly: data.isWomenOnly || false,
+    isWomenOnly: Boolean(data.isWomenOnly),
     isConnected: false,
+    status: 'PUBLISHED',
+    passengers: [],
+    passengerRequests: [],
   };
 
   strangerTrips.unshift(newTrip);
+  saveStore();
+
+  // Sync to Prisma Ride so that it seamlessly shows in My Rides and Offered Rides everywhere
+  try {
+    let driverProfile = user?.driverProfile;
+    if (!driverProfile && user) {
+      driverProfile = await prisma.driverProfile.create({
+        data: {
+          userId,
+          licenseNumber: `STRANGER-${Date.now().toString().slice(-6)}`,
+          licenseExpiryDate: new Date('2035-12-31'),
+          verificationStatus: 'APPROVED',
+        },
+      });
+      // Activate driver mode on user record
+      await prisma.user.update({
+        where: { id: userId },
+        data: { isDriverMode: true, activeRole: 'HOST' },
+      });
+    }
+
+    let vehicle = driverProfile?.vehicles?.[0];
+    if (!vehicle && driverProfile) {
+      const isBike = (data.mode || '').toLowerCase() === 'bikepool';
+      vehicle = await prisma.vehicle.create({
+        data: {
+          driverId: driverProfile.id,
+          vehicleType: isBike ? 'BIKE' : 'CAR',
+          make: isBike ? 'Honda' : 'Hyundai',
+          model: isBike ? 'Activa' : 'i20',
+          color: 'White',
+          registrationNumber: `TS 09 ST ${Date.now().toString().slice(-4)}`,
+          capacity: totalSeats || (isBike ? 1 : 4),
+        },
+      });
+    }
+
+    if (driverProfile && vehicle) {
+      const depDate = new Date();
+      depDate.setDate(depDate.getDate() + 2);
+
+      await prisma.ride.create({
+        data: {
+          id: tripId,
+          driverId: driverProfile.id,
+          vehicleId: vehicle.id,
+          rideType: 'LONG_DISTANCE',
+          departureAt: depDate,
+          estimatedArrivalAt: new Date(depDate.getTime() + 4 * 3600 * 1000),
+          totalSeats: totalSeats || 3,
+          availableSeats: totalSeats || 3,
+          startLocationName: data.origin,
+          startLat: 17.448293,
+          startLng: 78.391487,
+          endLocationName: data.destination,
+          endLat: 12.971598,
+          endLng: 77.594562,
+          status: 'PUBLISHED',
+          womenOnly: Boolean(data.isWomenOnly),
+          notes: data.notes || '',
+          pricing: {
+            create: {
+              pricingType: (data.pricePerPerson || 0) > 0 ? 'COST_SHARING' : 'FREE',
+              costPerSeat: Number(data.pricePerPerson || 0),
+              baseFare: Number(data.pricePerPerson || 0),
+            },
+          },
+          stops: {
+            create: [
+              { name: data.origin, sequence: 1, stopType: 'START', latitude: 17.448293, longitude: 78.391487 },
+              { name: data.destination, sequence: 2, stopType: 'END', latitude: 12.971598, longitude: 77.594562 },
+            ],
+          },
+        },
+      });
+    }
+  } catch (err) {
+    console.warn('Prisma sync for stranger trip warning:', err.message);
+  }
+
   return newTrip;
 };
 
-export const joinStrangerTrip = async (userId, tripId) => {
-  const trip = await getStrangerTripById(tripId);
-  if (trip.availableSeats <= 0) {
-    throw new ApiError(400, 'Trip is already full');
+export const updateStrangerTrip = async (userId, tripId, data) => {
+  const trip = strangerTrips.find((t) => t.id === tripId);
+  if (!trip) throw new ApiError(404, 'Stranger trip not found');
+
+  // Verify ownership (allow seeded mock host IDs or matching user ID)
+  if (trip.hostId && trip.hostId !== userId && !trip.hostId.startsWith('host_')) {
+    throw new ApiError(403, 'Unauthorized: You can only edit trips created by you');
   }
-  trip.availableSeats -= 1;
+
+  if (data.origin !== undefined) trip.origin = data.origin;
+  if (data.destination !== undefined) trip.destination = data.destination;
+  if (data.date !== undefined) trip.date = data.date;
+  if (data.time !== undefined) trip.time = data.time;
+  if (data.mode !== undefined) trip.mode = data.mode;
+  if (data.vibe !== undefined) trip.vibe = data.vibe;
+  if (data.totalSeats !== undefined) {
+    const seatDiff = data.totalSeats - trip.totalSeats;
+    trip.totalSeats = data.totalSeats;
+    trip.availableSeats = Math.max(0, trip.availableSeats + seatDiff);
+  }
+  if (data.availableSeats !== undefined) trip.availableSeats = data.availableSeats;
+  if (data.pricePerPerson !== undefined) trip.pricePerPerson = data.pricePerPerson;
+  if (data.notes !== undefined) trip.notes = data.notes;
+  if (data.interests !== undefined) trip.interests = data.interests;
+  if (data.isWomenOnly !== undefined) trip.isWomenOnly = data.isWomenOnly;
+  if (data.imageUrl !== undefined) trip.imageUrl = data.imageUrl;
+
+  saveStore();
+  return trip;
+};
+
+export const deleteStrangerTrip = async (userId, tripId) => {
+  const index = strangerTrips.findIndex((t) => t.id === tripId);
+  if (index === -1) throw new ApiError(404, 'Stranger trip not found');
+
+  const trip = strangerTrips[index];
+  // Verify ownership (allow seeded mock host IDs or matching user ID)
+  if (trip.hostId && trip.hostId !== userId && !trip.hostId.startsWith('host_')) {
+    throw new ApiError(403, 'Unauthorized: You can only delete trips created by you');
+  }
+
+  strangerTrips.splice(index, 1);
+  saveStore();
+  return {
+    success: true,
+    tripId,
+    message: 'Stranger trip deleted successfully',
+  };
+};
+
+export const joinStrangerTrip = async (userId, tripId, body = {}) => {
+  const trip = strangerTrips.find((t) => t.id === tripId);
+  if (!trip) throw new ApiError(404, 'Stranger trip not found');
+
+  if (trip.hostId === userId) {
+    throw new ApiError(400, 'You cannot send a join request to your own trip');
+  }
+
+  const seatsRequested = Math.max(1, Number(body.seats || body.seatsRequested || 1));
+  if (trip.availableSeats < seatsRequested && trip.availableSeats > 0) {
+    throw new ApiError(400, `Only ${trip.availableSeats} seat(s) available on this trip`);
+  }
+
+  if (trip.availableSeats <= 0) {
+    throw new ApiError(400, 'This trip is already full');
+  }
+
+  if (!trip.passengerRequests) trip.passengerRequests = [];
+  if (!trip.passengers) trip.passengers = [];
+
+  const alreadyRequested = trip.passengerRequests.some(
+    (r) => r.passengerId === userId && r.status === 'pending'
+  );
+  if (alreadyRequested) {
+    throw new ApiError(400, 'You have already sent an opt-in request for this trip');
+  }
+
+  const alreadyJoined = trip.passengers.some(
+    (p) => p.passengerId === userId && (p.isConfirmed || p.status === 'Confirmed' || p.status === 'accepted')
+  );
+  if (alreadyJoined) {
+    throw new ApiError(400, 'You are already a confirmed passenger on this trip');
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true, displayName: true, phone: true, avatarUrl: true },
+  });
+
+  const requestId = `req_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+  const totalFare = Number(trip.pricePerPerson || 0) * seatsRequested;
+
+  const newRequest = {
+    id: requestId,
+    requestId,
+    bookingId: requestId,
+    passengerId: user?.id || userId,
+    passengerName: user?.displayName || 'Passenger',
+    passengerPhone: user?.phone || '',
+    passengerAvatar: user?.avatarUrl || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=400&q=80',
+    seatsRequested,
+    totalFare,
+    notes: body.notes || 'Looking forward to co-traveling together!',
+    status: 'pending',
+    requestedAt: new Date().toISOString(),
+  };
+
+  trip.passengerRequests.push(newRequest);
   trip.isConnected = true;
-  return { success: true, message: 'Joined trip successfully!', availableSeats: trip.availableSeats };
+  saveStore();
+
+  // Sync to Prisma booking if Prisma ride exists
+  try {
+    const prismaRide = await prisma.ride.findUnique({
+      where: { id: tripId },
+      include: { stops: true },
+    });
+    if (prismaRide && prismaRide.stops && prismaRide.stops.length >= 2) {
+      await prisma.booking.create({
+        data: {
+          id: requestId,
+          rideId: tripId,
+          passengerId: userId,
+          pickupStopId: prismaRide.stops[0].id,
+          dropoffStopId: prismaRide.stops[prismaRide.stops.length - 1].id,
+          seatsRequested,
+          totalCostContribution: totalFare,
+          passengerNotes: body.notes || '',
+          status: 'PENDING',
+        },
+      });
+    }
+  } catch (err) {}
+
+  return {
+    success: true,
+    message: 'Opt-in request sent successfully! The host will review your request.',
+    request: newRequest,
+    passengerRequest: newRequest,
+    bookingId: requestId,
+    tripId: trip.id,
+    availableSeats: trip.availableSeats,
+  };
+};
+
+export const respondToStrangerTripRequest = async (hostUserId, tripId, requestId, action) => {
+  const trip = strangerTrips.find((t) => t.id === tripId);
+  if (!trip) throw new ApiError(404, 'Stranger trip not found');
+  if (trip.hostId !== hostUserId && !trip.hostId.startsWith('host_')) {
+    throw new ApiError(403, 'Unauthorized: Only the trip host can respond to requests');
+  }
+
+  if (!trip.passengerRequests) trip.passengerRequests = [];
+  if (!trip.passengers) trip.passengers = [];
+
+  const reqIndex = trip.passengerRequests.findIndex(
+    (r) => r.id === requestId || r.requestId === requestId || r.bookingId === requestId
+  );
+  if (reqIndex === -1) {
+    throw new ApiError(404, 'Passenger request not found');
+  }
+
+  const req = trip.passengerRequests[reqIndex];
+  const act = (action || '').toUpperCase();
+  const isAccept = ['ACCEPT', 'ACCEPTED', 'APPROVE'].includes(act);
+  const isReject = ['REJECT', 'REJECTED', 'DECLINE'].includes(act);
+
+  if (isAccept) {
+    if (trip.availableSeats < req.seatsRequested) {
+      throw new ApiError(400, `Cannot accept: Only ${trip.availableSeats} seat(s) remaining`);
+    }
+    trip.availableSeats = Math.max(0, trip.availableSeats - req.seatsRequested);
+    req.status = 'accepted';
+    trip.passengerRequests.splice(reqIndex, 1);
+
+    const confirmedPassenger = {
+      ...req,
+      status: 'Confirmed',
+      isConfirmed: true,
+      acceptedAt: new Date().toISOString(),
+    };
+    trip.passengers.push(confirmedPassenger);
+    saveStore();
+
+    try {
+      await prisma.booking.update({
+        where: { id: req.bookingId || req.id },
+        data: { status: 'ACCEPTED', acceptedAt: new Date() },
+      });
+      await prisma.ride.update({
+        where: { id: tripId },
+        data: { availableSeats: trip.availableSeats },
+      });
+    } catch (e) {}
+
+    return {
+      success: true,
+      message: `${req.passengerName}'s request accepted!`,
+      status: 'Confirmed',
+      passenger: confirmedPassenger,
+      availableSeats: trip.availableSeats,
+    };
+  } else if (isReject) {
+    req.status = 'rejected';
+    trip.passengerRequests.splice(reqIndex, 1);
+    saveStore();
+    try {
+      await prisma.booking.update({
+        where: { id: req.bookingId || req.id },
+        data: { status: 'REJECTED', rejectedAt: new Date() },
+      });
+    } catch (e) {}
+
+    return {
+      success: true,
+      message: `${req.passengerName}'s request has been rejected.`,
+      status: 'Rejected',
+    };
+  } else {
+    throw new ApiError(400, 'Invalid action. Must be ACCEPT or REJECT');
+  }
+};
+
+export const respondToStrangerTripRequestByBookingId = async (hostUserId, bookingId, action) => {
+  for (const trip of strangerTrips) {
+    const hasReq = (trip.passengerRequests || []).some(
+      (r) => r.id === bookingId || r.requestId === bookingId || r.bookingId === bookingId
+    );
+    if (hasReq) {
+      return await respondToStrangerTripRequest(hostUserId, trip.id, bookingId, action);
+    }
+  }
+  return null;
 };
 
 // --- 2. STRANGER MEETUPS ---
-export const getStrangerMeetups = async ({ category } = {}) => {
+export const getStrangerMeetups = async ({ category, search, host } = {}) => {
   let list = [...strangerMeetups];
   if (category && category !== 'All') {
     list = list.filter((m) => m.category.toLowerCase() === category.toLowerCase());
+  }
+  if (host) {
+    const h = host.toLowerCase();
+    list = list.filter((m) => m.hostName && m.hostName.toLowerCase().includes(h));
+  }
+  if (search) {
+    const s = search.toLowerCase();
+    list = list.filter((m) =>
+      (m.title && m.title.toLowerCase().includes(s)) ||
+      (m.area && m.area.toLowerCase().includes(s)) ||
+      (m.venueName && m.venueName.toLowerCase().includes(s)) ||
+      (m.hostName && m.hostName.toLowerCase().includes(s)) ||
+      (m.category && m.category.toLowerCase().includes(s))
+    );
   }
   return list;
 };
@@ -476,6 +1112,7 @@ export const createStrangerMeetup = async (userId, data) => {
   };
 
   strangerMeetups.unshift(newMeetup);
+  saveStore();
   return newMeetup;
 };
 
@@ -487,6 +1124,7 @@ export const rsvpStrangerMeetup = async (userId, meetupId) => {
   } else {
     meetup.attendeesCount = Math.max(1, meetup.attendeesCount - 1);
   }
+  saveStore();
   return {
     isRsvped: meetup.isRsvped,
     attendeesCount: meetup.attendeesCount,
@@ -495,11 +1133,113 @@ export const rsvpStrangerMeetup = async (userId, meetupId) => {
 };
 
 // --- 3. STRANGER PLANS ---
-export const getStrangerPlans = async ({ filter } = {}) => {
+export const getStrangerPlans = async ({ filter, interest, search, host } = {}) => {
   let list = [...strangerPlans];
   if (filter === 'trending') list = list.filter((p) => p.isTrending);
   if (filter === 'upcoming') list = list.filter((p) => p.isUpcoming);
+  if (interest && interest !== 'All') {
+    const intLower = interest.toLowerCase();
+    list = list.filter((p) =>
+      p.tags && p.tags.some((t) => t.toLowerCase().includes(intLower))
+    );
+  }
+  if (host) {
+    const h = host.toLowerCase();
+    list = list.filter((p) => p.hostName && p.hostName.toLowerCase().includes(h));
+  }
+  if (search) {
+    const s = search.toLowerCase();
+    list = list.filter((p) =>
+      (p.title && p.title.toLowerCase().includes(s)) ||
+      (p.location && p.location.toLowerCase().includes(s)) ||
+      (p.hostName && p.hostName.toLowerCase().includes(s))
+    );
+  }
   return list;
+};
+
+export const getTrendingPlans = async (query = {}) => {
+  return getStrangerPlans({ ...query, filter: 'trending' });
+};
+
+export const getUpcomingPlans = async (query = {}, currentUserId = null) => {
+  const basePlans = await getStrangerPlans({ ...query, filter: 'upcoming' });
+
+  // Format published stranger trips as plans so they appear in /plans/upcoming
+  const tripPlans = strangerTrips
+    .filter((t) => t.status !== 'CANCELLED')
+    .map((t) => {
+      const total = Number(t.totalSeats || 1);
+      const avail = t.availableSeats !== undefined ? Number(t.availableSeats) : total;
+      const booked = Math.max(0, total - avail);
+      const isHost = currentUserId ? t.hostId === currentUserId : false;
+      const passengerRequests = t.passengerRequests || [];
+      const passengers = t.passengers || [];
+      const userRequest = currentUserId
+        ? passengerRequests.find((r) => r.passengerId === currentUserId)
+        : null;
+      const isConfirmed = currentUserId
+        ? passengers.some((p) => p.passengerId === currentUserId && (p.isConfirmed || p.status === 'Confirmed' || p.status === 'accepted'))
+        : false;
+
+      return {
+        id: t.id,
+        tripId: t.id,
+        title: `${t.origin} to ${t.destination}`,
+        location: t.destination,
+        imageUrl: t.imageUrl || 'https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?auto=format&fit=crop&w=800&q=80',
+        dateRange: t.date,
+        audience: t.isWomenOnly ? 'Women Only' : 'Everyone',
+        joinedMembers: Math.max(1, booked),
+        totalMembers: total,
+        availableSeats: avail,
+        isPrivate: false,
+        isTrending: false,
+        isUpcoming: true,
+        hostId: t.hostId,
+        hostName: t.hostName,
+        hostAvatar: t.hostAvatar,
+        hostRating: t.hostRating || 5.0,
+        price: Number(t.pricePerPerson || 0),
+        description: t.notes || `Road trip from ${t.origin} to ${t.destination}`,
+        tags: t.interests || ['Road Trip', 'Travel'],
+        mode: t.mode,
+        vibe: t.vibe,
+        status: t.status,
+        passengers,
+        passengerRequests,
+        isHost,
+        hasRequested: Boolean(userRequest),
+        userRequestStatus: userRequest ? userRequest.status : (isConfirmed ? 'confirmed' : 'none'),
+        userRequest: userRequest || null,
+        isConnected: isHost || Boolean(userRequest) || isConfirmed,
+        canRequest: !isHost && !userRequest && !isConfirmed && (avail > 0),
+      };
+    });
+
+  return [...tripPlans, ...basePlans];
+};
+
+export const getPlansByInterest = async ({ interest, search, host } = {}) => {
+  const all = await getStrangerPlans({ search, host });
+  const interestSet = new Set(['All']);
+  all.forEach((p) => {
+    (p.tags || []).forEach((t) => interestSet.add(t));
+  });
+
+  let filtered = all;
+  if (interest && interest !== 'All') {
+    const intLower = interest.toLowerCase();
+    filtered = all.filter((p) =>
+      p.tags && p.tags.some((t) => t.toLowerCase().includes(intLower))
+    );
+  }
+
+  return {
+    interests: Array.from(interestSet),
+    plans: filtered,
+    allPlans: all,
+  };
 };
 
 export const getStrangerPlanById = async (id) => {
@@ -531,15 +1271,23 @@ export const createStrangerPlan = async (userId, data) => {
   };
 
   strangerPlans.unshift(newPlan);
+  saveStore();
   return newPlan;
 };
 
-export const joinStrangerPlan = async (userId, planId) => {
+export const joinStrangerPlan = async (userId, planId, body = {}) => {
+  // If planId corresponds to a stranger trip, delegate to joinStrangerTrip!
+  const linkedTrip = strangerTrips.find((t) => t.id === planId);
+  if (linkedTrip) {
+    return await joinStrangerTrip(userId, planId, body);
+  }
+
   const plan = await getStrangerPlanById(planId);
   if (plan.joinedMembers >= plan.totalMembers) {
     throw new ApiError(400, 'This plan is already full');
   }
   plan.joinedMembers += 1;
+  saveStore();
   return {
     joinedMembers: plan.joinedMembers,
     message: 'Joined travel plan successfully!',

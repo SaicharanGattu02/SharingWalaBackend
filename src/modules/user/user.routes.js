@@ -8,6 +8,7 @@ import {
   updateTrustedContactSchema,
   searchRidesQuerySchema,
   requestSeatSchema,
+  submitFeedbackSchema,
 } from './user.validation.js';
 import * as userController from './user.controller.js';
 
@@ -41,5 +42,14 @@ router.get('/active-trip', userController.getActiveRideTracking);
 router.get('/rides/active', userController.getActiveRideTracking);
 router.get('/rides/:id/active', userController.getActiveRideTracking);
 router.get('/rides/active/:id', userController.getActiveRideTracking);
+
+// Feedback, Rating & Review (After trip completion)
+router.post('/rides/:id/feedback', validate(submitFeedbackSchema), userController.submitRideFeedback);
+router.post('/rides/:id/rating', validate(submitFeedbackSchema), userController.submitRideFeedback);
+router.post('/rides/:id/rate', validate(submitFeedbackSchema), userController.submitRideFeedback);
+router.post('/rides/:id/review', validate(submitFeedbackSchema), userController.submitRideFeedback);
+router.get('/rides/:id/feedback', userController.getRideFeedback);
+router.get('/rides/:id/rating', userController.getRideFeedback);
+
 
 export default router;

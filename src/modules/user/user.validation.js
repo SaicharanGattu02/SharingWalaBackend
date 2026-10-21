@@ -61,3 +61,15 @@ export const requestSeatSchema = {
     notes: z.string().max(500).optional(),
   }),
 };
+
+export const submitFeedbackSchema = {
+  body: z.object({
+    rating: z.coerce.number().min(1, 'Rating must be at least 1').max(5, 'Rating cannot exceed 5'),
+    feedback: z.string().max(1000).optional(),
+    comment: z.string().max(1000).optional(),
+    review: z.string().max(1000).optional(),
+    tags: z.array(z.string()).optional(),
+    toUserId: z.string().optional(),
+  }),
+};
+

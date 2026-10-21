@@ -420,6 +420,9 @@
       "notes": "Joining from Kondapur Signal with laptop bag.",
       "requestedAt": "2026-10-20T00:30:00.000Z"
     },
+    "isFeedbackSubmitted": false,
+    "canSubmitFeedback": true,
+    "userFeedback": null,
     "stopsTimeline": [
       {
         "id": "cmvf6ov960003va5obpyq8pf8",
@@ -441,6 +444,12 @@
   "success": true
 }
 ```
+
+> **Feedback / Review UI Logic in Flutter:**
+> - `canSubmitFeedback: true` → Ride is completed and user hasn't reviewed yet! **Show "Rate & Review Host" / "Give Feedback" button.**
+> - `isFeedbackSubmitted: true` → User already rated! **Hide the submit button**, or show their rating/feedback card with `userFeedback.rating` (e.g. ⭐⭐⭐⭐⭐) and `userFeedback.comment`.
+> - `canSubmitFeedback: false` & `isFeedbackSubmitted: false` → Ride is still upcoming or in progress (cannot review yet).
+
 
 > **`requestStatus` / `bookingStatus` Logic in Flutter:**
 > - `"none"` → User has not requested. Show default **"Request Seat"** action button.
@@ -556,6 +565,55 @@
   "success": true
 }
 ```
+
+---
+
+### 2.9 Submit Trip Rating & Feedback (After Trip Completion)
+* **Screen:** `TripCompletedFeedbackSheet`, `RateRideScreen`, `TripReviewDialog`
+* **Method & Path Options:**
+  - `POST /api/v1/user/rides/:id/feedback` *(Recommended)*
+  - `POST /api/v1/user/rides/:id/rating`
+  - `POST /api/v1/user/rides/:id/rate`
+  - `POST /api/v1/user/rides/:id/review`
+* **Auth Required:** ✅ Yes (`Authorization: Bearer <TOKEN>`)
+* **Request Payload (Body):**
+```json
+{
+  "rating": 5,
+  "feedback": "Great trip! Very polite host, punctual pickup and smooth driving.",
+  "tags": ["Punctual", "Clean Vehicle", "Safe Driving", "Polite"]
+}
+```
+> **Fields:**
+> - `rating`: Number between `1` and `5` (Required)
+> - `feedback` / `comment` / `review`: Text review from user (Optional)
+> - `tags`: Array of string badges like `["Punctual", "Polite", "Clean Vehicle"]` (Optional)
+
+* **Success Response (`201 Created`):**
+```json
+{
+  "statusCode": 201,
+  "success": true,
+  "message": "Thank you for your feedback! Your rating helps keep SHARE2GO trusted and safe.",
+  "data": {
+    "id": "cmvgst7dq0001vakskmf6yiqv",
+    "ratingId": "cmvgst7dq0001vakskmf6yiqv",
+    "rideId": "cmvfo2d8z0001va1g037wxsdj",
+    "fromUserId": "cmv2liudn000wvaj4ggns8f3z",
+    "toUserId": "cmvct89cc0000va64lpsog7qm",
+    "rating": 5,
+    "comment": "Great trip! Very polite host, punctual pickup and smooth driving.",
+    "feedback": "Great trip! Very polite host, punctual pickup and smooth driving.",
+    "tags": ["Punctual", "Clean Vehicle", "Safe Driving", "Polite"],
+    "submittedAt": "2026-10-20T14:48:33.215Z",
+    "status": "submitted"
+  }
+}
+```
+
+* **Check Previously Submitted Feedback:**
+  - `GET /api/v1/user/rides/:id/feedback`
+  - Returns `{ hasRated: true, rating: 5, feedback: "..." }` if already reviewed.
 
 ---
 
@@ -912,27 +970,53 @@
 ## 🌟 4. Stranger Mode Module (Trips, Meetups, Plans, Reels)
 
 ### 4.1 Stranger Trips (Road Trips & Getaways)
-* **Screen:** `stranger_mode_screen.dart`, `stranger_trip_card.dart`
+* **Screen:** `stranger_mode_screen.dart`, `stranger_trip_card.dart`, `post_stranger_trip_screen.dart`
 * **List Trips:** `GET /api/v1/stranger/trips`
-  * Optional Filters: `?vibe=weekendGetaway&isWomenOnly=false`
-* **Create Trip:** `POST /api/v1/stranger/trips`
-  * **Payload:**
-  ```json
-  {
-    "origin": "Hyderabad",
-    "destination": "Goa (Panjim & Calangute)",
-    "date": "Fri, 10 Oct 2026",
-    "time": "06:00 AM",
-    "mode": "carpool",
-    "vibe": "weekendGetaway",
-    "totalSeats": 4,
-    "pricePerPerson": 1200.0,
-    "notes": "Weekend road trip to Goa! Clean SUV with Spotify ready.",
-    "interests": ["Road Trips", "Music", "Photography"],
-    "isWomenOnly": false
-  }
-  ```
-* **Join Trip:** `POST /api/v1/stranger/trips/:id/join`
+  * Optional Filters: `?vibe=weekendGetaway&isWomenOnly=false&search=Bengaluru`
+
+#### 4.1a Create Stranger Trip (Host Mode)
+* **Screen:** `post_stranger_trip_screen.dart`
+* **Method & Path:** `POST /api/v1/stranger/trips`
+* **Auth Required:** ✅ Yes (`Authorization: Bearer <TOKEN>`)
+* **Request Payload (Body):**
+```json
+{
+  "origin": "Hyderabad",
+  "destination": "Bengaluru",
+  "date": "Fri, 24 Oct 2026",
+  "time": "07:30 AM",
+  "mode": "carpool",
+  "vibe": "weekendGetaway",
+  "totalSeats": 3,
+  "pricePerPerson": 750.0,
+  "notes": "Heading for a weekend trip! Happy to share ride & playlists.",
+  "interests": ["Music", "Tech", "Food"],
+  "isWomenOnly": false,
+  "imageUrl": "https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?auto=format&fit=crop&w=800&q=80"
+}
+```
+
+#### 4.1b Update Stranger Trip (Host Mode)
+* **Screen:** Edit Trip Screen
+* **Method & Path:** `PUT /api/v1/stranger/trips/:id`
+* **Auth Required:** ✅ Yes (`Authorization: Bearer <TOKEN>`)
+* **Request Payload (Body):**
+```json
+{
+  "totalSeats": 4,
+  "pricePerPerson": 800.0,
+  "notes": "Updated: Leaving 30 mins earlier from Kondapur."
+}
+```
+
+#### 4.1c Delete / Cancel Stranger Trip (Host Mode)
+* **Screen:** Trip Details / Host Delete Action
+* **Method & Path:** `DELETE /api/v1/stranger/trips/:id`
+* **Auth Required:** ✅ Yes (`Authorization: Bearer <TOKEN>`)
+
+#### 4.1d Join Stranger Trip (Co-Traveler)
+* **Method & Path:** `POST /api/v1/stranger/trips/:id/join`
+* **Auth Required:** ✅ Yes
 
 ---
 
@@ -1028,3 +1112,77 @@
   "communityId": "comm_01"
 }
 ```
+
+---
+
+## 🌟 7. Stranger Mode Module (`/api/v1/stranger` or `/api/v1/user/stranger`)
+
+### 7.1 Trending Plans
+* **Screen:** `StrangerModeScreen.dart` (`_trendingPlans`)
+* **Method & Path:** `GET /api/v1/stranger/plans/trending` (or `GET /api/v1/stranger/plans?filter=trending`)
+* **Query Params:** `search` (optional), `host` (optional)
+* **Auth Required:** ❌ No
+
+### 7.2 Upcoming Plans
+* **Screen:** `StrangerModeScreen.dart` (`_upcomingPlans`)
+* **Method & Path:** `GET /api/v1/stranger/plans/upcoming` (or `GET /api/v1/stranger/plans?filter=upcoming`)
+* **Query Params:** `search` (optional), `host` (optional)
+* **Auth Required:** ❌ No
+
+### 7.3 Plans by Interest
+* **Screen:** `StrangerModeScreen.dart` (`PlansByInterestsSection`)
+* **Method & Path:** `GET /api/v1/stranger/plans/by-interest`
+* **Query Params:** `interest` (e.g. `Beach`, `Hill Station`, `Snow`, `All`), `search` (optional)
+* **Auth Required:** ❌ No
+* **Returns:** `{ interests: [...], plans: [...], allPlans: [...] }`
+
+### 7.4 Stranger Meetups
+* **Screen:** `StrangerModeScreen.dart` (`StrangerMeetupsSection`)
+* **Method & Path:** `GET /api/v1/stranger/meetups`
+* **Query Params:** `category` (optional, e.g. `Coffee & Cafes`, `Sports & Fitness`), `search` (optional)
+* **Auth Required:** ❌ No
+
+### 7.5 RSVP to Meetup
+* **Method & Path:** `POST /api/v1/stranger/meetups/:id/rsvp`
+* **Auth Required:** ✅ Yes
+
+### 7.6 Upcoming Stranger Trips (User View)
+* **Screen:** `StrangerModeScreen.dart` (`Upcoming Stranger Trips`)
+* **Method & Path:** `GET /api/v1/stranger/trips`
+* **Query Params:**
+  * `vibe`: `weekendGetaway`, `intercityCommute`, `cityExplore`
+  * `isWomenOnly`: `true` / `false`
+  * `mode`: `carpool` / `bikepool`
+  * `search`: text query matching origin, destination, or host name
+* **Auth Required:** ❌ No
+
+### 7.7 Connect / Join Stranger Trip
+* **Method & Path:** `POST /api/v1/stranger/trips/:id/connect` (or `POST /api/v1/stranger/trips/:id/join`)
+* **Auth Required:** ✅ Yes
+
+### 7.8 Rider / Host: Post a Stranger Trip
+* **Screen:** `PostStrangerTripScreen.dart`
+* **Method & Path:** `POST /api/v1/stranger/trips`
+* **Auth Required:** ✅ Yes
+* **Request Payload (Body):**
+```json
+{
+  "origin": "Hyderabad (Gachibowli)",
+  "destination": "Goa (Panjim)",
+  "date": "Fri, 23 Oct 2026",
+  "time": "06:00 AM",
+  "mode": "carpool",
+  "vibe": "weekendGetaway",
+  "totalSeats": 3,
+  "pricePerPerson": 1100,
+  "notes": "Planning a fun 3-day weekend road trip to Goa! Clean SUV with Spotify playlist ready.",
+  "interests": ["Road Trips", "Music", "Photography"],
+  "imageUrl": "https://images.unsplash.com/photo-1512343879784-a960bf40e7f2?auto=format&fit=crop&w=800&q=80",
+  "isWomenOnly": false
+}
+```
+* **Auto-Sync:**
+  * Immediately appears in `GET /api/v1/stranger/trips` for all users on `StrangerModeScreen`.
+  * Synchronized to the rider's `GET /api/v1/user/my-rides?type=offered` and `GET /api/v1/rider/my-offered-rides`.
+  * Passenger bookings are manageable via `GET /api/v1/rider/rides/:id/passengers`.
+

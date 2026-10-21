@@ -517,7 +517,19 @@ export const getMyOfferedRides = async (userId, query = {}) => {
     where: { userId },
   });
 
-  if (!driver) return [];
+  const getStrangerTrips = async () => {
+    try {
+      const { getStrangerTripsByHost, formatStrangerTripForOffered } = await import('../stranger/stranger.service.js');
+      const hostStrangerTrips = getStrangerTripsByHost(userId);
+      return hostStrangerTrips.map(formatStrangerTripForOffered);
+    } catch (e) {
+      return [];
+    }
+  };
+
+  if (!driver) {
+    return await getStrangerTrips();
+  }
 
   const statusParam = (query.status || 'active').toLowerCase();
   let statusCondition;
@@ -553,7 +565,7 @@ export const getMyOfferedRides = async (userId, query = {}) => {
     orderBy: { departureAt: 'asc' },
   });
 
-  return rides.map((r) => {
+  const result = rides.map((r) => {
     const formatted = formatRideForFlutter(r);
     formatted.isHost = true;
     formatted.passengerRequests = r.bookings.map((b) => ({
@@ -569,14 +581,40 @@ export const getMyOfferedRides = async (userId, query = {}) => {
     }));
     return formatted;
   });
+
+  // Include any stranger trips posted by this user
+  const strangerList = await getStrangerTrips();
+  for (const st of strangerList) {
+    if (!result.some((r) => r.id === st.id)) {
+      result.push(st);
+    }
+  }
+
+  return result;
 };
 
 /**
  * 5b. Get Passengers / Bookings for a Specific Offered Ride
  */
 export const getOfferedRidePassengers = async (userId, rideId) => {
+  // Check stranger trips first
+  try {
+    const { getStrangerTripPassengers } = await import('../stranger/stranger.service.js');
+    const strangerPassengers = getStrangerTripPassengers(userId, rideId);
+    if (strangerPassengers) return strangerPassengers;
+  } catch (e) {
+    // Continue
+  }
+
   const driver = await prisma.driverProfile.findUnique({ where: { userId } });
-  if (!driver) throw new ApiError(403, 'Unauthorized: Driver profile not found');
+  if (!driver) {
+    try {
+      const { getStrangerTripPassengers } = await import('../stranger/stranger.service.js');
+      const strangerPassengers = getStrangerTripPassengers(userId, rideId);
+      if (strangerPassengers) return strangerPassengers;
+    } catch (e) {}
+    throw new ApiError(403, 'Unauthorized: Driver profile not found');
+  }
 
   const ride = await prisma.ride.findFirst({
     where: { id: rideId, driverId: driver.id },
@@ -597,7 +635,14 @@ export const getOfferedRidePassengers = async (userId, rideId) => {
     },
   });
 
-  if (!ride) throw new ApiError(404, 'Offered ride not found');
+  if (!ride) {
+    try {
+      const { getStrangerTripPassengers } = await import('../stranger/stranger.service.js');
+      const strangerPassengers = getStrangerTripPassengers(userId, rideId);
+      if (strangerPassengers) return strangerPassengers;
+    } catch (e) {}
+    throw new ApiError(404, 'Offered ride not found');
+  }
 
   const bookedCount = ride.totalSeats - ride.availableSeats;
   const originName = ride.startLocationName.includes(',')
@@ -715,6 +760,15 @@ export const getOfferedRidePassengers = async (userId, rideId) => {
  * - OFFBOARD / DROPOFF
  */
 export const respondToPassengerRequest = async (userId, bookingId, actionOrStatus) => {
+  // Check if this bookingId belongs to a stranger trip request
+  try {
+    const { respondToStrangerTripRequestByBookingId } = await import('../stranger/stranger.service.js');
+    const strangerRes = await respondToStrangerTripRequestByBookingId(userId, bookingId, actionOrStatus);
+    if (strangerRes) return strangerRes;
+  } catch (e) {
+    if (e.statusCode) throw e;
+  }
+
   return await prisma.$transaction(async (tx) => {
     const booking = await tx.booking.findUnique({
       where: { id: bookingId },
@@ -918,6 +972,14 @@ export const onboardPassenger = async (userId, bookingId, isPickedUp = true) => 
  * 7. Start Trip (Rider starts the offered ride)
  */
 export const startTrip = async (userId, rideId, options = {}) => {
+  if (rideId && rideId.startsWith('stranger_')) {
+    try {
+      const { startStrangerTrip } = await import('../stranger/stranger.service.js');
+      const res = startStrangerTrip(userId, rideId);
+      if (res) return res;
+    } catch (e) {}
+  }
+
   const driver = await prisma.driverProfile.findUnique({ where: { userId } });
   if (!driver) throw new ApiError(403, 'Unauthorized: Driver profile not found');
 
@@ -1077,6 +1139,14 @@ export const startTrip = async (userId, rideId, options = {}) => {
  * 7b. Complete Trip (Rider marks the trip as completed)
  */
 export const completeTrip = async (userId, rideId, options = {}) => {
+  if (rideId && rideId.startsWith('stranger_')) {
+    try {
+      const { completeStrangerTrip } = await import('../stranger/stranger.service.js');
+      const res = completeStrangerTrip(userId, rideId);
+      if (res) return res;
+    } catch (e) {}
+  }
+
   const driver = await prisma.driverProfile.findUnique({ where: { userId } });
   if (!driver) throw new ApiError(403, 'Unauthorized: Driver profile not found');
 
@@ -1354,6 +1424,14 @@ export const updateOfferedRide = async (userId, rideId, data) => {
  * 9. Delete / Cancel Offered Ride
  */
 export const deleteOfferedRide = async (userId, rideId, { permanent = false, reason = 'Cancelled by driver' } = {}) => {
+  if (rideId && rideId.startsWith('stranger_')) {
+    try {
+      const { cancelStrangerTrip } = await import('../stranger/stranger.service.js');
+      const res = cancelStrangerTrip(userId, rideId);
+      if (res) return res;
+    } catch (e) {}
+  }
+
   const driver = await prisma.driverProfile.findUnique({ where: { userId } });
   if (!driver) throw new ApiError(403, 'Unauthorized: No driver profile found');
 

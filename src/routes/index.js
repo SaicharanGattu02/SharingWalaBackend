@@ -17,14 +17,15 @@ const router = Router();
 // 1. PRIMARY PERSONA MODULES
 // ==============================================================================
 
+// 🌟 C. Stranger Mode Module (Trips, Meetups, Plans, Reels)
+router.use('/user/stranger', strangerPersonaRoutes);
+router.use('/stranger', strangerPersonaRoutes);
+
 // 👤 A. User Module (Guest / Commuter / Passenger)
 router.use('/user', userPersonaRoutes);
 
 // 🚗 B. Rider Module (Host / Driver / Vehicle Owner)
 router.use('/rider', riderPersonaRoutes);
-
-// 🌟 C. Stranger Mode Module (Trips, Meetups, Plans, Reels)
-router.use('/stranger', strangerPersonaRoutes);
 
 // ==============================================================================
 // 2. COMMON & PLATFORM SERVICES

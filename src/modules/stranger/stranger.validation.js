@@ -13,7 +13,25 @@ export const createStrangerTripSchema = {
     notes: z.string().max(1000).optional(),
     interests: z.array(z.string()).default([]),
     isWomenOnly: z.boolean().default(false),
-    imageUrl: z.string().url().optional(),
+    imageUrl: z.string().optional(),
+  }),
+};
+
+export const updateStrangerTripSchema = {
+  body: z.object({
+    origin: z.string().min(2).optional(),
+    destination: z.string().min(2).optional(),
+    date: z.string().min(1).optional(),
+    time: z.string().min(1).optional(),
+    mode: z.enum(['carpool', 'bikepool', 'other']).optional(),
+    vibe: z.enum(['weekendGetaway', 'intercityCommute', 'roadTrip', 'backpacking', 'cityExplore', 'eventConcert']).optional(),
+    totalSeats: z.number().int().min(1).max(10).optional(),
+    availableSeats: z.number().int().min(0).max(10).optional(),
+    pricePerPerson: z.number().min(0).optional(),
+    notes: z.string().max(1000).optional(),
+    interests: z.array(z.string()).optional(),
+    isWomenOnly: z.boolean().optional(),
+    imageUrl: z.string().optional(),
   }),
 };
 
