@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "nodemon src/server.js",
     "start": "node src/server.js",
-    "build": "prisma generate",
+    "build": "prisma generate && mkdir -p dist && cp -r src dist/ && cp -r prisma dist/ && cp package.json dist/ && cp .env dist/ 2>/dev/null || true",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:push": "prisma db push",
