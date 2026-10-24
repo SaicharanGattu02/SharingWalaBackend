@@ -68,7 +68,8 @@ export const rejectRequest = asyncHandler(async (req, res) => {
 
 // --- Meetups ---
 export const getMeetups = asyncHandler(async (req, res) => {
-  const meetups = await strangerService.getStrangerMeetups(req.query);
+  const currentUserId = req.user?.id || req.query.userId;
+  const meetups = await strangerService.getStrangerMeetups(req.query, currentUserId);
   res.status(200).json(new ApiResponse(200, meetups, 'Stranger meetups retrieved'));
 });
 

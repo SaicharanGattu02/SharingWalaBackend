@@ -180,14 +180,50 @@ export const formatRideForFlutter = (ride) => {
 
   const departureDate = new Date(ride.departureAt);
   const now = new Date();
+  const isPast = !isNaN(departureDate.getTime()) && departureDate.getTime() < now.getTime();
+  const is24HoursPast = !isNaN(departureDate.getTime()) && (now.getTime() - departureDate.getTime() > 24 * 60 * 60 * 1000);
   const isToday = departureDate.toDateString() === now.toDateString();
-  const isTomorrow = new Date(now.setDate(now.getDate() + 1)).toDateString() === departureDate.toDateString();
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const isTomorrow = tomorrow.toDateString() === departureDate.toDateString();
 
   const formattedDate = isToday ? 'Today' : isTomorrow ? 'Tomorrow' : departureDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   const formattedTime = departureDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
 
   const mode = vehicle?.vehicleType === 'BIKE' ? 'bikepool' : 'carpool';
   const price = ride.pricing ? Number(ride.pricing.costPerSeat ?? ride.pricing.baseFare ?? 45.0) : 45.0;
+
+  // Check if ride has valid passenger bookings/requests
+  const validBookings = (ride.bookings || []).filter(
+    (b) => b.status === 'ACCEPTED' || b.status === 'COMPLETED' || b.status === 'PENDING'
+  );
+  const hasBookings = validBookings.length > 0;
+
+  const rawStatus = (ride.status || 'PUBLISHED').toUpperCase();
+  let status = 'available';
+
+  if (rawStatus === 'CANCELLED') {
+    status = 'cancelled';
+  } else if (rawStatus === 'COMPLETED') {
+    status = 'completed';
+  } else if (rawStatus === 'IN_PROGRESS') {
+    status = 'in_progress';
+  } else if (isPast) {
+    if (hasBookings) {
+      // Departure passed with passengers -> Completed ride, not expired
+      status = 'completed';
+    } else if (is24HoursPast) {
+      // 0 bookings and more than 24 hours passed since departure -> Expired
+      status = 'expired';
+    } else {
+      // Within 24-hour cycle of offered trip -> Stays active/available
+      status = 'available';
+    }
+  } else {
+    status = rawStatus === 'PUBLISHED' ? 'available' : rawStatus.toLowerCase();
+  }
+
+  const isExpired = status === 'expired';
 
   return {
     id: ride.id,
@@ -212,7 +248,8 @@ export const formatRideForFlutter = (ride) => {
     communityName: null,
     pickupFlexibility: 'Flexible within 500m',
     notes: ride.notes || 'Daily commute ride. Clean vehicle, split fuel cost community ride.',
-    status: ride.status === 'PUBLISHED' ? 'available' : ride.status.toLowerCase(),
+    status,
+    isExpired,
     meetingPoint: ride.stops?.[0]?.name || `${ride.startLocationName} Main Gate`,
     isWomenOnly: ride.womenOnly,
     pricePerSeat: price,
@@ -465,13 +502,14 @@ export const searchUserRides = async (query = {}, currentUserId = null) => {
   const whereClause = {
     status: 'PUBLISHED',
     availableSeats: { gt: 0 },
+    departureAt: { gte: new Date() },
   };
 
   if (date) {
     if (date.toLowerCase() === 'today') {
       const endOfToday = new Date(startOfToday);
       endOfToday.setHours(23, 59, 59, 999);
-      whereClause.departureAt = { gte: new Date(Date.now() - 48 * 3600 * 1000), lte: endOfToday };
+      whereClause.departureAt = { gte: new Date(), lte: endOfToday };
     } else if (date.toLowerCase() === 'tomorrow') {
       const startOfTomorrow = new Date(startOfToday);
       startOfTomorrow.setDate(startOfTomorrow.getDate() + 1);
@@ -848,7 +886,15 @@ export const requestSeatOnRide = async (passengerUserId, rideId, { seats = 1, pi
     }
 
     if (ride.driver && ride.driver.userId === passengerUserId) {
-      throw new ApiError(400, 'You cannot book your own ride as a passenger');
+      return {
+        bookingId: `host_${ride.id}`,
+        rideId,
+        status: 'accepted',
+        isHost: true,
+        seatsBooked: seats,
+        totalFare: 0,
+        message: 'You are the host of this ride',
+      };
     }
 
     if (ride.availableSeats < seats) {
@@ -970,12 +1016,15 @@ export const getUserMyRides = async (userId, query = {}) => {
   // ----------------------------------------------------
   const history = [];
 
-  // 1a. Hosted rides that are COMPLETED or CANCELLED (Host perspective)
+  // 1a. Hosted rides that are COMPLETED, CANCELLED, or EXPIRED (Host perspective)
   if (driver && !filterGuestOnly) {
     const hostedHistory = await prisma.ride.findMany({
       where: {
         driverId: driver.id,
-        status: { in: ['COMPLETED', 'CANCELLED'] },
+        OR: [
+          { status: { in: ['COMPLETED', 'CANCELLED'] } },
+          { departureAt: { lt: new Date() } },
+        ],
       },
       include: {
         vehicle: true,
@@ -995,9 +1044,12 @@ export const getUserMyRides = async (userId, query = {}) => {
 
     for (const r of hostedHistory) {
       const formatted = formatRideForFlutter(r);
+      // If within 24 hours of departure and had 0 bookings, it still belongs in Offered, not History
+      if (formatted.status === 'available') {
+        continue;
+      }
       formatted.isHost = true;
-      formatted.status = r.status === 'CANCELLED' ? 'cancelled' : 'completed';
-      formatted.cancellationReason = r.cancellationReason || (r.status === 'CANCELLED' ? 'Trip cancelled' : null);
+      formatted.cancellationReason = r.cancellationReason || (formatted.status === 'cancelled' ? 'Trip cancelled' : null);
       formatted.passengerRequests = r.bookings.map((b) => ({
         bookingId: b.id,
         passengerId: b.passenger.id,
@@ -1060,6 +1112,19 @@ export const getUserMyRides = async (userId, query = {}) => {
     }
   }
 
+  // Include past / cancelled / expired Stranger Trips in History
+  try {
+    const { getStrangerTripsByHost, formatStrangerTripForOffered, isDateTimePast } = await import('../stranger/stranger.service.js');
+    const hostStrangerTrips = getStrangerTripsByHost(userId);
+    for (const st of hostStrangerTrips) {
+      if (isDateTimePast(st.date, st.time) || st.status === 'CANCELLED' || st.status === 'COMPLETED' || st.status === 'EXPIRED') {
+        if (!history.some((h) => h.id === st.id)) {
+          history.push(formatStrangerTripForOffered(st));
+        }
+      }
+    }
+  } catch (err) {}
+
   // Sort all history by departure date descending
   history.sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
 
@@ -1110,14 +1175,16 @@ export const getUserMyRides = async (userId, query = {}) => {
   }
 
   // ----------------------------------------------------
-  // 3. Offered: Active Host Offered Rides
+  // 3. Offered: Active Host Offered Rides (Upcoming only, not expired)
   // ----------------------------------------------------
   const offered = [];
   if (driver) {
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
     const activeOfferedRides = await prisma.ride.findMany({
       where: {
         driverId: driver.id,
         status: { in: ['PUBLISHED', 'IN_PROGRESS', 'FULL'] },
+        departureAt: { gte: twentyFourHoursAgo },
       },
       include: {
         vehicle: true,
@@ -1137,6 +1204,10 @@ export const getUserMyRides = async (userId, query = {}) => {
 
     for (const r of activeOfferedRides) {
       const formatted = formatRideForFlutter(r);
+      // Completed, cancelled, or expired rides belong in History, not Offered
+      if (formatted.status === 'expired' || formatted.status === 'completed' || formatted.status === 'cancelled') {
+        continue;
+      }
       formatted.isHost = true;
       formatted.passengerRequests = r.bookings.map((b) => ({
         bookingId: b.id,
@@ -1153,19 +1224,23 @@ export const getUserMyRides = async (userId, query = {}) => {
     }
   }
 
-  // Include Stranger Trips posted by this host
+  // Include Stranger Trips posted by this host (Active / within 24h)
   try {
     const { getStrangerTripsByHost, formatStrangerTripForOffered } = await import('../stranger/stranger.service.js');
     const hostStrangerTrips = getStrangerTripsByHost(userId);
     for (const st of hostStrangerTrips) {
+      const formatted = formatStrangerTripForOffered(st);
+      if (formatted.status === 'expired' || formatted.status === 'cancelled' || formatted.status === 'completed') {
+        continue;
+      }
       if (!offered.some((o) => o.id === st.id)) {
-        offered.push(formatStrangerTripForOffered(st));
+        offered.push(formatted);
       }
     }
   } catch (err) {}
 
   // ----------------------------------------------------
-  // 4. Requested: Active Passenger Bookings
+  // 4. Requested: Active Passenger Bookings (Upcoming only)
   // ----------------------------------------------------
   const requested = [];
   const activeBookings = await prisma.booking.findMany({
@@ -1174,6 +1249,7 @@ export const getUserMyRides = async (userId, query = {}) => {
       status: { in: ['PENDING', 'ACCEPTED'] },
       ride: {
         status: { in: ['PUBLISHED', 'IN_PROGRESS', 'FULL'] },
+        departureAt: { gte: new Date() },
         driver: {
           userId: { not: userId },
         },
@@ -1195,6 +1271,9 @@ export const getUserMyRides = async (userId, query = {}) => {
   for (const b of activeBookings) {
     if (!b.ride || b.ride.driver?.userId === userId) continue;
     const formatted = formatRideForFlutter(b.ride);
+    if (formatted.isExpired || formatted.status === 'expired') {
+      continue;
+    }
     formatted.bookingId = b.id;
     formatted.seatsBooked = b.seatsRequested;
     formatted.bookingStatus = b.status.toLowerCase();

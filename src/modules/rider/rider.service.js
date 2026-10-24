@@ -278,16 +278,23 @@ export const deleteRiderVehicle = async (userId, vehicleId) => {
 };
 
 const parseDateTime = (timeStr, dateStr) => {
-  const date = new Date();
-  if (dateStr && dateStr.toLowerCase() === 'tomorrow') {
-    date.setDate(date.getDate() + 1);
-  } else if (dateStr && dateStr !== 'Today' && !isNaN(Date.parse(dateStr))) {
-    const parsed = new Date(dateStr);
-    date.setFullYear(parsed.getFullYear(), parsed.getMonth(), parsed.getDate());
+  const now = new Date();
+  let targetDate = new Date();
+
+  if (dateStr) {
+    const dLower = String(dateStr).trim().toLowerCase();
+    if (dLower === 'tomorrow') {
+      targetDate.setDate(targetDate.getDate() + 1);
+    } else if (dLower !== 'today') {
+      const parsed = new Date(dateStr);
+      if (!isNaN(parsed.getTime())) {
+        targetDate = parsed;
+      }
+    }
   }
 
   if (timeStr) {
-    const match = timeStr.match(/(\d+):(\d+)\s*(AM|PM)?/i);
+    const match = String(timeStr).match(/(\d+):(\d+)\s*(AM|PM)?/i);
     if (match) {
       let hours = parseInt(match[1], 10);
       const minutes = parseInt(match[2], 10);
@@ -296,13 +303,20 @@ const parseDateTime = (timeStr, dateStr) => {
       if (period === 'PM' && hours < 12) hours += 12;
       if (period === 'AM' && hours === 12) hours = 0;
 
-      date.setHours(hours, minutes, 0, 0);
+      targetDate.setHours(hours, minutes, 0, 0);
     }
   } else {
-    date.setHours(date.getHours() + 1);
+    targetDate.setHours(targetDate.getHours() + 1);
   }
 
-  return date;
+  // If date was 'Today' or omitted and the time has already passed today,
+  // automatically schedule for the upcoming occurrence (tomorrow morning) so it doesn't expire immediately
+  const isTodayOrUnspecified = !dateStr || String(dateStr).trim().toLowerCase() === 'today';
+  if (isTodayOrUnspecified && targetDate.getTime() < now.getTime()) {
+    targetDate.setDate(targetDate.getDate() + 1);
+  }
+
+  return targetDate;
 };
 
 /**
@@ -517,11 +531,28 @@ export const getMyOfferedRides = async (userId, query = {}) => {
     where: { userId },
   });
 
+  const statusParam = (query.status || 'active').toLowerCase();
+
   const getStrangerTrips = async () => {
     try {
-      const { getStrangerTripsByHost, formatStrangerTripForOffered } = await import('../stranger/stranger.service.js');
+      const { getStrangerTripsByHost, formatStrangerTripForOffered, isDateTimePast } = await import('../stranger/stranger.service.js');
       const hostStrangerTrips = getStrangerTripsByHost(userId);
-      return hostStrangerTrips.map(formatStrangerTripForOffered);
+      return hostStrangerTrips
+        .filter((st) => {
+          const isPast = isDateTimePast(st.date, st.time);
+          if (statusParam === 'history' || statusParam === 'completed') {
+            return isPast || st.status === 'COMPLETED' || st.status === 'CANCELLED';
+          }
+          if (statusParam === 'cancelled') {
+            return st.status === 'CANCELLED';
+          }
+          if (statusParam === 'all') {
+            return true;
+          }
+          // Default: active / upcoming offered rides only (not expired)
+          return !isPast && st.status !== 'CANCELLED' && st.status !== 'COMPLETED' && st.status !== 'EXPIRED';
+        })
+        .map(formatStrangerTripForOffered);
     } catch (e) {
       return [];
     }
@@ -531,23 +562,25 @@ export const getMyOfferedRides = async (userId, query = {}) => {
     return await getStrangerTrips();
   }
 
-  const statusParam = (query.status || 'active').toLowerCase();
   let statusCondition;
+  let dateCondition;
   if (statusParam === 'all') {
     statusCondition = undefined;
   } else if (statusParam === 'cancelled') {
     statusCondition = 'CANCELLED';
-  } else if (statusParam === 'completed') {
-    statusCondition = 'COMPLETED';
+  } else if (statusParam === 'completed' || statusParam === 'history') {
+    statusCondition = { in: ['COMPLETED', 'CANCELLED'] };
   } else {
-    // Default: 'active' offered rides only (excludes cancelled and completed)
+    // Default: 'active' offered rides only (excludes cancelled, completed, and expired)
     statusCondition = { in: ['PUBLISHED', 'IN_PROGRESS', 'FULL'] };
+    dateCondition = { gte: new Date() };
   }
 
   const rides = await prisma.ride.findMany({
     where: {
       driverId: driver.id,
       ...(statusCondition ? { status: statusCondition } : {}),
+      ...(dateCondition ? { departureAt: dateCondition } : {}),
     },
     include: {
       vehicle: true,
@@ -565,8 +598,12 @@ export const getMyOfferedRides = async (userId, query = {}) => {
     orderBy: { departureAt: 'asc' },
   });
 
-  const result = rides.map((r) => {
+  const result = [];
+  for (const r of rides) {
     const formatted = formatRideForFlutter(r);
+    if (statusParam === 'active' && (formatted.isExpired || formatted.status === 'expired')) {
+      continue;
+    }
     formatted.isHost = true;
     formatted.passengerRequests = r.bookings.map((b) => ({
       bookingId: b.id,
@@ -579,8 +616,8 @@ export const getMyOfferedRides = async (userId, query = {}) => {
       totalFare: Number(b.totalCostContribution || 0),
       requestedAt: b.requestedAt || b.createdAt,
     }));
-    return formatted;
-  });
+    result.push(formatted);
+  }
 
   // Include any stranger trips posted by this user
   const strangerList = await getStrangerTrips();

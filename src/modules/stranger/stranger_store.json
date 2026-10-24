@@ -1,6 +1,51 @@
 {
   "strangerTrips": [
     {
+      "id": "stranger_1792872454170",
+      "hostId": "cmvidzcly0000vaaswh1rsxtf",
+      "hostName": "saicharan",
+      "hostAvatar": "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=400&q=80",
+      "hostRating": 5,
+      "totalTrips": 1,
+      "isVerified": true,
+      "origin": "Hyderabad",
+      "destination": "Goa",
+      "date": "Tue, 27 Oct 2026",
+      "time": "7:30 AM",
+      "mode": "carpool",
+      "vibe": "weekendGetaway",
+      "availableSeats": 3,
+      "totalSeats": 3,
+      "pricePerPerson": 1200,
+      "notes": "Heading for a weekend trip! Happy to share ride & playlists.",
+      "interests": [
+        "Music",
+        "Tech",
+        "Food"
+      ],
+      "imageUrl": "https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?auto=format&fit=crop&w=800&q=80",
+      "isWomenOnly": false,
+      "isConnected": true,
+      "status": "PUBLISHED",
+      "passengers": [],
+      "passengerRequests": [
+        {
+          "id": "req_1792873136709_u3gi",
+          "requestId": "req_1792873136709_u3gi",
+          "bookingId": "req_1792873136709_u3gi",
+          "passengerId": "cmvms026c0000vau8s9hz7tk0",
+          "passengerName": "Testing1",
+          "passengerPhone": "+919999999999",
+          "passengerAvatar": "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=400&q=80",
+          "seatsRequested": 1,
+          "totalFare": 1200,
+          "notes": "Looking forward to co-traveling together!",
+          "status": "pending",
+          "requestedAt": "2026-10-24T20:18:56.709Z"
+        }
+      ]
+    },
+    {
       "id": "stranger_1792606140308",
       "hostId": "cmvidzcly0000vaaswh1rsxtf",
       "hostName": "saicharan",
@@ -56,7 +101,24 @@
       ],
       "imageUrl": "https://images.unsplash.com/photo-1512343879784-a960bf40e7f2?auto=format&fit=crop&w=800&q=80",
       "isWomenOnly": false,
-      "isConnected": false
+      "isConnected": true,
+      "passengerRequests": [
+        {
+          "id": "req_1792871460264_gz3h",
+          "requestId": "req_1792871460264_gz3h",
+          "bookingId": "req_1792871460264_gz3h",
+          "passengerId": "cmvidzcly0000vaaswh1rsxtf",
+          "passengerName": "saicharan",
+          "passengerPhone": "+917674952516",
+          "passengerAvatar": "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=400&q=80",
+          "seatsRequested": 1,
+          "totalFare": 1200,
+          "notes": "Looking forward to co-traveling together!",
+          "status": "pending",
+          "requestedAt": "2026-10-24T19:51:00.264Z"
+        }
+      ],
+      "passengers": []
     },
     {
       "id": "stranger_2",
@@ -110,7 +172,24 @@
       ],
       "imageUrl": "https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?auto=format&fit=crop&w=800&q=80",
       "isWomenOnly": false,
-      "isConnected": false
+      "isConnected": true,
+      "passengerRequests": [
+        {
+          "id": "req_1792871500578_418u",
+          "requestId": "req_1792871500578_418u",
+          "bookingId": "req_1792871500578_418u",
+          "passengerId": "cmvidzcly0000vaaswh1rsxtf",
+          "passengerName": "saicharan",
+          "passengerPhone": "+917674952516",
+          "passengerAvatar": "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=400&q=80",
+          "seatsRequested": 1,
+          "totalFare": 550,
+          "notes": "Looking forward to co-traveling together!",
+          "status": "pending",
+          "requestedAt": "2026-10-24T19:51:40.578Z"
+        }
+      ],
+      "passengers": []
     },
     {
       "id": "stranger_4",
@@ -141,6 +220,213 @@
     }
   ],
   "strangerMeetups": [
+    {
+      "id": "meetup_1792872466039",
+      "title": "Weekend Coffee & Tech Founders Pitch",
+      "category": "Coffee & Cafes",
+      "venueName": "Roastery Coffee House",
+      "area": "Jubilee Hills",
+      "distanceKm": 1,
+      "date": "This Saturday",
+      "time": "05:00 PM - 07:00 PM",
+      "hostId": "cmvidzcly0000vaaswh1rsxtf",
+      "hostName": "saicharan",
+      "hostAvatar": "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=400&q=80",
+      "isHostVerified": true,
+      "hostRating": 5,
+      "imageUrl": "https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?auto=format&fit=crop&w=800&q=80",
+      "matchPercentage": 95,
+      "matchReason": "Nearby community member with shared interests",
+      "icebreakerPrompt": "What is one wild tech idea or project you are tinkering with right now?",
+      "maxAttendees": 6,
+      "attendeesCount": 0,
+      "attendeesAvatars": [],
+      "attendeesNames": [],
+      "audienceType": "Everyone",
+      "rsvpedUserIds": [],
+      "tags": [
+        "☕ Coffee",
+        "💻 Tech",
+        "🚀 Startups",
+        "🤝 Networking"
+      ],
+      "expenseType": "Self-order & split bills at venue"
+    },
+    {
+      "id": "meetup_1792871079801",
+      "title": "Weekend Coffee & Tech Founders Pitch",
+      "category": "Tech & Startup",
+      "venueName": "Roastery Coffee",
+      "area": "Sarvodaya Enclave",
+      "distanceKm": 1,
+      "date": "This Saturday",
+      "time": "05:00 PM - 07:00 PM",
+      "hostId": "cmvidzcly0000vaaswh1rsxtf",
+      "hostName": "saicharan",
+      "hostAvatar": "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=400&q=80",
+      "isHostVerified": true,
+      "hostRating": 5,
+      "imageUrl": "https://images.unsplash.com/photo-1522202176988-66273c2fd55f?auto=format&fit=crop&w=800&q=80",
+      "matchPercentage": 95,
+      "matchReason": "Nearby community member with shared interests",
+      "icebreakerPrompt": "What is one wild tech idea or project you are tinkering with right now?",
+      "maxAttendees": 4,
+      "attendeesCount": 0,
+      "attendeesAvatars": [
+        "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80"
+      ],
+      "attendeesNames": [],
+      "audienceType": "Everyone",
+      "isRsvped": false,
+      "rsvpedUserIds": [],
+      "tags": [
+        "☕ Coffee",
+        "💻 Tech",
+        "🚀 Startups",
+        "🤝 Networking"
+      ],
+      "expenseType": "Self-order & split bills at venue"
+    },
+    {
+      "id": "meetup_1792869773049",
+      "title": "Weekend Coffee & Tech Founders Pitch",
+      "category": "Coffee & Cafes",
+      "venueName": "Roastery Coffee",
+      "area": "Road 45, Jubilee Hills",
+      "distanceKm": 1,
+      "date": "Wed, 28 Oct 2026",
+      "time": "5:00 PM - 7:00 PM",
+      "hostId": "cmvidzcly0000vaaswh1rsxtf",
+      "hostName": "saicharan",
+      "hostAvatar": "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=400&q=80",
+      "isHostVerified": true,
+      "hostRating": 5,
+      "imageUrl": "https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?auto=format&fit=crop&w=800&q=80",
+      "matchPercentage": 95,
+      "matchReason": "Nearby community member with shared interests",
+      "icebreakerPrompt": "What is one wild tech idea or project you are tinkering with right now?",
+      "maxAttendees": 6,
+      "attendeesCount": 0,
+      "attendeesAvatars": [
+        "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80"
+      ],
+      "attendeesNames": [],
+      "audienceType": "Everyone",
+      "isRsvped": false,
+      "rsvpedUserIds": [],
+      "tags": [
+        "☕ Coffee",
+        "💻 Tech",
+        "🚀 Startups",
+        "🤝 Networking"
+      ],
+      "expenseType": "Self-order & split bills at venue"
+    },
+    {
+      "id": "meetup_1792869071586",
+      "title": "Weekend Coffee & Tech Founders Pitch",
+      "category": "Coffee & Cafes",
+      "venueName": "Durgam Cheruvu Walkway",
+      "area": "Road 45, Jubilee Hills",
+      "distanceKm": 1,
+      "date": "Tomorrow",
+      "time": "07:00 AM - 09:00 AM",
+      "hostId": "cmvidzcly0000vaaswh1rsxtf",
+      "hostName": "saicharan",
+      "hostAvatar": "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=400&q=80",
+      "isHostVerified": true,
+      "hostRating": 5,
+      "imageUrl": "https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?auto=format&fit=crop&w=800&q=80",
+      "matchPercentage": 95,
+      "matchReason": "Nearby community member with shared interests",
+      "icebreakerPrompt": "What is one wild tech idea or project you are tinkering with right now?",
+      "maxAttendees": 3,
+      "attendeesCount": 1,
+      "attendeesAvatars": [
+        "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80"
+      ],
+      "attendeesNames": [],
+      "audienceType": "Everyone",
+      "isRsvped": false,
+      "rsvpedUserIds": [
+        "cmvms026c0000vau8s9hz7tk0"
+      ],
+      "tags": [
+        "☕ Coffee",
+        "💻 Tech",
+        "🚀 Startups",
+        "🤝 Networking"
+      ],
+      "expenseType": "Self-order & split bills at venue"
+    },
+    {
+      "id": "meetup_1792868256315",
+      "title": "Weekend Coffee & Tech Founders Pitch",
+      "category": "Coffee & Cafes",
+      "venueName": "Roastery Coffee House",
+      "area": "Road 45, Jubilee Hills",
+      "distanceKm": 1,
+      "date": "This Saturday",
+      "time": "05:00 PM - 07:00 PM",
+      "hostId": "cmvidzcly0000vaaswh1rsxtf",
+      "hostName": "saicharan",
+      "hostAvatar": "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=400&q=80",
+      "isHostVerified": true,
+      "hostRating": 5,
+      "imageUrl": "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=800&q=80",
+      "matchPercentage": 95,
+      "matchReason": "Nearby community member with shared interests",
+      "icebreakerPrompt": "What is one wild tech idea or project you are tinkering with right now?",
+      "maxAttendees": 6,
+      "attendeesCount": 0,
+      "attendeesAvatars": [
+        "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80"
+      ],
+      "attendeesNames": [],
+      "audienceType": "Women Only",
+      "isRsvped": false,
+      "rsvpedUserIds": [],
+      "tags": [
+        "💻 Tech",
+        "🚀 Startups",
+        "🤝 Networking"
+      ],
+      "expenseType": "BYOB / Potluck"
+    },
+    {
+      "id": "meetup_1792862771891",
+      "title": "Tech Founders & Weekend Chai",
+      "category": "Coffee & Cafes",
+      "venueName": "Roastery Coffee House",
+      "area": "Road 45, Jubilee Hills",
+      "distanceKm": 1,
+      "date": "This Sunday",
+      "time": "05:00 PM - 07:00 PM",
+      "hostId": "cmvidzcly0000vaaswh1rsxtf",
+      "hostName": "saicharan",
+      "hostAvatar": "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=400&q=80",
+      "isHostVerified": true,
+      "hostRating": 5,
+      "imageUrl": "https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?auto=format&fit=crop&w=800&q=80",
+      "matchPercentage": 95,
+      "matchReason": "Nearby community member with shared interests",
+      "icebreakerPrompt": "What project or idea are you hacking on this month?",
+      "maxAttendees": 6,
+      "attendeesCount": 0,
+      "attendeesAvatars": [
+        "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80"
+      ],
+      "attendeesNames": [],
+      "audienceType": "Everyone",
+      "isRsvped": false,
+      "rsvpedUserIds": [],
+      "tags": [
+        "☕ Coffee",
+        "💻 Startups",
+        "🚀 Tech"
+      ],
+      "expenseType": "Self-order & split bills at venue"
+    },
     {
       "id": "meetup_01",
       "title": "Weekend Coffee & Tech Founders Pitch",
@@ -299,7 +585,8 @@
         "🎨 Design",
         "💼 Career Growth"
       ],
-      "expenseType": "Split brunch bill at venue"
+      "expenseType": "Split brunch bill at venue",
+      "rsvpedUserIds": []
     }
   ],
   "strangerPlans": [
@@ -310,7 +597,7 @@
       "imageUrl": "https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=800&q=80",
       "dateRange": "Sep 18 - Sep 21",
       "audience": "Everyone",
-      "joinedMembers": 9,
+      "joinedMembers": 10,
       "totalMembers": 10,
       "isPrivate": false,
       "isTrending": true,

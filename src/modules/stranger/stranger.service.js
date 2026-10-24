@@ -519,12 +519,81 @@ export const getStrangerTripById = async (id, currentUserId = null) => {
   };
 };
 
+export const parseDateTime = (dateInput, timeInput) => {
+  if (!dateInput) return null;
+  if (dateInput instanceof Date) {
+    if (isNaN(dateInput.getTime())) return null;
+    return dateInput;
+  }
+  const dateStr = String(dateInput).trim();
+  const timeStr = timeInput ? String(timeInput).trim() : '';
+  if (timeStr) {
+    const combined = new Date(`${dateStr} ${timeStr}`);
+    if (!isNaN(combined.getTime())) return combined;
+  }
+  const directDate = new Date(dateStr);
+  if (!isNaN(directDate.getTime())) {
+    if (timeStr) {
+      const match = timeStr.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);
+      if (match) {
+        let hours = parseInt(match[1], 10);
+        const minutes = parseInt(match[2], 10);
+        const ampm = match[3] ? match[3].toUpperCase() : null;
+        if (ampm === 'PM' && hours < 12) hours += 12;
+        if (ampm === 'AM' && hours === 12) hours = 0;
+        const res = new Date(directDate);
+        res.setHours(hours, minutes, 0, 0);
+        return res;
+      }
+    }
+    return directDate;
+  }
+  return null;
+};
+
+export const isDateTimePast = (dateInput, timeInput) => {
+  const dt = parseDateTime(dateInput, timeInput);
+  if (!dt) return false;
+  return dt.getTime() < Date.now();
+};
+
+export const isDateTimePast24Hours = (dateInput, timeInput) => {
+  const dt = parseDateTime(dateInput, timeInput);
+  if (!dt) return false;
+  return Date.now() - dt.getTime() > 24 * 60 * 60 * 1000;
+};
+
 export const getStrangerTripsByHost = (hostId) => {
   return strangerTrips.filter((t) => t.hostId === hostId);
 };
 
 export const formatStrangerTripForOffered = (t) => {
   const price = Number(t.pricePerPerson || 0);
+  const isPast = isDateTimePast(t.date, t.time);
+  const isPast24h = isDateTimePast24Hours(t.date, t.time);
+  const hasMembers = (t.passengers && t.passengers.length > 0) || (t.passengerRequests && t.passengerRequests.some((r) => r.status === 'accepted' || r.status === 'completed')) || (t.membersCount && t.membersCount > 1) || (t.attendeesCount && t.attendeesCount > 1);
+
+  let status = 'available';
+  if (t.status === 'CANCELLED' || t.status === 'cancelled') {
+    status = 'cancelled';
+  } else if (t.status === 'COMPLETED' || t.status === 'completed') {
+    status = 'completed';
+  } else if (t.status === 'IN_PROGRESS' || t.status === 'inprogress') {
+    status = 'inprogress';
+  } else if (isPast) {
+    if (hasMembers) {
+      status = 'completed';
+    } else if (isPast24h) {
+      status = 'expired';
+    } else {
+      status = 'available';
+    }
+  } else {
+    status = 'available';
+  }
+
+  const isExpired = status === 'expired';
+
   return {
     id: t.id,
     rideId: t.id,
@@ -553,7 +622,8 @@ export const formatStrangerTripForOffered = (t) => {
     communityName: 'Stranger Long Trips',
     pickupFlexibility: 'Flexible pickup',
     notes: t.notes || '',
-    status: 'available',
+    status,
+    isExpired,
     meetingPoint: t.origin,
     isWomenOnly: Boolean(t.isWomenOnly),
     pricePerSeat: price,
@@ -563,8 +633,8 @@ export const formatStrangerTripForOffered = (t) => {
     isHost: true,
     isStrangerTrip: true,
     imageUrl: t.imageUrl,
-    passengerRequests: [],
-    passengers: [],
+    passengerRequests: t.passengerRequests || [],
+    passengers: t.passengers || [],
   };
 };
 
@@ -832,6 +902,7 @@ export const updateStrangerTrip = async (userId, tripId, data) => {
   if (data.time !== undefined) trip.time = data.time;
   if (data.mode !== undefined) trip.mode = data.mode;
   if (data.vibe !== undefined) trip.vibe = data.vibe;
+  if (data.status !== undefined) trip.status = data.status;
   if (data.totalSeats !== undefined) {
     const seatDiff = data.totalSeats - trip.totalSeats;
     trip.totalSeats = data.totalSeats;
@@ -844,7 +915,33 @@ export const updateStrangerTrip = async (userId, tripId, data) => {
   if (data.isWomenOnly !== undefined) trip.isWomenOnly = data.isWomenOnly;
   if (data.imageUrl !== undefined) trip.imageUrl = data.imageUrl;
 
+  // If date/time was updated to the future and was expired/none, revive status to PUBLISHED
+  if (!isDateTimePast(trip.date, trip.time) && (trip.status === 'EXPIRED' || !trip.status)) {
+    trip.status = 'PUBLISHED';
+  }
+
   saveStore();
+
+  // Sync to Prisma ride if exists
+  try {
+    const existingRide = await prisma.ride.findUnique({ where: { id: tripId } });
+    if (existingRide) {
+      const newDepDate = parseDateTime(trip.date, trip.time);
+      await prisma.ride.update({
+        where: { id: tripId },
+        data: {
+          ...(newDepDate ? { departureAt: newDepDate } : {}),
+          startLocationName: trip.origin,
+          endLocationName: trip.destination,
+          totalSeats: trip.totalSeats,
+          availableSeats: trip.availableSeats,
+          notes: trip.notes,
+          ...(trip.status === 'CANCELLED' ? { status: 'CANCELLED' } : { status: 'PUBLISHED' }),
+        },
+      });
+    }
+  } catch (err) {}
+
   return trip;
 };
 
@@ -872,7 +969,14 @@ export const joinStrangerTrip = async (userId, tripId, body = {}) => {
   if (!trip) throw new ApiError(404, 'Stranger trip not found');
 
   if (trip.hostId === userId) {
-    throw new ApiError(400, 'You cannot send a join request to your own trip');
+    return {
+      success: true,
+      message: 'You are the host of this trip',
+      isHost: true,
+      status: 'accepted',
+      tripId: trip.id,
+      availableSeats: trip.availableSeats,
+    };
   }
 
   const seatsRequested = Math.max(1, Number(body.seats || body.seatsRequested || 1));
@@ -891,14 +995,30 @@ export const joinStrangerTrip = async (userId, tripId, body = {}) => {
     (r) => r.passengerId === userId && r.status === 'pending'
   );
   if (alreadyRequested) {
-    throw new ApiError(400, 'You have already sent an opt-in request for this trip');
+    const existingReq = trip.passengerRequests.find((r) => r.passengerId === userId && r.status === 'pending');
+    return {
+      success: true,
+      message: 'Your join request is already pending with the host',
+      request: existingReq,
+      passengerRequest: existingReq,
+      bookingId: existingReq?.id || existingReq?.bookingId,
+      status: 'pending',
+      tripId: trip.id,
+      availableSeats: trip.availableSeats,
+    };
   }
 
   const alreadyJoined = trip.passengers.some(
     (p) => p.passengerId === userId && (p.isConfirmed || p.status === 'Confirmed' || p.status === 'accepted')
   );
   if (alreadyJoined) {
-    throw new ApiError(400, 'You are already a confirmed passenger on this trip');
+    return {
+      success: true,
+      message: 'You are already a confirmed member of this trip',
+      status: 'accepted',
+      tripId: trip.id,
+      availableSeats: trip.availableSeats,
+    };
   }
 
   const user = await prisma.user.findUnique({
@@ -1053,32 +1173,186 @@ export const respondToStrangerTripRequestByBookingId = async (hostUserId, bookin
 };
 
 // --- 2. STRANGER MEETUPS ---
-export const getStrangerMeetups = async ({ category, search, host } = {}) => {
+export const getStrangerMeetups = async (query = {}, currentUserId = null) => {
+  const {
+    category,
+    search,
+    q,
+    host,
+    audienceType,
+    audience,
+    isWomenOnly,
+    womenOnly,
+    date,
+    day,
+    area,
+    location,
+    venue,
+    maxDistance,
+    distance,
+    tag,
+    tags,
+    interest,
+    isFree,
+    expenseType,
+    isRsvped,
+    rsvpedOnly,
+    myMeetups,
+    hasSeats,
+    availableOnly,
+    sortBy,
+    sort,
+  } = query;
+
   let list = [...strangerMeetups];
-  if (category && category !== 'All') {
-    list = list.filter((m) => m.category.toLowerCase() === category.toLowerCase());
+
+  // 1. Category Filter (Supports exact, partial, or comma-separated: 'Coffee,Tech')
+  if (category && category !== 'All' && category !== 'all') {
+    const cats = category.split(',').map((c) => c.trim().toLowerCase()).filter(Boolean);
+    list = list.filter((m) => {
+      const mCat = (m.category || '').toLowerCase();
+      return cats.some((c) => mCat.includes(c));
+    });
   }
+
+  // 2. Audience / Women-Only Filter
+  const womenFilter = isWomenOnly === 'true' || isWomenOnly === true ||
+                      womenOnly === 'true' || womenOnly === true ||
+                      audienceType?.toLowerCase() === 'women only' ||
+                      audience?.toLowerCase() === 'women only';
+  if (womenFilter) {
+    list = list.filter((m) => (m.audienceType || '').toLowerCase().includes('women'));
+  } else if (audienceType && audienceType !== 'All' && audienceType !== 'all') {
+    const aud = audienceType.toLowerCase();
+    list = list.filter((m) => (m.audienceType || '').toLowerCase().includes(aud));
+  }
+
+  // 3. Date / Day Filter (today, tomorrow, weekend, saturday, sunday, friday, etc.)
+  const dateFilter = (date || day || '').trim().toLowerCase();
+  if (dateFilter && dateFilter !== 'all') {
+    list = list.filter((m) => {
+      const mDate = (m.date || '').toLowerCase();
+      if (dateFilter === 'weekend') {
+        return mDate.includes('saturday') || mDate.includes('sunday') || mDate.includes('weekend');
+      }
+      return mDate.includes(dateFilter);
+    });
+  }
+
+  // 4. Area / Location / Venue Filter
+  const locFilter = (area || location || venue || '').trim().toLowerCase();
+  if (locFilter) {
+    list = list.filter((m) =>
+      (m.area && m.area.toLowerCase().includes(locFilter)) ||
+      (m.venueName && m.venueName.toLowerCase().includes(locFilter))
+    );
+  }
+
+  // 5. Maximum Distance / Proximity Filter (in km)
+  const distLimit = Number(maxDistance || distance);
+  if (!isNaN(distLimit) && distLimit > 0) {
+    list = list.filter((m) => Number(m.distanceKm || 0) <= distLimit);
+  }
+
+  // 6. Tag / Interest Filter
+  const tagFilter = (tag || tags || interest || '').trim().toLowerCase();
+  if (tagFilter && tagFilter !== 'all') {
+    list = list.filter((m) =>
+      Array.isArray(m.tags) && m.tags.some((t) => t.toLowerCase().includes(tagFilter))
+    );
+  }
+
+  // 7. Free / Expense Type Filter
+  const freeFilter = isFree === 'true' || isFree === true || expenseType?.toLowerCase() === 'free';
+  if (freeFilter) {
+    list = list.filter((m) => (m.expenseType || '').toLowerCase().includes('free'));
+  } else if (expenseType && expenseType !== 'all') {
+    const exp = expenseType.toLowerCase();
+    list = list.filter((m) => (m.expenseType || '').toLowerCase().includes(exp));
+  }
+
+  // 8. Available Seats Filter
+  const seatsOnly = hasSeats === 'true' || hasSeats === true || availableOnly === 'true' || availableOnly === true;
+  if (seatsOnly) {
+    list = list.filter((m) => (m.attendeesCount || 0) < (m.maxAttendees || 10));
+  }
+
+  // 9. RSVPed / My Meetups Filter
+  const rsvpFilter = isRsvped === 'true' || isRsvped === true || rsvpedOnly === 'true' || myMeetups === 'true';
+  if (rsvpFilter) {
+    list = list.filter((m) => {
+      const isUserRsvped = currentUserId
+        ? (m.rsvpedUserIds?.includes(currentUserId) || m.attendeesNames?.includes('You') || m.isRsvped)
+        : m.isRsvped;
+      const isHost = currentUserId ? m.hostId === currentUserId : false;
+      return isUserRsvped || isHost;
+    });
+  }
+
+  // 10. Host Name Filter
   if (host) {
     const h = host.toLowerCase();
     list = list.filter((m) => m.hostName && m.hostName.toLowerCase().includes(h));
   }
-  if (search) {
-    const s = search.toLowerCase();
+
+  // 11. Keyword Search across title, area, venue, host, category, tags, icebreaker
+  const keyword = (search || q || '').trim().toLowerCase();
+  if (keyword) {
     list = list.filter((m) =>
-      (m.title && m.title.toLowerCase().includes(s)) ||
-      (m.area && m.area.toLowerCase().includes(s)) ||
-      (m.venueName && m.venueName.toLowerCase().includes(s)) ||
-      (m.hostName && m.hostName.toLowerCase().includes(s)) ||
-      (m.category && m.category.toLowerCase().includes(s))
+      (m.title && m.title.toLowerCase().includes(keyword)) ||
+      (m.area && m.area.toLowerCase().includes(keyword)) ||
+      (m.venueName && m.venueName.toLowerCase().includes(keyword)) ||
+      (m.hostName && m.hostName.toLowerCase().includes(keyword)) ||
+      (m.category && m.category.toLowerCase().includes(keyword)) ||
+      (m.matchReason && m.matchReason.toLowerCase().includes(keyword)) ||
+      (m.icebreakerPrompt && m.icebreakerPrompt.toLowerCase().includes(keyword)) ||
+      (Array.isArray(m.tags) && m.tags.some((t) => t.toLowerCase().includes(keyword)))
     );
   }
-  return list;
+
+  // 12. Sorting Options (distance, match, rating, attendees)
+  const sortOption = (sortBy || sort || '').trim().toLowerCase();
+  if (sortOption === 'distance' || sortOption === 'nearest') {
+    list.sort((a, b) => Number(a.distanceKm || 0) - Number(b.distanceKm || 0));
+  } else if (sortOption === 'match' || sortOption === 'matchpercentage') {
+    list.sort((a, b) => Number(b.matchPercentage || 0) - Number(a.matchPercentage || 0));
+  } else if (sortOption === 'rating') {
+    list.sort((a, b) => Number(b.hostRating || 0) - Number(a.hostRating || 0));
+  } else if (sortOption === 'attendees' || sortOption === 'popular') {
+    list.sort((a, b) => Number(b.attendeesCount || 0) - Number(a.attendeesCount || 0));
+  }
+
+  // Enrich with user-specific context
+  return list.map((m) => {
+    const isHost = currentUserId ? m.hostId === currentUserId : false;
+    const isUserRsvped = currentUserId
+      ? Boolean(m.rsvpedUserIds && m.rsvpedUserIds.includes(currentUserId) && m.hostId !== currentUserId)
+      : false;
+    return {
+      ...m,
+      isHost,
+      isRsvped: isUserRsvped,
+      availableSeats: Math.max(0, (m.maxAttendees || 6) - (m.attendeesCount || 0)),
+      isFull: (m.attendeesCount || 0) >= (m.maxAttendees || 6),
+    };
+  });
 };
 
-export const getStrangerMeetupById = async (id) => {
+export const getStrangerMeetupById = async (id, currentUserId = null) => {
   const meetup = strangerMeetups.find((m) => m.id === id);
   if (!meetup) throw new ApiError(404, 'Stranger meetup not found');
-  return meetup;
+  const isHost = currentUserId ? meetup.hostId === currentUserId : false;
+  const isUserRsvped = currentUserId
+    ? Boolean(meetup.rsvpedUserIds && meetup.rsvpedUserIds.includes(currentUserId) && meetup.hostId !== currentUserId)
+    : false;
+
+  return {
+    ...meetup,
+    isHost,
+    isRsvped: isUserRsvped,
+    availableSeats: Math.max(0, (meetup.maxAttendees || 6) - (meetup.attendeesCount || 0)),
+    isFull: (meetup.attendeesCount || 0) >= (meetup.maxAttendees || 6),
+  };
 };
 
 export const createStrangerMeetup = async (userId, data) => {
@@ -1102,33 +1376,83 @@ export const createStrangerMeetup = async (userId, data) => {
     matchReason: 'Nearby community member with shared interests',
     icebreakerPrompt: data.icebreakerPrompt || 'What brings you to this meetup?',
     maxAttendees: data.maxAttendees,
-    attendeesCount: 1,
-    attendeesAvatars: [user?.avatarUrl || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80'],
-    attendeesNames: [user?.displayName || 'You'],
-    audienceType: data.audienceType,
-    isRsvped: true,
-    tags: data.tags,
-    expenseType: data.expenseType,
+    attendeesCount: 0,
+    attendeesAvatars: [],
+    attendeesNames: [],
+    audienceType: data.audienceType || 'Everyone',
+    rsvpedUserIds: [],
+    tags: data.tags || [],
+    expenseType: data.expenseType || 'Self-order & split bills at venue',
   };
 
   strangerMeetups.unshift(newMeetup);
   saveStore();
-  return newMeetup;
+  return {
+    ...newMeetup,
+    isHost: true,
+    isRsvped: false,
+    availableSeats: newMeetup.maxAttendees,
+    isFull: false,
+  };
 };
 
 export const rsvpStrangerMeetup = async (userId, meetupId) => {
-  const meetup = await getStrangerMeetupById(meetupId);
-  meetup.isRsvped = !meetup.isRsvped;
-  if (meetup.isRsvped) {
-    meetup.attendeesCount += 1;
+  const meetup = strangerMeetups.find((m) => m.id === meetupId);
+  if (!meetup) throw new ApiError(404, 'Stranger meetup not found');
+
+  if (meetup.hostId === userId) {
+    return {
+      isRsvped: false,
+      isHost: true,
+      attendeesCount: meetup.attendeesCount || 0,
+      message: 'You are the host of this meetup',
+    };
+  }
+
+  if (!meetup.rsvpedUserIds) {
+    meetup.rsvpedUserIds = [];
+  }
+  if (!meetup.attendeesNames) {
+    meetup.attendeesNames = [];
+  }
+  if (!meetup.attendeesAvatars) {
+    meetup.attendeesAvatars = [];
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { displayName: true, avatarUrl: true },
+  });
+
+  const alreadyRsvped = meetup.rsvpedUserIds.includes(userId);
+  let isRsvped = false;
+
+  if (alreadyRsvped) {
+    meetup.rsvpedUserIds = meetup.rsvpedUserIds.filter((id) => id !== userId);
+    if (user?.displayName) {
+      meetup.attendeesNames = meetup.attendeesNames.filter((n) => n !== user.displayName && n !== 'You');
+    }
+    if (user?.avatarUrl) {
+      meetup.attendeesAvatars = meetup.attendeesAvatars.filter((a) => a !== user.avatarUrl);
+    }
+    meetup.attendeesCount = Math.max(0, (meetup.attendeesCount || 1) - 1);
+    isRsvped = false;
   } else {
-    meetup.attendeesCount = Math.max(1, meetup.attendeesCount - 1);
+    meetup.rsvpedUserIds.push(userId);
+    if (user?.displayName && !meetup.attendeesNames.includes(user.displayName)) {
+      meetup.attendeesNames.push(user.displayName);
+    }
+    if (user?.avatarUrl && !meetup.attendeesAvatars.includes(user.avatarUrl)) {
+      meetup.attendeesAvatars.push(user.avatarUrl);
+    }
+    meetup.attendeesCount = (meetup.attendeesCount || 0) + 1;
+    isRsvped = true;
   }
   saveStore();
   return {
-    isRsvped: meetup.isRsvped,
+    isRsvped,
     attendeesCount: meetup.attendeesCount,
-    message: meetup.isRsvped ? 'RSVP confirmed!' : 'RSVP cancelled',
+    message: isRsvped ? 'RSVP confirmed!' : 'RSVP cancelled',
   };
 };
 
@@ -1283,12 +1607,22 @@ export const joinStrangerPlan = async (userId, planId, body = {}) => {
   }
 
   const plan = await getStrangerPlanById(planId);
+  if (plan.hostId === userId) {
+    return {
+      success: true,
+      isHost: true,
+      status: 'accepted',
+      joinedMembers: plan.joinedMembers,
+      message: 'You are the host of this travel plan',
+    };
+  }
   if (plan.joinedMembers >= plan.totalMembers) {
     throw new ApiError(400, 'This plan is already full');
   }
   plan.joinedMembers += 1;
   saveStore();
   return {
+    success: true,
     joinedMembers: plan.joinedMembers,
     message: 'Joined travel plan successfully!',
   };

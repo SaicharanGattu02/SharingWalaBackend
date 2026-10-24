@@ -10,6 +10,7 @@ import authRoutes from '../modules/auth/auth.routes.js';
 import chatRoutes from '../modules/chat/chat.routes.js';
 import communityRoutes from '../modules/communities/community.routes.js';
 import healthRoutes from '../modules/health/health.routes.js';
+import commonRoutes from '../modules/common/common.routes.js';
 
 const router = Router();
 
@@ -30,6 +31,10 @@ router.use('/rider', riderPersonaRoutes);
 // ==============================================================================
 // 2. COMMON & PLATFORM SERVICES
 // ==============================================================================
+
+// 📢 Common Banners & App Config
+router.use('/common', commonRoutes);
+router.use('/banners', commonRoutes);
 
 // 🔐 Authentication & Session
 router.use('/auth', authRoutes);
