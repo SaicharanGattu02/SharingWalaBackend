@@ -74,7 +74,8 @@ export const getMeetups = asyncHandler(async (req, res) => {
 });
 
 export const getMeetupById = asyncHandler(async (req, res) => {
-  const meetup = await strangerService.getStrangerMeetupById(req.params.id);
+  const currentUserId = req.user?.id || req.query.userId;
+  const meetup = await strangerService.getStrangerMeetupById(req.params.id, currentUserId);
   res.status(200).json(new ApiResponse(200, meetup, 'Meetup details retrieved'));
 });
 

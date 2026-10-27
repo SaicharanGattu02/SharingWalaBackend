@@ -1326,8 +1326,8 @@ export const getStrangerMeetups = async (query = {}, currentUserId = null) => {
   return list.map((m) => {
     const isHost = currentUserId ? m.hostId === currentUserId : false;
     const isUserRsvped = currentUserId
-      ? Boolean(m.rsvpedUserIds && m.rsvpedUserIds.includes(currentUserId) && m.hostId !== currentUserId)
-      : false;
+      ? Boolean(m.rsvpedUserIds && m.rsvpedUserIds.includes(currentUserId))
+      : Boolean(m.isRsvped);
     return {
       ...m,
       isHost,
@@ -1343,8 +1343,8 @@ export const getStrangerMeetupById = async (id, currentUserId = null) => {
   if (!meetup) throw new ApiError(404, 'Stranger meetup not found');
   const isHost = currentUserId ? meetup.hostId === currentUserId : false;
   const isUserRsvped = currentUserId
-    ? Boolean(meetup.rsvpedUserIds && meetup.rsvpedUserIds.includes(currentUserId) && meetup.hostId !== currentUserId)
-    : false;
+    ? Boolean(meetup.rsvpedUserIds && meetup.rsvpedUserIds.includes(currentUserId))
+    : Boolean(meetup.isRsvped);
 
   return {
     ...meetup,
@@ -1400,15 +1400,6 @@ export const rsvpStrangerMeetup = async (userId, meetupId) => {
   const meetup = strangerMeetups.find((m) => m.id === meetupId);
   if (!meetup) throw new ApiError(404, 'Stranger meetup not found');
 
-  if (meetup.hostId === userId) {
-    return {
-      isRsvped: false,
-      isHost: true,
-      attendeesCount: meetup.attendeesCount || 0,
-      message: 'You are the host of this meetup',
-    };
-  }
-
   if (!meetup.rsvpedUserIds) {
     meetup.rsvpedUserIds = [];
   }
@@ -1439,19 +1430,23 @@ export const rsvpStrangerMeetup = async (userId, meetupId) => {
     isRsvped = false;
   } else {
     meetup.rsvpedUserIds.push(userId);
-    if (user?.displayName && !meetup.attendeesNames.includes(user.displayName)) {
-      meetup.attendeesNames.push(user.displayName);
+    const userName = user?.displayName || 'Attendee';
+    if (!meetup.attendeesNames.includes(userName)) {
+      meetup.attendeesNames.push(userName);
     }
-    if (user?.avatarUrl && !meetup.attendeesAvatars.includes(user.avatarUrl)) {
-      meetup.attendeesAvatars.push(user.avatarUrl);
+    const userAvatar = user?.avatarUrl || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80';
+    if (!meetup.attendeesAvatars.includes(userAvatar)) {
+      meetup.attendeesAvatars.push(userAvatar);
     }
     meetup.attendeesCount = (meetup.attendeesCount || 0) + 1;
     isRsvped = true;
   }
+  meetup.isRsvped = isRsvped;
   saveStore();
   return {
     isRsvped,
     attendeesCount: meetup.attendeesCount,
+    isHost: meetup.hostId === userId,
     message: isRsvped ? 'RSVP confirmed!' : 'RSVP cancelled',
   };
 };

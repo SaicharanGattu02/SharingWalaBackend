@@ -145,7 +145,24 @@
       ],
       "imageUrl": "https://images.unsplash.com/photo-1596176530529-78163a4f7af2?auto=format&fit=crop&w=800&q=80",
       "isWomenOnly": true,
-      "isConnected": false
+      "isConnected": true,
+      "passengerRequests": [
+        {
+          "id": "req_1793130462361_q0xa",
+          "requestId": "req_1793130462361_q0xa",
+          "bookingId": "req_1793130462361_q0xa",
+          "passengerId": "cmvidzcly0000vaaswh1rsxtf",
+          "passengerName": "saicharan",
+          "passengerPhone": "+917674952516",
+          "passengerAvatar": "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=400&q=80",
+          "seatsRequested": 1,
+          "totalFare": 650,
+          "notes": "Looking forward to co-traveling together!",
+          "status": "pending",
+          "requestedAt": "2026-10-27T19:47:42.361Z"
+        }
+      ],
+      "passengers": []
     },
     {
       "id": "stranger_3",
@@ -239,11 +256,18 @@
       "matchReason": "Nearby community member with shared interests",
       "icebreakerPrompt": "What is one wild tech idea or project you are tinkering with right now?",
       "maxAttendees": 6,
-      "attendeesCount": 0,
-      "attendeesAvatars": [],
-      "attendeesNames": [],
+      "attendeesCount": 1,
+      "attendeesAvatars": [
+        "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=400&q=80"
+      ],
+      "attendeesNames": [
+        "saicharan"
+      ],
       "audienceType": "Everyone",
-      "rsvpedUserIds": [],
+      "isRsvped": true,
+      "rsvpedUserIds": [
+        "cmvidzcly0000vaaswh1rsxtf"
+      ],
       "tags": [
         "☕ Coffee",
         "💻 Tech",
@@ -690,7 +714,7 @@
       "imageUrl": "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=800&q=80",
       "dateRange": "Nov 14 - Nov 18",
       "audience": "Everyone",
-      "joinedMembers": 3,
+      "joinedMembers": 4,
       "totalMembers": 6,
       "isPrivate": false,
       "isTrending": false,
