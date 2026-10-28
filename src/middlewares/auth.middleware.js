@@ -27,6 +27,7 @@ export const authenticate = asyncHandler(async (req, res, next) => {
       displayName: true,
       phone: true,
       email: true,
+      gender: true,
       status: true,
       driverProfile: {
         select: {
@@ -81,6 +82,7 @@ export const optionalAuthenticate = asyncHandler(async (req, res, next) => {
         id: true,
         displayName: true,
         phone: true,
+        gender: true,
         status: true,
         driverProfile: {
           select: { id: true, verificationStatus: true },

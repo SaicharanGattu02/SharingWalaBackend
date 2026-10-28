@@ -3,6 +3,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { prisma } from '../../config/db.js';
 import { ApiError } from '../../utils/apiError.js';
+import { getIO } from '../../config/socket.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -261,100 +262,193 @@ let strangerMeetups = [
 
 let strangerPlans = [
   {
-    id: 'plan_trend_1',
+    id: 'trend_01',
+    aliases: ['plan_trend_1', 'trend_1', 'Trend_1', 'Trend!1'],
     title: 'Delhi To Chakrata',
     location: 'Chakrata hill station',
     imageUrl: 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=800&q=80',
-    dateRange: 'Sep 18 - Sep 21',
+    dateRange: 'Nov 12 - Nov 15',
+    startDate: '2026-11-12',
+    time: '06:00 AM',
     audience: 'Everyone',
-    joinedMembers: 9,
+    joinedMembers: 7,
     totalMembers: 10,
     isPrivate: false,
     isTrending: true,
     isUpcoming: false,
+    isWomenOnly: false,
+    hostId: 'host_trend_1',
     hostName: 'Manish Kumar',
     hostAvatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=400&q=80',
     hostRating: 4.95,
     price: 1850,
     description: 'Scenic weekend mountain drive and camp out at Chakrata hills with bonfire and hiking trails.',
-    tags: ['Hill Station', 'Campfire', 'Weekend Road Trip'],
+    tags: ['Hill Station', 'Campfire', 'Weekend Road Trip', 'Road Trips'],
+    joinedUserIds: ['usr_seed_1', 'usr_seed_2', 'usr_seed_3', 'usr_seed_4', 'usr_seed_5', 'usr_seed_6', 'usr_seed_7'],
+    members: [
+      { userId: 'usr_seed_1', name: 'Rohan Gupta', avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=400&q=80' },
+      { userId: 'usr_seed_2', name: 'Pooja Verma', avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=400&q=80' },
+      { userId: 'usr_seed_3', name: 'Siddharth Rao', avatar: 'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?auto=format&fit=crop&w=400&q=80' },
+      { userId: 'usr_seed_4', name: 'Ananya Sen', avatar: 'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=400&q=80' },
+      { userId: 'usr_seed_5', name: 'Vikram Sethi', avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=400&q=80' },
+      { userId: 'usr_seed_6', name: 'Neha Joshi', avatar: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=400&q=80' },
+      { userId: 'usr_seed_7', name: 'Kunal Mehra', avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=400&q=80' }
+    ]
   },
   {
-    id: 'plan_trend_2',
+    id: 'trend_02',
+    aliases: ['plan_trend_2', 'trend_2', 'Trend_2', 'Trend!2'],
     title: 'durga pooja kolkata',
     location: 'Kolkata',
     imageUrl: 'https://images.unsplash.com/photo-1567157577867-05ccb1388e66?auto=format&fit=crop&w=800&q=80',
-    dateRange: 'Oct 15 - Oct 17',
+    dateRange: 'Nov 15 - Nov 17',
+    startDate: '2026-11-15',
+    time: '08:30 AM',
     audience: 'Everyone',
     joinedMembers: 4,
     totalMembers: 20,
     isPrivate: false,
     isTrending: true,
     isUpcoming: false,
+    isWomenOnly: false,
+    hostId: 'host_trend_2',
     hostName: 'Bhanuprakash',
     hostAvatar: 'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?auto=format&fit=crop&w=400&q=80',
     hostRating: 4.9,
     price: 900,
     description: 'Explore the grand Durga Puja pandals, Bengali street food, and cultural festivities together.',
-    tags: ['Festival', 'Street Food', 'Cultural Walk'],
+    tags: ['Festival', 'Street Food', 'Cultural Walk', 'Road Trips'],
+    joinedUserIds: ['usr_seed_1', 'usr_seed_2', 'usr_seed_3', 'usr_seed_4'],
+    members: [
+      { userId: 'usr_seed_1', name: 'Rohan Gupta', avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=400&q=80' },
+      { userId: 'usr_seed_2', name: 'Pooja Verma', avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=400&q=80' },
+      { userId: 'usr_seed_3', name: 'Siddharth Rao', avatar: 'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?auto=format&fit=crop&w=400&q=80' },
+      { userId: 'usr_seed_4', name: 'Ananya Sen', avatar: 'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=400&q=80' }
+    ]
   },
   {
-    id: 'plan_trend_3',
+    id: 'trend_03',
+    aliases: ['plan_trend_3', 'trend_3', 'Trend_3', 'Trend!3'],
     title: 'Uttarakhand Trip',
     location: 'Uttarakhand',
     imageUrl: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=800&q=80',
-    dateRange: 'Jul 15 - Aug 10',
+    dateRange: 'Nov 18 - Nov 22',
+    startDate: '2026-11-18',
+    time: '07:00 AM',
     audience: 'Female only',
-    joinedMembers: 7,
+    joinedMembers: 5,
     totalMembers: 9,
     isPrivate: true,
     isTrending: true,
     isUpcoming: false,
+    isWomenOnly: true,
+    hostId: 'host_trend_3',
     hostName: 'Apoorva Sharma',
     hostAvatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=400&q=80',
     hostRating: 4.98,
     price: 2400,
     description: 'Peaceful lake visit, boating, cafe hopping, and valley sunset viewpoints across Uttarakhand.',
-    tags: ['Lakes', 'Boating', 'Safe Travel', 'Women Only'],
+    tags: ['Lakes', 'Boating', 'Safe Travel', 'Women Only', 'Road Trips'],
+    joinedUserIds: ['usr_seed_2', 'usr_seed_4', 'usr_seed_6', 'usr_seed_8', 'usr_seed_9'],
+    members: [
+      { userId: 'usr_seed_2', name: 'Pooja Verma', avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=400&q=80' },
+      { userId: 'usr_seed_4', name: 'Ananya Sen', avatar: 'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=400&q=80' },
+      { userId: 'usr_seed_6', name: 'Neha Joshi', avatar: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=400&q=80' },
+      { userId: 'usr_seed_8', name: 'Sneha Patel', avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=400&q=80' },
+      { userId: 'usr_seed_9', name: 'Deepa Roy', avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80' }
+    ]
   },
   {
-    id: 'plan_up_2',
+    id: 'upcoming_02',
+    aliases: ['plan_up_2', 'upcoming_2', 'up_2'],
     title: 'Manali Snow Adventure',
     location: 'Solang Valley, Manali',
     imageUrl: 'https://images.unsplash.com/photo-1517824806704-9040b037703b?auto=format&fit=crop&w=800&q=80',
-    dateRange: 'Nov 02 - Nov 07',
+    dateRange: 'Nov 05 - Nov 10',
+    startDate: '2026-11-05',
+    time: '06:30 AM',
     audience: 'Everyone',
     joinedMembers: 6,
     totalMembers: 10,
     isPrivate: false,
     isTrending: false,
     isUpcoming: true,
+    isWomenOnly: false,
+    hostId: 'host_up_2',
     hostName: 'Aditya Verma',
     hostAvatar: 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&w=400&q=80',
     hostRating: 4.96,
     price: 3200,
     description: 'Early winter snow drive, paragliding at Solang valley, and cozy cafe exploration in Old Manali.',
-    tags: ['Snow', 'Cafes', 'Adventure'],
+    tags: ['Snow', 'Cafes', 'Adventure', 'Road Trips'],
+    joinedUserIds: ['usr_seed_1', 'usr_seed_2', 'usr_seed_3', 'usr_seed_4', 'usr_seed_5', 'usr_seed_6'],
+    members: [
+      { userId: 'usr_seed_1', name: 'Rohan Gupta', avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=400&q=80' },
+      { userId: 'usr_seed_2', name: 'Pooja Verma', avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=400&q=80' },
+      { userId: 'usr_seed_3', name: 'Siddharth Rao', avatar: 'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?auto=format&fit=crop&w=400&q=80' },
+      { userId: 'usr_seed_4', name: 'Ananya Sen', avatar: 'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=400&q=80' },
+      { userId: 'usr_seed_5', name: 'Vikram Sethi', avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=400&q=80' },
+      { userId: 'usr_seed_6', name: 'Neha Joshi', avatar: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=400&q=80' }
+    ]
   },
   {
-    id: 'plan_up_3',
+    id: 'upcoming_03',
+    aliases: ['plan_up_3', 'upcoming_3', 'up_3'],
     title: 'Goa Beach & Sunsets',
     location: 'North Goa (Vagator & Morjim)',
     imageUrl: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=800&q=80',
     dateRange: 'Nov 14 - Nov 18',
+    startDate: '2026-11-14',
+    time: '07:30 AM',
     audience: 'Everyone',
     joinedMembers: 3,
     totalMembers: 6,
     isPrivate: false,
     isTrending: false,
     isUpcoming: true,
+    isWomenOnly: false,
+    hostId: 'host_up_3',
     hostName: 'Kavya Reddy',
     hostAvatar: 'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=400&q=80',
     hostRating: 4.98,
     price: 2100,
     description: 'Chill beach days, seaside sunsets, acoustic music jams, and seaside seafood dinners.',
-    tags: ['Beach', 'Sunset', 'Relax'],
+    tags: ['Beach', 'Sunset', 'Relax', 'Road Trips'],
+    joinedUserIds: ['usr_seed_1', 'usr_seed_2', 'usr_seed_3'],
+    members: [
+      { userId: 'usr_seed_1', name: 'Rohan Gupta', avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=400&q=80' },
+      { userId: 'usr_seed_2', name: 'Pooja Verma', avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=400&q=80' },
+      { userId: 'usr_seed_3', name: 'Siddharth Rao', avatar: 'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?auto=format&fit=crop&w=400&q=80' }
+    ]
   },
+  {
+    id: 'plan_exp_1',
+    title: 'Jaipur Heritage Walk',
+    location: 'Jaipur, Rajasthan',
+    imageUrl: 'https://images.unsplash.com/photo-1477587458883-47145ed94245?auto=format&fit=crop&w=800&q=80',
+    dateRange: 'Oct 20 - Oct 22',
+    startDate: '2026-10-20',
+    time: '06:00 AM',
+    audience: 'Everyone',
+    joinedMembers: 8,
+    totalMembers: 10,
+    isPrivate: false,
+    isTrending: false,
+    isUpcoming: false,
+    isWomenOnly: false,
+    hostId: 'host_exp_1',
+    hostName: 'Rajesh Sharma',
+    hostAvatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=400&q=80',
+    hostRating: 4.92,
+    price: 1200,
+    description: 'Historical morning tour covering Amer Fort, Hawa Mahal, and local heritage bazaars.',
+    tags: ['Heritage', 'Cultural Walk', 'Historic'],
+    joinedUserIds: ['usr_seed_1', 'usr_seed_2', 'usr_seed_3', 'usr_seed_4'],
+    members: [
+      { userId: 'usr_seed_1', name: 'Rohan Gupta', avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=400&q=80' },
+      { userId: 'usr_seed_2', name: 'Pooja Verma', avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=400&q=80' }
+    ]
+  }
 ];
 
 let strangerReels = [
@@ -419,7 +513,9 @@ const loadStore = () => {
     if (fs.existsSync(storeFilePath)) {
       const data = JSON.parse(fs.readFileSync(storeFilePath, 'utf8'));
       if (Array.isArray(data.strangerTrips) && data.strangerTrips.length > 0) {
-        const hasSai = data.strangerTrips.some((t) => t.id === 'stranger_1792606140308');
+        const hasSai = data.strangerTrips.some(
+          (t) => t.id === 'stranger_1792606140308' || t.id === 'TRP-300002' || (Array.isArray(t.aliases) && t.aliases.includes('stranger_1792606140308'))
+        );
         if (!hasSai) {
           data.strangerTrips.unshift(strangerTrips[0]);
         }
@@ -435,14 +531,126 @@ const loadStore = () => {
 
 loadStore();
 
+export const generateUniqueTripCode = (prefix = 'TRP') => {
+  let code;
+  let fullId;
+  let exists = true;
+  while (exists) {
+    const num = Math.floor(100000 + Math.random() * 900000);
+    code = String(num);
+    fullId = `${prefix}-${code}`;
+    const inTrips = strangerTrips.some(
+      (t) => t.id === fullId || t.code === code || (Array.isArray(t.aliases) && t.aliases.includes(fullId))
+    );
+    const inPlans = strangerPlans.some(
+      (p) => p.id === fullId || p.code === code || (Array.isArray(p.aliases) && p.aliases.includes(fullId))
+    );
+    if (!inTrips && !inPlans) {
+      exists = false;
+    }
+  }
+  return { code, fullId };
+};
+
+export const findStrangerTrip = (id) => {
+  if (!id) return null;
+  const raw = String(id).trim();
+  const clean = raw.toLowerCase();
+  const unprefix = clean.replace(/^(stranger_|trip_|trp_)/, '').replace(/^(trp-)/, '');
+  const alphanum = clean.replace(/[^a-z0-9]/g, '');
+  const numNormalized = alphanum.replace(/0(\d)$/, '$1');
+
+  return (
+    strangerTrips.find((t) => {
+      if (!t || !t.id) return false;
+      const tid = String(t.id).toLowerCase();
+      const tidUnprefix = tid.replace(/^(stranger_|trip_|trp_)/, '').replace(/^(trp-)/, '');
+      const tidAlphanum = tid.replace(/[^a-z0-9]/g, '');
+      const tidNumNorm = tidAlphanum.replace(/0(\d)$/, '$1');
+
+      if (
+        t.id === raw ||
+        tid === clean ||
+        t.code === raw ||
+        t.structuredId === raw ||
+        tidUnprefix === unprefix ||
+        tid === unprefix ||
+        tidUnprefix === clean ||
+        tidAlphanum === alphanum ||
+        tidNumNorm === numNormalized
+      ) {
+        return true;
+      }
+
+      if (Array.isArray(t.aliases)) {
+        return t.aliases.some((a) => {
+          const al = String(a).toLowerCase();
+          const alUnprefix = al.replace(/^(stranger_|trip_|trp_)/, '').replace(/^(trp-)/, '');
+          const alAlphanum = al.replace(/[^a-z0-9]/g, '');
+          const alNumNorm = alAlphanum.replace(/0(\d)$/, '$1');
+
+          return (
+            a === raw ||
+            al === clean ||
+            alUnprefix === unprefix ||
+            al === unprefix ||
+            alUnprefix === clean ||
+            alAlphanum === alphanum ||
+            alNumNorm === numNormalized
+          );
+        });
+      }
+      return false;
+    }) || null
+  );
+};
+
 // --- 1. STRANGER TRIPS ---
-export const getStrangerTrips = async ({ vibe, isWomenOnly, mode, search, host } = {}, currentUserId = null) => {
+export const getStrangerTrips = async (
+  { type, filter, vibe, isWomenOnly, womenOnly, mode, search, q, host, origin, destination, priceType, interest } = {},
+  currentUserId = null
+) => {
   let list = strangerTrips.filter((t) => t.status !== 'CANCELLED');
+
+  // Unified `type` or `filter` query parameter
+  const filterType = (type || filter || '').toLowerCase().trim();
+  if (filterType && filterType !== 'all') {
+    if (filterType === 'carpool' || filterType === 'car') {
+      list = list.filter((t) => (t.mode || '').toLowerCase() === 'carpool');
+    } else if (filterType === 'bikepool' || filterType === 'bike') {
+      list = list.filter((t) => (t.mode || '').toLowerCase() === 'bikepool');
+    } else if (filterType === 'womenonly' || filterType === 'women' || filterType === 'female' || filterType === 'women_only') {
+      list = list.filter((t) => Boolean(t.isWomenOnly));
+    } else if (filterType === 'weekendgetaway' || filterType === 'weekend' || filterType === 'weekend_getaway') {
+      list = list.filter((t) => (t.vibe || '').toLowerCase() === 'weekendgetaway');
+    } else if (filterType === 'intercitycommute' || filterType === 'commute' || filterType === 'intercity') {
+      list = list.filter((t) => (t.vibe || '').toLowerCase() === 'intercitycommute');
+    } else if (filterType === 'cityexplore' || filterType === 'explore' || filterType === 'city') {
+      list = list.filter((t) => (t.vibe || '').toLowerCase() === 'cityexplore');
+    } else if (filterType === 'free') {
+      list = list.filter((t) => Number(t.pricePerPerson || 0) === 0);
+    } else if (filterType === 'costsharing' || filterType === 'paid') {
+      list = list.filter((t) => Number(t.pricePerPerson || 0) > 0);
+    } else if (filterType === 'myrides' || filterType === 'hosted') {
+      if (currentUserId) {
+        list = list.filter((t) => t.hostId === currentUserId);
+      }
+    } else {
+      list = list.filter((t) =>
+        (t.vibe && t.vibe.toLowerCase() === filterType) ||
+        (t.mode && t.mode.toLowerCase() === filterType) ||
+        (Array.isArray(t.interests) && t.interests.some((i) => i.toLowerCase().includes(filterType)))
+      );
+    }
+  }
+
+  // Individual specific filters
   if (vibe) {
     list = list.filter((t) => t.vibe && t.vibe.toLowerCase() === vibe.toLowerCase());
   }
-  if (isWomenOnly !== undefined) {
-    const isWomenBool = isWomenOnly === 'true' || isWomenOnly === true;
+  const isWomenCheck = isWomenOnly !== undefined ? isWomenOnly : womenOnly;
+  if (isWomenCheck !== undefined) {
+    const isWomenBool = isWomenCheck === 'true' || isWomenCheck === true;
     if (isWomenBool) {
       list = list.filter((t) => Boolean(t.isWomenOnly));
     }
@@ -454,8 +662,23 @@ export const getStrangerTrips = async ({ vibe, isWomenOnly, mode, search, host }
     const h = host.toLowerCase();
     list = list.filter((t) => t.hostName && t.hostName.toLowerCase().includes(h));
   }
-  if (search) {
-    const s = search.toLowerCase();
+  if (origin) {
+    const o = origin.toLowerCase();
+    list = list.filter((t) => t.origin && t.origin.toLowerCase().includes(o));
+  }
+  if (destination) {
+    const d = destination.toLowerCase();
+    list = list.filter((t) => t.destination && t.destination.toLowerCase().includes(d));
+  }
+  if (interest) {
+    const intLower = interest.toLowerCase();
+    list = list.filter((t) =>
+      Array.isArray(t.interests) && t.interests.some((i) => i.toLowerCase().includes(intLower))
+    );
+  }
+  const searchQuery = search || q;
+  if (searchQuery) {
+    const s = searchQuery.toLowerCase();
     list = list.filter((t) =>
       (t.origin && t.origin.toLowerCase().includes(s)) ||
       (t.destination && t.destination.toLowerCase().includes(s)) ||
@@ -476,6 +699,11 @@ export const getStrangerTrips = async ({ vibe, isWomenOnly, mode, search, host }
 
     return {
       ...t,
+      id: t.id,
+      code: t.code || (t.id ? String(t.id).replace(/[^0-9]/g, '').slice(-6) : null),
+      uniqueCode: t.code || (t.id ? String(t.id).replace(/[^0-9]/g, '').slice(-6) : null),
+      structuredId: t.structuredId || t.id,
+      aliases: t.aliases || [],
       availableSeats: t.availableSeats !== undefined ? t.availableSeats : t.totalSeats,
       passengers,
       passengerRequests,
@@ -491,7 +719,7 @@ export const getStrangerTrips = async ({ vibe, isWomenOnly, mode, search, host }
 };
 
 export const getStrangerTripById = async (id, currentUserId = null) => {
-  const t = strangerTrips.find((item) => item.id === id);
+  const t = findStrangerTrip(id);
   if (!t) throw new ApiError(404, 'Stranger trip not found');
 
   const isHost = currentUserId ? t.hostId === currentUserId : false;
@@ -506,6 +734,13 @@ export const getStrangerTripById = async (id, currentUserId = null) => {
 
   return {
     ...t,
+    id: t.id,
+    rideId: t.id,
+    tripId: t.id,
+    code: t.code || (t.id ? String(t.id).replace(/[^0-9]/g, '').slice(-6) : null),
+    uniqueCode: t.code || (t.id ? String(t.id).replace(/[^0-9]/g, '').slice(-6) : null),
+    structuredId: t.structuredId || t.id,
+    aliases: t.aliases || [],
     availableSeats: t.availableSeats !== undefined ? t.availableSeats : t.totalSeats,
     passengers,
     passengerRequests,
@@ -597,6 +832,11 @@ export const formatStrangerTripForOffered = (t) => {
   return {
     id: t.id,
     rideId: t.id,
+    tripId: t.id,
+    code: t.code || (t.id ? String(t.id).replace(/[^0-9]/g, '').slice(-6) : null),
+    uniqueCode: t.code || (t.id ? String(t.id).replace(/[^0-9]/g, '').slice(-6) : null),
+    structuredId: t.structuredId || t.id,
+    aliases: t.aliases || [],
     driverId: t.hostId,
     driverName: t.hostName,
     driverAvatar: t.hostAvatar,
@@ -687,7 +927,7 @@ export const getStrangerTripPassengers = (userId, tripId) => {
 };
 
 export const startStrangerTrip = (userId, tripId) => {
-  const trip = strangerTrips.find((t) => t.id === tripId);
+  const trip = findStrangerTrip(tripId);
   if (!trip) return null;
   trip.status = 'IN_PROGRESS';
   saveStore();
@@ -702,6 +942,10 @@ export const startStrangerTrip = (userId, tripId) => {
     id: trip.id,
     rideId: trip.id,
     tripId: trip.id,
+    code: trip.code || (trip.id ? String(trip.id).replace(/[^0-9]/g, '').slice(-6) : null),
+    uniqueCode: trip.code || (trip.id ? String(trip.id).replace(/[^0-9]/g, '').slice(-6) : null),
+    structuredId: trip.structuredId || trip.id,
+    aliases: trip.aliases || [],
     status: 'in_progress',
     statusLabel: 'Trip in Progress',
     rawStatus: 'IN_PROGRESS',
@@ -733,7 +977,7 @@ export const startStrangerTrip = (userId, tripId) => {
 };
 
 export const completeStrangerTrip = (userId, tripId) => {
-  const trip = strangerTrips.find((t) => t.id === tripId);
+  const trip = findStrangerTrip(tripId);
   if (!trip) return null;
   trip.status = 'COMPLETED';
   saveStore();
@@ -741,6 +985,10 @@ export const completeStrangerTrip = (userId, tripId) => {
     id: trip.id,
     rideId: trip.id,
     tripId: trip.id,
+    code: trip.code || (trip.id ? String(trip.id).replace(/[^0-9]/g, '').slice(-6) : null),
+    uniqueCode: trip.code || (trip.id ? String(trip.id).replace(/[^0-9]/g, '').slice(-6) : null),
+    structuredId: trip.structuredId || trip.id,
+    aliases: trip.aliases || [],
     status: 'completed',
     statusLabel: 'Completed',
     rawStatus: 'COMPLETED',
@@ -751,7 +999,7 @@ export const completeStrangerTrip = (userId, tripId) => {
 };
 
 export const cancelStrangerTrip = (userId, tripId) => {
-  const trip = strangerTrips.find((t) => t.id === tripId);
+  const trip = findStrangerTrip(tripId);
   if (!trip) return null;
   trip.status = 'CANCELLED';
   saveStore();
@@ -774,10 +1022,15 @@ export const createStrangerTrip = async (userId, data) => {
     include: { driverProfile: { include: { vehicles: true } } },
   });
 
-  const tripId = `stranger_${Date.now()}`;
+  const { code, fullId } = generateUniqueTripCode('TRP');
+  const tripId = fullId;
   const totalSeats = Number(data.totalSeats || 1);
   const newTrip = {
     id: tripId,
+    code,
+    uniqueCode: code,
+    structuredId: tripId,
+    aliases: [tripId, `TRP${code}`, code, `stranger_${code}`, `stranger_${Date.now()}`],
     hostId: userId,
     hostName: user?.displayName || 'Traveler',
     hostAvatar: user?.avatarUrl || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=400&q=80',
@@ -888,7 +1141,7 @@ export const createStrangerTrip = async (userId, data) => {
 };
 
 export const updateStrangerTrip = async (userId, tripId, data) => {
-  const trip = strangerTrips.find((t) => t.id === tripId);
+  const trip = findStrangerTrip(tripId);
   if (!trip) throw new ApiError(404, 'Stranger trip not found');
 
   // Verify ownership (allow seeded mock host IDs or matching user ID)
@@ -924,11 +1177,11 @@ export const updateStrangerTrip = async (userId, tripId, data) => {
 
   // Sync to Prisma ride if exists
   try {
-    const existingRide = await prisma.ride.findUnique({ where: { id: tripId } });
+    const existingRide = await prisma.ride.findUnique({ where: { id: trip.id } });
     if (existingRide) {
       const newDepDate = parseDateTime(trip.date, trip.time);
       await prisma.ride.update({
-        where: { id: tripId },
+        where: { id: trip.id },
         data: {
           ...(newDepDate ? { departureAt: newDepDate } : {}),
           startLocationName: trip.origin,
@@ -946,10 +1199,10 @@ export const updateStrangerTrip = async (userId, tripId, data) => {
 };
 
 export const deleteStrangerTrip = async (userId, tripId) => {
-  const index = strangerTrips.findIndex((t) => t.id === tripId);
-  if (index === -1) throw new ApiError(404, 'Stranger trip not found');
+  const trip = findStrangerTrip(tripId);
+  if (!trip) throw new ApiError(404, 'Stranger trip not found');
+  const index = strangerTrips.findIndex((t) => t.id === trip.id);
 
-  const trip = strangerTrips[index];
   // Verify ownership (allow seeded mock host IDs or matching user ID)
   if (trip.hostId && trip.hostId !== userId && !trip.hostId.startsWith('host_')) {
     throw new ApiError(403, 'Unauthorized: You can only delete trips created by you');
@@ -959,13 +1212,13 @@ export const deleteStrangerTrip = async (userId, tripId) => {
   saveStore();
   return {
     success: true,
-    tripId,
+    tripId: trip.id,
     message: 'Stranger trip deleted successfully',
   };
 };
 
 export const joinStrangerTrip = async (userId, tripId, body = {}) => {
-  const trip = strangerTrips.find((t) => t.id === tripId);
+  const trip = findStrangerTrip(tripId);
   if (!trip) throw new ApiError(404, 'Stranger trip not found');
 
   if (trip.hostId === userId) {
@@ -1083,7 +1336,7 @@ export const joinStrangerTrip = async (userId, tripId, body = {}) => {
 };
 
 export const respondToStrangerTripRequest = async (hostUserId, tripId, requestId, action) => {
-  const trip = strangerTrips.find((t) => t.id === tripId);
+  const trip = findStrangerTrip(tripId);
   if (!trip) throw new ApiError(404, 'Stranger trip not found');
   if (trip.hostId !== hostUserId && !trip.hostId.startsWith('host_')) {
     throw new ApiError(403, 'Unauthorized: Only the trip host can respond to requests');
@@ -1452,14 +1705,158 @@ export const rsvpStrangerMeetup = async (userId, meetupId) => {
 };
 
 // --- 3. STRANGER PLANS ---
-export const getStrangerPlans = async ({ filter, interest, search, host } = {}) => {
+
+export const parsePlanDepartureDateTime = (plan) => {
+  if (plan.departureDateTime) {
+    const dt = new Date(plan.departureDateTime);
+    if (!isNaN(dt.getTime())) return dt;
+  }
+  const timeStr = plan.time || '07:00 AM';
+  if (plan.startDate) {
+    const dt = parseDateTime(plan.startDate, timeStr);
+    if (dt) return dt;
+  }
+  const dateRangeStr = String(plan.dateRange || '').trim();
+  const startPart = dateRangeStr.split('-')[0].trim();
+  const hasYear = /\d{4}/.test(startPart);
+  const fullDateStr = hasYear ? startPart : `${startPart} 2026`;
+  const dt = parseDateTime(fullDateStr, timeStr);
+  if (dt) return dt;
+  return new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+};
+
+export const getPlanExpiryInfo = (plan) => {
+  const departureDate = parsePlanDepartureDateTime(plan);
+  // Cut-off is strictly 30 minutes before departure time
+  const cutoffDate = new Date(departureDate.getTime() - 30 * 60 * 1000);
+  const now = Date.now();
+  const isCutoffPassed = now >= cutoffDate.getTime();
+  const isDeparted = now >= departureDate.getTime();
+  const minutesUntilCutoff = Math.round((cutoffDate.getTime() - now) / (60 * 1000));
+
+  return {
+    departureDateTime: departureDate.toISOString(),
+    joinCutoffDateTime: cutoffDate.toISOString(),
+    isCutoffPassed,
+    isDeparted,
+    isExpired: isCutoffPassed,
+    minutesUntilCutoff,
+  };
+};
+
+export const formatStrangerPlan = (p, currentUserId = null, currentUserGender = null) => {
+  const members = Array.isArray(p.members) ? p.members : [];
+  const joinedUserIds = Array.isArray(p.joinedUserIds)
+    ? p.joinedUserIds
+    : members.map((m) => m.userId || m.id);
+  const total = Number(p.totalMembers || 10);
+  const count = members.length > 0 ? members.length : Number(p.joinedMembers || 1);
+  const isJoined = Boolean(
+    currentUserId &&
+      (joinedUserIds.includes(currentUserId) ||
+        members.some((m) => m.userId === currentUserId || m.id === currentUserId))
+  );
+  const isHost = Boolean(currentUserId && p.hostId === currentUserId);
+  const availableSeats = Math.max(0, total - count);
+  const isFull = count >= total;
+
+  const expiryInfo = getPlanExpiryInfo(p);
+  const isFemaleOnly =
+    Boolean(p.isWomenOnly) ||
+    Boolean(p.audience && /female|women/i.test(p.audience));
+
+  // Determine user gender for eligibility
+  const normalizedUserGender = currentUserGender
+    ? String(currentUserGender).toUpperCase()
+    : null;
+  const canGenderJoin = !isFemaleOnly || (normalizedUserGender === 'FEMALE');
+
+  const canJoin = !expiryInfo.isExpired && !isFull && !isJoined && canGenderJoin;
+
+  let cannotJoinReason = null;
+  if (expiryInfo.isExpired) {
+    cannotJoinReason = 'Join window closed (cut-off is 30 minutes before departure)';
+  } else if (isFull) {
+    cannotJoinReason = 'This travel plan is full';
+  } else if (isJoined) {
+    cannotJoinReason = 'You have already joined this plan';
+  } else if (!canGenderJoin) {
+    cannotJoinReason = 'This plan is exclusively for female travelers (Female only)';
+  }
+
+  let status = 'OPEN';
+  if (expiryInfo.isExpired) {
+    status = 'EXPIRED';
+  } else if (isFull) {
+    status = 'FULL';
+  } else if (isJoined) {
+    status = 'JOINED';
+  }
+
+  return {
+    id: p.id,
+    planId: p.id,
+    code: p.code || (p.id ? String(p.id).replace(/[^0-9]/g, '').slice(-6) : null),
+    uniqueCode: p.code || (p.id ? String(p.id).replace(/[^0-9]/g, '').slice(-6) : null),
+    structuredId: p.structuredId || p.id,
+    aliases: p.aliases || [],
+    title: p.title,
+    location: p.location,
+    imageUrl: p.imageUrl,
+    dateRange: p.dateRange,
+    startDate: p.startDate || p.dateRange?.split('-')[0]?.trim() || null,
+    time: p.time || '07:00 AM',
+    departureDateTime: expiryInfo.departureDateTime,
+    joinCutoffDateTime: expiryInfo.joinCutoffDateTime,
+    minutesUntilCutoff: expiryInfo.minutesUntilCutoff,
+    isExpired: expiryInfo.isExpired,
+    audience: p.audience || (isFemaleOnly ? 'Female only' : 'Everyone'),
+    isWomenOnly: isFemaleOnly,
+    joinedMembers: count,
+    totalMembers: total,
+    availableSeats,
+    canJoin,
+    cannotJoinReason,
+    isPrivate: Boolean(p.isPrivate),
+    isTrending: Boolean(p.isTrending),
+    isUpcoming: Boolean(p.isUpcoming),
+    hostId: p.hostId || 'host_default',
+    hostName: p.hostName,
+    hostAvatar: p.hostAvatar,
+    hostRating: Number(p.hostRating || 4.95),
+    price: Number(p.price || 0),
+    description: p.description || '',
+    tags: Array.isArray(p.tags) ? p.tags : [],
+    members,
+    joinedUserIds,
+    isJoined,
+    isHost,
+    status,
+  };
+};
+
+export const getStrangerPlans = async ({ filter, interest, search, host } = {}, currentUserId = null, currentUserGender = null) => {
   let list = [...strangerPlans];
   if (filter === 'trending') list = list.filter((p) => p.isTrending);
   if (filter === 'upcoming') list = list.filter((p) => p.isUpcoming);
   if (interest && interest !== 'All') {
-    const intLower = interest.toLowerCase();
-    list = list.filter((p) =>
-      p.tags && p.tags.some((t) => t.toLowerCase().includes(intLower))
+    const intLower = interest.toLowerCase().trim();
+    const intStem = intLower.replace(/s\b/g, '');
+    const words = intLower.split(/\s+/).filter(Boolean);
+    list = list.filter(
+      (p) =>
+        p.tags &&
+        p.tags.some((t) => {
+          const tagLower = t.toLowerCase().trim();
+          const tagStem = tagLower.replace(/s\b/g, '');
+          return (
+            tagLower.includes(intLower) ||
+            intLower.includes(tagLower) ||
+            tagStem.includes(intStem) ||
+            intStem.includes(tagStem) ||
+            words.some((w) => w.length > 3 && tagLower.includes(w))
+          );
+        })
     );
   }
   if (host) {
@@ -1468,21 +1865,22 @@ export const getStrangerPlans = async ({ filter, interest, search, host } = {}) 
   }
   if (search) {
     const s = search.toLowerCase();
-    list = list.filter((p) =>
-      (p.title && p.title.toLowerCase().includes(s)) ||
-      (p.location && p.location.toLowerCase().includes(s)) ||
-      (p.hostName && p.hostName.toLowerCase().includes(s))
+    list = list.filter(
+      (p) =>
+        (p.title && p.title.toLowerCase().includes(s)) ||
+        (p.location && p.location.toLowerCase().includes(s)) ||
+        (p.hostName && p.hostName.toLowerCase().includes(s))
     );
   }
-  return list;
+  return list.map((p) => formatStrangerPlan(p, currentUserId, currentUserGender));
 };
 
-export const getTrendingPlans = async (query = {}) => {
-  return getStrangerPlans({ ...query, filter: 'trending' });
+export const getTrendingPlans = async (query = {}, currentUserId = null, currentUserGender = null) => {
+  return getStrangerPlans({ ...query, filter: 'trending' }, currentUserId, currentUserGender);
 };
 
-export const getUpcomingPlans = async (query = {}, currentUserId = null) => {
-  const basePlans = await getStrangerPlans({ ...query, filter: 'upcoming' });
+export const getUpcomingPlans = async (query = {}, currentUserId = null, currentUserGender = null) => {
+  const basePlans = await getStrangerPlans({ ...query, filter: 'upcoming' }, currentUserId, currentUserGender);
 
   // Format published stranger trips as plans so they appear in /plans/upcoming
   const tripPlans = strangerTrips
@@ -1501,17 +1899,31 @@ export const getUpcomingPlans = async (query = {}, currentUserId = null) => {
         ? passengers.some((p) => p.passengerId === currentUserId && (p.isConfirmed || p.status === 'Confirmed' || p.status === 'accepted'))
         : false;
 
+      const expiryInfo = getPlanExpiryInfo({
+        startDate: t.date,
+        time: t.time || '07:00 AM',
+      });
+
       return {
         id: t.id,
+        planId: t.id,
         tripId: t.id,
         title: `${t.origin} to ${t.destination}`,
         location: t.destination,
         imageUrl: t.imageUrl || 'https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?auto=format&fit=crop&w=800&q=80',
         dateRange: t.date,
+        startDate: t.date,
+        time: t.time || '07:00 AM',
+        departureDateTime: expiryInfo.departureDateTime,
+        joinCutoffDateTime: expiryInfo.joinCutoffDateTime,
+        minutesUntilCutoff: expiryInfo.minutesUntilCutoff,
+        isExpired: expiryInfo.isExpired,
         audience: t.isWomenOnly ? 'Women Only' : 'Everyone',
+        isWomenOnly: Boolean(t.isWomenOnly),
         joinedMembers: Math.max(1, booked),
         totalMembers: total,
         availableSeats: avail,
+        canJoin: !expiryInfo.isExpired && avail > 0 && !isConfirmed && !userRequest,
         isPrivate: false,
         isTrending: false,
         isUpcoming: true,
@@ -1524,23 +1936,24 @@ export const getUpcomingPlans = async (query = {}, currentUserId = null) => {
         tags: t.interests || ['Road Trip', 'Travel'],
         mode: t.mode,
         vibe: t.vibe,
-        status: t.status,
+        status: expiryInfo.isExpired ? 'EXPIRED' : t.status,
         passengers,
         passengerRequests,
         isHost,
+        isJoined: isConfirmed || Boolean(userRequest),
         hasRequested: Boolean(userRequest),
         userRequestStatus: userRequest ? userRequest.status : (isConfirmed ? 'confirmed' : 'none'),
         userRequest: userRequest || null,
         isConnected: isHost || Boolean(userRequest) || isConfirmed,
-        canRequest: !isHost && !userRequest && !isConfirmed && (avail > 0),
+        canRequest: !isHost && !userRequest && !isConfirmed && (avail > 0) && !expiryInfo.isExpired,
       };
     });
 
   return [...tripPlans, ...basePlans];
 };
 
-export const getPlansByInterest = async ({ interest, search, host } = {}) => {
-  const all = await getStrangerPlans({ search, host });
+export const getPlansByInterest = async ({ interest, search, host } = {}, currentUserId = null, currentUserGender = null) => {
+  const all = await getStrangerPlans({ search, host }, currentUserId, currentUserGender);
   const interestSet = new Set(['All']);
   all.forEach((p) => {
     (p.tags || []).forEach((t) => interestSet.add(t));
@@ -1548,9 +1961,24 @@ export const getPlansByInterest = async ({ interest, search, host } = {}) => {
 
   let filtered = all;
   if (interest && interest !== 'All') {
-    const intLower = interest.toLowerCase();
-    filtered = all.filter((p) =>
-      p.tags && p.tags.some((t) => t.toLowerCase().includes(intLower))
+    const intLower = interest.toLowerCase().trim();
+    const intStem = intLower.replace(/s\b/g, '');
+    const words = intLower.split(/\s+/).filter(Boolean);
+
+    filtered = all.filter(
+      (p) =>
+        p.tags &&
+        p.tags.some((t) => {
+          const tagLower = t.toLowerCase().trim();
+          const tagStem = tagLower.replace(/s\b/g, '');
+          return (
+            tagLower.includes(intLower) ||
+            intLower.includes(tagLower) ||
+            tagStem.includes(intStem) ||
+            intStem.includes(tagStem) ||
+            words.some((w) => w.length > 3 && tagLower.includes(w))
+          );
+        })
     );
   }
 
@@ -1561,37 +1989,110 @@ export const getPlansByInterest = async ({ interest, search, host } = {}) => {
   };
 };
 
-export const getStrangerPlanById = async (id) => {
-  const plan = strangerPlans.find((p) => p.id === id);
+export const findStrangerPlan = (id) => {
+  if (!id) return null;
+  const raw = String(id).trim();
+  const clean = raw.toLowerCase();
+  const unplan = clean.replace(/^(plan_|trend_|upc_|exp_|trd_)/, '').replace(/^(trd-|upc-|exp-|pln-)/, '');
+  const alphanum = clean.replace(/[^a-z0-9]/g, '');
+  const numNormalized = alphanum.replace(/0(\d)$/, '$1');
+
+  return (
+    strangerPlans.find((p) => {
+      if (!p || !p.id) return false;
+      const pid = String(p.id).toLowerCase();
+      const pidUnplan = pid.replace(/^(plan_|trend_|upc_|exp_|trd_)/, '').replace(/^(trd-|upc-|exp-|pln-)/, '');
+      const pidAlphanum = pid.replace(/[^a-z0-9]/g, '');
+      const pidNumNorm = pidAlphanum.replace(/0(\d)$/, '$1');
+
+      if (
+        p.id === raw ||
+        pid === clean ||
+        p.code === raw ||
+        p.uniqueCode === raw ||
+        p.structuredId === raw ||
+        pidUnplan === unplan ||
+        pid === unplan ||
+        pidUnplan === clean ||
+        pidAlphanum === alphanum ||
+        pidNumNorm === numNormalized
+      ) {
+        return true;
+      }
+
+      if (Array.isArray(p.aliases)) {
+        return p.aliases.some((a) => {
+          const al = String(a).toLowerCase();
+          const alUnplan = al.replace(/^(plan_|trend_|upc_|exp_|trd_)/, '').replace(/^(trd-|upc-|exp-|pln-)/, '');
+          const alAlphanum = al.replace(/[^a-z0-9]/g, '');
+          const alNumNorm = alAlphanum.replace(/0(\d)$/, '$1');
+
+          return (
+            a === raw ||
+            al === clean ||
+            alUnplan === unplan ||
+            al === unplan ||
+            alUnplan === clean ||
+            alAlphanum === alphanum ||
+            alNumNorm === numNormalized
+          );
+        });
+      }
+      return false;
+    }) || null
+  );
+};
+
+export const getStrangerPlanById = async (id, currentUserId = null, currentUserGender = null) => {
+  const plan = findStrangerPlan(id);
   if (!plan) throw new ApiError(404, 'Travel plan not found');
-  return plan;
+  return formatStrangerPlan(plan, currentUserId, currentUserGender);
 };
 
 export const createStrangerPlan = async (userId, data) => {
   const user = await prisma.user.findUnique({ where: { id: userId } });
+  const isFemaleOnly = data.audience === 'Female only' || Boolean(data.isWomenOnly);
+  const { code, fullId } = generateUniqueTripCode('PLN');
   const newPlan = {
-    id: `plan_${Date.now()}`,
+    id: fullId,
+    code,
+    uniqueCode: code,
+    structuredId: fullId,
+    aliases: [fullId, `PLN${code}`, code, `plan_${code}`, `plan_${Date.now()}`],
     title: data.title,
     location: data.location,
     imageUrl: data.imageUrl || 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=800&q=80',
     dateRange: data.dateRange,
-    audience: data.audience,
+    startDate: data.startDate || data.dateRange?.split('-')[0]?.trim() || null,
+    time: data.time || '07:00 AM',
+    audience: data.audience || 'Everyone',
+    isWomenOnly: isFemaleOnly,
     joinedMembers: 1,
-    totalMembers: data.totalMembers,
-    isPrivate: data.isPrivate,
+    totalMembers: data.totalMembers || 10,
+    isPrivate: Boolean(data.isPrivate),
     isTrending: false,
     isUpcoming: true,
-    hostName: user?.displayName || 'Host',
+    hostId: userId,
+    hostName: user?.displayName || user?.username || 'Host',
     hostAvatar: user?.avatarUrl || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=400&q=80',
     hostRating: 5.0,
-    price: data.price,
+    price: Number(data.price || 0),
     description: data.description || '',
-    tags: data.tags,
+    tags: Array.isArray(data.tags) ? data.tags : [],
+    joinedUserIds: [userId],
+    members: [
+      {
+        userId,
+        name: user?.displayName || user?.username || 'Host',
+        avatar: user?.avatarUrl || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=400&q=80',
+        joinedAt: new Date().toISOString(),
+      },
+    ],
   };
 
   strangerPlans.unshift(newPlan);
   saveStore();
-  return newPlan;
+  return formatStrangerPlan(newPlan, userId, user?.gender);
 };
 
 export const joinStrangerPlan = async (userId, planId, body = {}) => {
@@ -1601,25 +2102,197 @@ export const joinStrangerPlan = async (userId, planId, body = {}) => {
     return await joinStrangerTrip(userId, planId, body);
   }
 
-  const plan = await getStrangerPlanById(planId);
-  if (plan.hostId === userId) {
+  const rawPlan = findStrangerPlan(planId);
+  if (!rawPlan) {
+    throw new ApiError(404, 'Travel plan not found');
+  }
+
+  // 1. Time Expiry & Cutoff Validation (Strictly 30 minutes before departure)
+  const expiryInfo = getPlanExpiryInfo(rawPlan);
+  if (expiryInfo.isExpired) {
+    const cutoffFormatted = new Date(expiryInfo.joinCutoffDateTime).toLocaleString([], {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+    throw new ApiError(
+      400,
+      `Joining for this travel plan has expired. The join cut-off window closed 30 minutes before departure (closed at: ${cutoffFormatted})`
+    );
+  }
+
+  // Ensure members & joinedUserIds arrays exist
+  if (!Array.isArray(rawPlan.members)) {
+    rawPlan.members = [];
+    const count = Number(rawPlan.joinedMembers || 1);
+    for (let i = 0; i < count; i++) {
+      rawPlan.members.push({
+        userId: `usr_seed_${i + 1}`,
+        name: `Traveler ${i + 1}`,
+        avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=400&q=80',
+        joinedAt: new Date().toISOString(),
+      });
+    }
+  }
+  if (!Array.isArray(rawPlan.joinedUserIds)) {
+    rawPlan.joinedUserIds = rawPlan.members.map((m) => m.userId || m.id);
+  }
+
+  let dbUser = null;
+  if (userId && !String(userId).startsWith('guest_')) {
+    try {
+      dbUser = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { id: true, displayName: true, username: true, avatarUrl: true, phone: true, gender: true },
+      });
+    } catch {}
+  }
+
+  const effectiveUserId = userId || dbUser?.id || body.userId || `guest_${Date.now()}`;
+  const effectiveGender = (dbUser?.gender || body.gender || '').toUpperCase();
+  const memberName = dbUser?.displayName || dbUser?.username || body.name || body.userName || 'Adventure Traveler';
+  const memberAvatar =
+    dbUser?.avatarUrl ||
+    body.avatar ||
+    'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=400&q=80';
+
+  // 2. Female-Only Audience Validation
+  const isFemaleOnly =
+    Boolean(rawPlan.isWomenOnly) ||
+    Boolean(rawPlan.audience && /female|women/i.test(rawPlan.audience));
+
+  if (isFemaleOnly) {
+    if (effectiveGender !== 'FEMALE') {
+      throw new ApiError(
+        403,
+        'Access denied: This travel plan is exclusively for female travelers (Female only). Non-female travelers cannot join this plan.'
+      );
+    }
+  }
+
+  // 3. Host Check
+  if (rawPlan.hostId && rawPlan.hostId === effectiveUserId) {
+    const formatted = formatStrangerPlan(rawPlan, effectiveUserId, effectiveGender);
     return {
       success: true,
       isHost: true,
+      isJoined: true,
       status: 'accepted',
-      joinedMembers: plan.joinedMembers,
+      joinedMembers: formatted.joinedMembers,
+      totalMembers: formatted.totalMembers,
       message: 'You are the host of this travel plan',
+      plan: formatted,
     };
   }
-  if (plan.joinedMembers >= plan.totalMembers) {
-    throw new ApiError(400, 'This plan is already full');
+
+  // 4. Already Joined Check
+  const isAlreadyJoined =
+    rawPlan.joinedUserIds.includes(effectiveUserId) ||
+    rawPlan.members.some((m) => m.userId === effectiveUserId || m.id === effectiveUserId);
+
+  if (isAlreadyJoined) {
+    const formatted = formatStrangerPlan(rawPlan, effectiveUserId, effectiveGender);
+    return {
+      success: true,
+      alreadyJoined: true,
+      isJoined: true,
+      joinedMembers: formatted.joinedMembers,
+      totalMembers: formatted.totalMembers,
+      message: 'You have already joined this travel plan!',
+      plan: formatted,
+    };
   }
-  plan.joinedMembers += 1;
+
+  // 5. Capacity Check
+  const total = Number(rawPlan.totalMembers || 10);
+  if (rawPlan.members.length >= total) {
+    throw new ApiError(400, 'This travel plan is already full');
+  }
+
+  // Add new member
+  const newMember = {
+    userId: effectiveUserId,
+    name: memberName,
+    avatar: memberAvatar,
+    phone: dbUser?.phone || body.phone || null,
+    gender: effectiveGender || null,
+    joinedAt: new Date().toISOString(),
+  };
+
+  rawPlan.members.push(newMember);
+  rawPlan.joinedUserIds.push(effectiveUserId);
+  rawPlan.joinedMembers = rawPlan.members.length;
+
   saveStore();
+
+  const formattedPlan = formatStrangerPlan(rawPlan, effectiveUserId, effectiveGender);
+
+  // Broadcast real-time Socket.io event to all connected clients
+  try {
+    const io = getIO();
+    io.emit('plan:member_joined', {
+      planId: rawPlan.id,
+      joinedMembers: formattedPlan.joinedMembers,
+      totalMembers: formattedPlan.totalMembers,
+      availableSeats: formattedPlan.availableSeats,
+      member: newMember,
+      plan: formattedPlan,
+    });
+    io.emit('plan:updated', formattedPlan);
+  } catch (socketErr) {
+    // Socket emit is best-effort
+  }
+
   return {
     success: true,
-    joinedMembers: plan.joinedMembers,
+    isJoined: true,
+    joinedMembers: formattedPlan.joinedMembers,
+    totalMembers: formattedPlan.totalMembers,
+    availableSeats: formattedPlan.availableSeats,
     message: 'Joined travel plan successfully!',
+    member: newMember,
+    plan: formattedPlan,
+  };
+};
+
+export const leaveStrangerPlan = async (userId, planId) => {
+  const rawPlan = findStrangerPlan(planId);
+  if (!rawPlan) {
+    throw new ApiError(404, 'Travel plan not found');
+  }
+
+  if (Array.isArray(rawPlan.members)) {
+    rawPlan.members = rawPlan.members.filter((m) => m.userId !== userId && m.id !== userId);
+  }
+  if (Array.isArray(rawPlan.joinedUserIds)) {
+    rawPlan.joinedUserIds = rawPlan.joinedUserIds.filter((id) => id !== userId);
+  }
+  rawPlan.joinedMembers = Math.max(1, rawPlan.members ? rawPlan.members.length : 1);
+
+  saveStore();
+
+  const formattedPlan = formatStrangerPlan(rawPlan, userId);
+
+  try {
+    const io = getIO();
+    io.emit('plan:member_left', {
+      planId: rawPlan.id,
+      userId,
+      joinedMembers: formattedPlan.joinedMembers,
+      totalMembers: formattedPlan.totalMembers,
+      plan: formattedPlan,
+    });
+    io.emit('plan:updated', formattedPlan);
+  } catch {}
+
+  return {
+    success: true,
+    isJoined: false,
+    joinedMembers: formattedPlan.joinedMembers,
+    totalMembers: formattedPlan.totalMembers,
+    message: 'Left travel plan successfully',
+    plan: formattedPlan,
   };
 };
 

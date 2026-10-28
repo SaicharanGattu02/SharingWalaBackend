@@ -11,7 +11,8 @@ export const getOrCreateDirectChat = asyncHandler(async (req, res) => {
 });
 
 export const getMyConversations = asyncHandler(async (req, res) => {
-  const conversations = await chatService.getUserConversations(req.user.id);
+  const type = req.query.type || req.query.category;
+  const conversations = await chatService.getUserConversations(req.user.id, type);
   res.status(200).json(new ApiResponse(200, conversations, 'Conversations retrieved'));
 });
 

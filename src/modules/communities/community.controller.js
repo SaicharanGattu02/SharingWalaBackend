@@ -12,8 +12,13 @@ export const joinCommunity = asyncHandler(async (req, res) => {
   res.status(200).json(new ApiResponse(200, membership, 'Joined community successfully'));
 });
 
+export const leaveCommunity = asyncHandler(async (req, res) => {
+  const result = await communityService.leaveCommunity(req.user.id, req.body.communityId);
+  res.status(200).json(new ApiResponse(200, result, 'Left community successfully'));
+});
+
 export const listCommunities = asyncHandler(async (req, res) => {
-  const communities = await communityService.listCommunities();
+  const communities = await communityService.listCommunities(req.user?.id);
   res.status(200).json(new ApiResponse(200, communities, 'Communities retrieved'));
 });
 

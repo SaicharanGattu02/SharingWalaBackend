@@ -1,51 +1,6 @@
 {
   "strangerTrips": [
     {
-      "id": "stranger_1792872454170",
-      "hostId": "cmvidzcly0000vaaswh1rsxtf",
-      "hostName": "saicharan",
-      "hostAvatar": "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=400&q=80",
-      "hostRating": 5,
-      "totalTrips": 1,
-      "isVerified": true,
-      "origin": "Hyderabad",
-      "destination": "Goa",
-      "date": "Tue, 27 Oct 2026",
-      "time": "7:30 AM",
-      "mode": "carpool",
-      "vibe": "weekendGetaway",
-      "availableSeats": 3,
-      "totalSeats": 3,
-      "pricePerPerson": 1200,
-      "notes": "Heading for a weekend trip! Happy to share ride & playlists.",
-      "interests": [
-        "Music",
-        "Tech",
-        "Food"
-      ],
-      "imageUrl": "https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?auto=format&fit=crop&w=800&q=80",
-      "isWomenOnly": false,
-      "isConnected": true,
-      "status": "PUBLISHED",
-      "passengers": [],
-      "passengerRequests": [
-        {
-          "id": "req_1792873136709_u3gi",
-          "requestId": "req_1792873136709_u3gi",
-          "bookingId": "req_1792873136709_u3gi",
-          "passengerId": "cmvms026c0000vau8s9hz7tk0",
-          "passengerName": "Testing1",
-          "passengerPhone": "+919999999999",
-          "passengerAvatar": "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=400&q=80",
-          "seatsRequested": 1,
-          "totalFare": 1200,
-          "notes": "Looking forward to co-traveling together!",
-          "status": "pending",
-          "requestedAt": "2026-10-24T20:18:56.709Z"
-        }
-      ]
-    },
-    {
       "id": "stranger_1792606140308",
       "hostId": "cmvidzcly0000vaaswh1rsxtf",
       "hostName": "saicharan",
@@ -104,9 +59,9 @@
       "isConnected": true,
       "passengerRequests": [
         {
-          "id": "req_1792871460264_gz3h",
-          "requestId": "req_1792871460264_gz3h",
-          "bookingId": "req_1792871460264_gz3h",
+          "id": "req_1793216814746_ce2j",
+          "requestId": "req_1793216814746_ce2j",
+          "bookingId": "req_1793216814746_ce2j",
           "passengerId": "cmvidzcly0000vaaswh1rsxtf",
           "passengerName": "saicharan",
           "passengerPhone": "+917674952516",
@@ -115,7 +70,7 @@
           "totalFare": 1200,
           "notes": "Looking forward to co-traveling together!",
           "status": "pending",
-          "requestedAt": "2026-10-24T19:51:00.264Z"
+          "requestedAt": "2026-10-28T19:46:54.746Z"
         }
       ],
       "passengers": []
@@ -148,9 +103,9 @@
       "isConnected": true,
       "passengerRequests": [
         {
-          "id": "req_1793130462361_q0xa",
-          "requestId": "req_1793130462361_q0xa",
-          "bookingId": "req_1793130462361_q0xa",
+          "id": "req_1793210726466_wdon",
+          "requestId": "req_1793210726466_wdon",
+          "bookingId": "req_1793210726466_wdon",
           "passengerId": "cmvidzcly0000vaaswh1rsxtf",
           "passengerName": "saicharan",
           "passengerPhone": "+917674952516",
@@ -159,7 +114,7 @@
           "totalFare": 650,
           "notes": "Looking forward to co-traveling together!",
           "status": "pending",
-          "requestedAt": "2026-10-27T19:47:42.361Z"
+          "requestedAt": "2026-10-28T18:05:26.466Z"
         }
       ],
       "passengers": []
@@ -189,24 +144,7 @@
       ],
       "imageUrl": "https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?auto=format&fit=crop&w=800&q=80",
       "isWomenOnly": false,
-      "isConnected": true,
-      "passengerRequests": [
-        {
-          "id": "req_1792871500578_418u",
-          "requestId": "req_1792871500578_418u",
-          "bookingId": "req_1792871500578_418u",
-          "passengerId": "cmvidzcly0000vaaswh1rsxtf",
-          "passengerName": "saicharan",
-          "passengerPhone": "+917674952516",
-          "passengerAvatar": "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=400&q=80",
-          "seatsRequested": 1,
-          "totalFare": 550,
-          "notes": "Looking forward to co-traveling together!",
-          "status": "pending",
-          "requestedAt": "2026-10-24T19:51:40.578Z"
-        }
-      ],
-      "passengers": []
+      "isConnected": false
     },
     {
       "id": "stranger_4",
@@ -238,220 +176,6 @@
   ],
   "strangerMeetups": [
     {
-      "id": "meetup_1792872466039",
-      "title": "Weekend Coffee & Tech Founders Pitch",
-      "category": "Coffee & Cafes",
-      "venueName": "Roastery Coffee House",
-      "area": "Jubilee Hills",
-      "distanceKm": 1,
-      "date": "This Saturday",
-      "time": "05:00 PM - 07:00 PM",
-      "hostId": "cmvidzcly0000vaaswh1rsxtf",
-      "hostName": "saicharan",
-      "hostAvatar": "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=400&q=80",
-      "isHostVerified": true,
-      "hostRating": 5,
-      "imageUrl": "https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?auto=format&fit=crop&w=800&q=80",
-      "matchPercentage": 95,
-      "matchReason": "Nearby community member with shared interests",
-      "icebreakerPrompt": "What is one wild tech idea or project you are tinkering with right now?",
-      "maxAttendees": 6,
-      "attendeesCount": 1,
-      "attendeesAvatars": [
-        "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=400&q=80"
-      ],
-      "attendeesNames": [
-        "saicharan"
-      ],
-      "audienceType": "Everyone",
-      "isRsvped": true,
-      "rsvpedUserIds": [
-        "cmvidzcly0000vaaswh1rsxtf"
-      ],
-      "tags": [
-        "☕ Coffee",
-        "💻 Tech",
-        "🚀 Startups",
-        "🤝 Networking"
-      ],
-      "expenseType": "Self-order & split bills at venue"
-    },
-    {
-      "id": "meetup_1792871079801",
-      "title": "Weekend Coffee & Tech Founders Pitch",
-      "category": "Tech & Startup",
-      "venueName": "Roastery Coffee",
-      "area": "Sarvodaya Enclave",
-      "distanceKm": 1,
-      "date": "This Saturday",
-      "time": "05:00 PM - 07:00 PM",
-      "hostId": "cmvidzcly0000vaaswh1rsxtf",
-      "hostName": "saicharan",
-      "hostAvatar": "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=400&q=80",
-      "isHostVerified": true,
-      "hostRating": 5,
-      "imageUrl": "https://images.unsplash.com/photo-1522202176988-66273c2fd55f?auto=format&fit=crop&w=800&q=80",
-      "matchPercentage": 95,
-      "matchReason": "Nearby community member with shared interests",
-      "icebreakerPrompt": "What is one wild tech idea or project you are tinkering with right now?",
-      "maxAttendees": 4,
-      "attendeesCount": 0,
-      "attendeesAvatars": [
-        "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80"
-      ],
-      "attendeesNames": [],
-      "audienceType": "Everyone",
-      "isRsvped": false,
-      "rsvpedUserIds": [],
-      "tags": [
-        "☕ Coffee",
-        "💻 Tech",
-        "🚀 Startups",
-        "🤝 Networking"
-      ],
-      "expenseType": "Self-order & split bills at venue"
-    },
-    {
-      "id": "meetup_1792869773049",
-      "title": "Weekend Coffee & Tech Founders Pitch",
-      "category": "Coffee & Cafes",
-      "venueName": "Roastery Coffee",
-      "area": "Road 45, Jubilee Hills",
-      "distanceKm": 1,
-      "date": "Wed, 28 Oct 2026",
-      "time": "5:00 PM - 7:00 PM",
-      "hostId": "cmvidzcly0000vaaswh1rsxtf",
-      "hostName": "saicharan",
-      "hostAvatar": "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=400&q=80",
-      "isHostVerified": true,
-      "hostRating": 5,
-      "imageUrl": "https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?auto=format&fit=crop&w=800&q=80",
-      "matchPercentage": 95,
-      "matchReason": "Nearby community member with shared interests",
-      "icebreakerPrompt": "What is one wild tech idea or project you are tinkering with right now?",
-      "maxAttendees": 6,
-      "attendeesCount": 0,
-      "attendeesAvatars": [
-        "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80"
-      ],
-      "attendeesNames": [],
-      "audienceType": "Everyone",
-      "isRsvped": false,
-      "rsvpedUserIds": [],
-      "tags": [
-        "☕ Coffee",
-        "💻 Tech",
-        "🚀 Startups",
-        "🤝 Networking"
-      ],
-      "expenseType": "Self-order & split bills at venue"
-    },
-    {
-      "id": "meetup_1792869071586",
-      "title": "Weekend Coffee & Tech Founders Pitch",
-      "category": "Coffee & Cafes",
-      "venueName": "Durgam Cheruvu Walkway",
-      "area": "Road 45, Jubilee Hills",
-      "distanceKm": 1,
-      "date": "Tomorrow",
-      "time": "07:00 AM - 09:00 AM",
-      "hostId": "cmvidzcly0000vaaswh1rsxtf",
-      "hostName": "saicharan",
-      "hostAvatar": "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=400&q=80",
-      "isHostVerified": true,
-      "hostRating": 5,
-      "imageUrl": "https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?auto=format&fit=crop&w=800&q=80",
-      "matchPercentage": 95,
-      "matchReason": "Nearby community member with shared interests",
-      "icebreakerPrompt": "What is one wild tech idea or project you are tinkering with right now?",
-      "maxAttendees": 3,
-      "attendeesCount": 1,
-      "attendeesAvatars": [
-        "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80"
-      ],
-      "attendeesNames": [],
-      "audienceType": "Everyone",
-      "isRsvped": false,
-      "rsvpedUserIds": [
-        "cmvms026c0000vau8s9hz7tk0"
-      ],
-      "tags": [
-        "☕ Coffee",
-        "💻 Tech",
-        "🚀 Startups",
-        "🤝 Networking"
-      ],
-      "expenseType": "Self-order & split bills at venue"
-    },
-    {
-      "id": "meetup_1792868256315",
-      "title": "Weekend Coffee & Tech Founders Pitch",
-      "category": "Coffee & Cafes",
-      "venueName": "Roastery Coffee House",
-      "area": "Road 45, Jubilee Hills",
-      "distanceKm": 1,
-      "date": "This Saturday",
-      "time": "05:00 PM - 07:00 PM",
-      "hostId": "cmvidzcly0000vaaswh1rsxtf",
-      "hostName": "saicharan",
-      "hostAvatar": "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=400&q=80",
-      "isHostVerified": true,
-      "hostRating": 5,
-      "imageUrl": "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=800&q=80",
-      "matchPercentage": 95,
-      "matchReason": "Nearby community member with shared interests",
-      "icebreakerPrompt": "What is one wild tech idea or project you are tinkering with right now?",
-      "maxAttendees": 6,
-      "attendeesCount": 0,
-      "attendeesAvatars": [
-        "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80"
-      ],
-      "attendeesNames": [],
-      "audienceType": "Women Only",
-      "isRsvped": false,
-      "rsvpedUserIds": [],
-      "tags": [
-        "💻 Tech",
-        "🚀 Startups",
-        "🤝 Networking"
-      ],
-      "expenseType": "BYOB / Potluck"
-    },
-    {
-      "id": "meetup_1792862771891",
-      "title": "Tech Founders & Weekend Chai",
-      "category": "Coffee & Cafes",
-      "venueName": "Roastery Coffee House",
-      "area": "Road 45, Jubilee Hills",
-      "distanceKm": 1,
-      "date": "This Sunday",
-      "time": "05:00 PM - 07:00 PM",
-      "hostId": "cmvidzcly0000vaaswh1rsxtf",
-      "hostName": "saicharan",
-      "hostAvatar": "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=400&q=80",
-      "isHostVerified": true,
-      "hostRating": 5,
-      "imageUrl": "https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?auto=format&fit=crop&w=800&q=80",
-      "matchPercentage": 95,
-      "matchReason": "Nearby community member with shared interests",
-      "icebreakerPrompt": "What project or idea are you hacking on this month?",
-      "maxAttendees": 6,
-      "attendeesCount": 0,
-      "attendeesAvatars": [
-        "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80"
-      ],
-      "attendeesNames": [],
-      "audienceType": "Everyone",
-      "isRsvped": false,
-      "rsvpedUserIds": [],
-      "tags": [
-        "☕ Coffee",
-        "💻 Startups",
-        "🚀 Tech"
-      ],
-      "expenseType": "Self-order & split bills at venue"
-    },
-    {
       "id": "meetup_01",
       "title": "Weekend Coffee & Tech Founders Pitch",
       "category": "Coffee & Cafes",
@@ -470,28 +194,33 @@
       "matchReason": "Shares 3 interests: Tech, Filter Coffee & Early Stage Startups",
       "icebreakerPrompt": "What is one wild tech idea or project you are tinkering with right now?",
       "maxAttendees": 6,
-      "attendeesCount": 4,
+      "attendeesCount": 5,
       "attendeesAvatars": [
         "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=200&q=80",
         "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=200&q=80",
         "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=200&q=80",
-        "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=200&q=80"
+        "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=200&q=80",
+        "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80"
       ],
       "attendeesNames": [
         "Pooja R.",
         "Kiran R.",
         "Rahul V.",
-        "Kavya M."
+        "Kavya M.",
+        "saicharan"
       ],
       "audienceType": "Everyone",
-      "isRsvped": false,
+      "isRsvped": true,
       "tags": [
         "☕ Coffee",
         "💻 Tech",
         "🚀 Startups",
         "🤝 Networking"
       ],
-      "expenseType": "Self-order & split bills at cafe"
+      "expenseType": "Self-order & split bills at cafe",
+      "rsvpedUserIds": [
+        "cmvidzcly0000vaaswh1rsxtf"
+      ]
     },
     {
       "id": "meetup_02",
@@ -512,7 +241,7 @@
       "matchReason": "Nearby commuter along Cyber Towers route • Sports enthusiast",
       "icebreakerPrompt": "Favorite sport you played growing up versus now?",
       "maxAttendees": 4,
-      "attendeesCount": 3,
+      "attendeesCount": 4,
       "attendeesAvatars": [
         "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80",
         "https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=200&q=80",
@@ -521,17 +250,21 @@
       "attendeesNames": [
         "Sai C.",
         "Neha K.",
-        "Vikram S."
+        "Vikram S.",
+        "saicharan"
       ],
       "audienceType": "Everyone",
-      "isRsvped": false,
+      "isRsvped": true,
       "tags": [
         "🏸 Badminton",
         "🌅 Sunrise",
         "☕ Irani Chai",
         "🏃 Fitness"
       ],
-      "expenseType": "Split court fee (₹120 / person)"
+      "expenseType": "Split court fee (₹120 / person)",
+      "rsvpedUserIds": [
+        "cmvidzcly0000vaaswh1rsxtf"
+      ]
     },
     {
       "id": "meetup_03",
@@ -595,7 +328,8 @@
       "attendeesCount": 4,
       "attendeesAvatars": [
         "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=200&q=80",
-        "https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=200&q=80"
+        "https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=200&q=80",
+        "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80"
       ],
       "attendeesNames": [
         "Pooja R.",
@@ -615,17 +349,27 @@
   ],
   "strangerPlans": [
     {
-      "id": "plan_trend_1",
+      "id": "trend_01",
+      "aliases": [
+        "plan_trend_1",
+        "trend_1",
+        "Trend_1",
+        "Trend!1"
+      ],
       "title": "Delhi To Chakrata",
       "location": "Chakrata hill station",
       "imageUrl": "https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=800&q=80",
-      "dateRange": "Sep 18 - Sep 21",
+      "dateRange": "Nov 12 - Nov 15",
+      "startDate": "2026-11-12",
+      "time": "06:00 AM",
       "audience": "Everyone",
-      "joinedMembers": 10,
+      "joinedMembers": 8,
       "totalMembers": 10,
       "isPrivate": false,
       "isTrending": true,
       "isUpcoming": false,
+      "isWomenOnly": false,
+      "hostId": "host_trend_1",
       "hostName": "Manish Kumar",
       "hostAvatar": "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=400&q=80",
       "hostRating": 4.95,
@@ -634,21 +378,87 @@
       "tags": [
         "Hill Station",
         "Campfire",
-        "Weekend Road Trip"
+        "Weekend Road Trip",
+        "Road Trips"
+      ],
+      "joinedUserIds": [
+        "usr_seed_1",
+        "usr_seed_2",
+        "usr_seed_3",
+        "usr_seed_4",
+        "usr_seed_5",
+        "usr_seed_6",
+        "usr_seed_7",
+        "cmvidzcly0000vaaswh1rsxtf"
+      ],
+      "members": [
+        {
+          "userId": "usr_seed_1",
+          "name": "Rohan Gupta",
+          "avatar": "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=400&q=80"
+        },
+        {
+          "userId": "usr_seed_2",
+          "name": "Pooja Verma",
+          "avatar": "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=400&q=80"
+        },
+        {
+          "userId": "usr_seed_3",
+          "name": "Siddharth Rao",
+          "avatar": "https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?auto=format&fit=crop&w=400&q=80"
+        },
+        {
+          "userId": "usr_seed_4",
+          "name": "Ananya Sen",
+          "avatar": "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=400&q=80"
+        },
+        {
+          "userId": "usr_seed_5",
+          "name": "Vikram Sethi",
+          "avatar": "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=400&q=80"
+        },
+        {
+          "userId": "usr_seed_6",
+          "name": "Neha Joshi",
+          "avatar": "https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=400&q=80"
+        },
+        {
+          "userId": "usr_seed_7",
+          "name": "Kunal Mehra",
+          "avatar": "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=400&q=80"
+        },
+        {
+          "userId": "cmvidzcly0000vaaswh1rsxtf",
+          "name": "saicharan",
+          "avatar": "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=400&q=80",
+          "phone": "+917674952516",
+          "gender": "MALE",
+          "joinedAt": "2026-10-28T19:36:08.161Z"
+        }
       ]
     },
     {
-      "id": "plan_trend_2",
+      "id": "trend_02",
+      "aliases": [
+        "plan_trend_2",
+        "trend_2",
+        "Trend_2",
+        "Trend!2"
+      ],
       "title": "durga pooja kolkata",
       "location": "Kolkata",
       "imageUrl": "https://images.unsplash.com/photo-1567157577867-05ccb1388e66?auto=format&fit=crop&w=800&q=80",
-      "dateRange": "Oct 15 - Oct 17",
+      "dateRange": "Nov 15 - Nov 17",
+      "startDate": "2026-11-15",
+      "time": "08:30 AM",
       "audience": "Everyone",
       "joinedMembers": 4,
       "totalMembers": 20,
       "isPrivate": false,
       "isTrending": true,
       "isUpcoming": false,
+      "isWomenOnly": false,
+      "hostId": "host_trend_2",
       "hostName": "Bhanuprakash",
       "hostAvatar": "https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?auto=format&fit=crop&w=400&q=80",
       "hostRating": 4.9,
@@ -657,21 +467,60 @@
       "tags": [
         "Festival",
         "Street Food",
-        "Cultural Walk"
+        "Cultural Walk",
+        "Road Trips"
+      ],
+      "joinedUserIds": [
+        "usr_seed_1",
+        "usr_seed_2",
+        "usr_seed_3",
+        "usr_seed_4"
+      ],
+      "members": [
+        {
+          "userId": "usr_seed_1",
+          "name": "Rohan Gupta",
+          "avatar": "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=400&q=80"
+        },
+        {
+          "userId": "usr_seed_2",
+          "name": "Pooja Verma",
+          "avatar": "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=400&q=80"
+        },
+        {
+          "userId": "usr_seed_3",
+          "name": "Siddharth Rao",
+          "avatar": "https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?auto=format&fit=crop&w=400&q=80"
+        },
+        {
+          "userId": "usr_seed_4",
+          "name": "Ananya Sen",
+          "avatar": "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=400&q=80"
+        }
       ]
     },
     {
-      "id": "plan_trend_3",
+      "id": "trend_03",
+      "aliases": [
+        "plan_trend_3",
+        "trend_3",
+        "Trend_3",
+        "Trend!3"
+      ],
       "title": "Uttarakhand Trip",
       "location": "Uttarakhand",
       "imageUrl": "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=800&q=80",
-      "dateRange": "Jul 15 - Aug 10",
+      "dateRange": "Nov 18 - Nov 22",
+      "startDate": "2026-11-18",
+      "time": "07:00 AM",
       "audience": "Female only",
-      "joinedMembers": 7,
+      "joinedMembers": 5,
       "totalMembers": 9,
       "isPrivate": true,
       "isTrending": true,
       "isUpcoming": false,
+      "isWomenOnly": true,
+      "hostId": "host_trend_3",
       "hostName": "Apoorva Sharma",
       "hostAvatar": "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=400&q=80",
       "hostRating": 4.98,
@@ -681,21 +530,65 @@
         "Lakes",
         "Boating",
         "Safe Travel",
-        "Women Only"
+        "Women Only",
+        "Road Trips"
+      ],
+      "joinedUserIds": [
+        "usr_seed_2",
+        "usr_seed_4",
+        "usr_seed_6",
+        "usr_seed_8",
+        "usr_seed_9"
+      ],
+      "members": [
+        {
+          "userId": "usr_seed_2",
+          "name": "Pooja Verma",
+          "avatar": "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=400&q=80"
+        },
+        {
+          "userId": "usr_seed_4",
+          "name": "Ananya Sen",
+          "avatar": "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=400&q=80"
+        },
+        {
+          "userId": "usr_seed_6",
+          "name": "Neha Joshi",
+          "avatar": "https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=400&q=80"
+        },
+        {
+          "userId": "usr_seed_8",
+          "name": "Sneha Patel",
+          "avatar": "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=400&q=80"
+        },
+        {
+          "userId": "usr_seed_9",
+          "name": "Deepa Roy",
+          "avatar": "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80"
+        }
       ]
     },
     {
-      "id": "plan_up_2",
+      "id": "upcoming_02",
+      "aliases": [
+        "plan_up_2",
+        "upcoming_2",
+        "up_2"
+      ],
       "title": "Manali Snow Adventure",
       "location": "Solang Valley, Manali",
       "imageUrl": "https://images.unsplash.com/photo-1517824806704-9040b037703b?auto=format&fit=crop&w=800&q=80",
-      "dateRange": "Nov 02 - Nov 07",
+      "dateRange": "Nov 05 - Nov 10",
+      "startDate": "2026-11-05",
+      "time": "06:30 AM",
       "audience": "Everyone",
       "joinedMembers": 6,
       "totalMembers": 10,
       "isPrivate": false,
       "isTrending": false,
       "isUpcoming": true,
+      "isWomenOnly": false,
+      "hostId": "host_up_2",
       "hostName": "Aditya Verma",
       "hostAvatar": "https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&w=400&q=80",
       "hostRating": 4.96,
@@ -704,21 +597,71 @@
       "tags": [
         "Snow",
         "Cafes",
-        "Adventure"
+        "Adventure",
+        "Road Trips"
+      ],
+      "joinedUserIds": [
+        "usr_seed_1",
+        "usr_seed_2",
+        "usr_seed_3",
+        "usr_seed_4",
+        "usr_seed_5",
+        "usr_seed_6"
+      ],
+      "members": [
+        {
+          "userId": "usr_seed_1",
+          "name": "Rohan Gupta",
+          "avatar": "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=400&q=80"
+        },
+        {
+          "userId": "usr_seed_2",
+          "name": "Pooja Verma",
+          "avatar": "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=400&q=80"
+        },
+        {
+          "userId": "usr_seed_3",
+          "name": "Siddharth Rao",
+          "avatar": "https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?auto=format&fit=crop&w=400&q=80"
+        },
+        {
+          "userId": "usr_seed_4",
+          "name": "Ananya Sen",
+          "avatar": "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=400&q=80"
+        },
+        {
+          "userId": "usr_seed_5",
+          "name": "Vikram Sethi",
+          "avatar": "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=400&q=80"
+        },
+        {
+          "userId": "usr_seed_6",
+          "name": "Neha Joshi",
+          "avatar": "https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=400&q=80"
+        }
       ]
     },
     {
-      "id": "plan_up_3",
+      "id": "upcoming_03",
+      "aliases": [
+        "plan_up_3",
+        "upcoming_3",
+        "up_3"
+      ],
       "title": "Goa Beach & Sunsets",
       "location": "North Goa (Vagator & Morjim)",
       "imageUrl": "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=800&q=80",
       "dateRange": "Nov 14 - Nov 18",
+      "startDate": "2026-11-14",
+      "time": "07:30 AM",
       "audience": "Everyone",
-      "joinedMembers": 4,
+      "joinedMembers": 3,
       "totalMembers": 6,
       "isPrivate": false,
       "isTrending": false,
       "isUpcoming": true,
+      "isWomenOnly": false,
+      "hostId": "host_up_3",
       "hostName": "Kavya Reddy",
       "hostAvatar": "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=400&q=80",
       "hostRating": 4.98,
@@ -727,7 +670,75 @@
       "tags": [
         "Beach",
         "Sunset",
-        "Relax"
+        "Relax",
+        "Road Trips"
+      ],
+      "joinedUserIds": [
+        "usr_seed_1",
+        "usr_seed_2",
+        "usr_seed_3"
+      ],
+      "members": [
+        {
+          "userId": "usr_seed_1",
+          "name": "Rohan Gupta",
+          "avatar": "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=400&q=80"
+        },
+        {
+          "userId": "usr_seed_2",
+          "name": "Pooja Verma",
+          "avatar": "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=400&q=80"
+        },
+        {
+          "userId": "usr_seed_3",
+          "name": "Siddharth Rao",
+          "avatar": "https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?auto=format&fit=crop&w=400&q=80"
+        }
+      ]
+    },
+    {
+      "id": "plan_exp_1",
+      "title": "Jaipur Heritage Walk",
+      "location": "Jaipur, Rajasthan",
+      "imageUrl": "https://images.unsplash.com/photo-1477587458883-47145ed94245?auto=format&fit=crop&w=800&q=80",
+      "dateRange": "Oct 20 - Oct 22",
+      "startDate": "2026-10-20",
+      "time": "06:00 AM",
+      "audience": "Everyone",
+      "joinedMembers": 8,
+      "totalMembers": 10,
+      "isPrivate": false,
+      "isTrending": false,
+      "isUpcoming": false,
+      "isWomenOnly": false,
+      "hostId": "host_exp_1",
+      "hostName": "Rajesh Sharma",
+      "hostAvatar": "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=400&q=80",
+      "hostRating": 4.92,
+      "price": 1200,
+      "description": "Historical morning tour covering Amer Fort, Hawa Mahal, and local heritage bazaars.",
+      "tags": [
+        "Heritage",
+        "Cultural Walk",
+        "Historic"
+      ],
+      "joinedUserIds": [
+        "usr_seed_1",
+        "usr_seed_2",
+        "usr_seed_3",
+        "usr_seed_4"
+      ],
+      "members": [
+        {
+          "userId": "usr_seed_1",
+          "name": "Rohan Gupta",
+          "avatar": "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=400&q=80"
+        },
+        {
+          "userId": "usr_seed_2",
+          "name": "Pooja Verma",
+          "avatar": "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=400&q=80"
+        }
       ]
     }
   ]

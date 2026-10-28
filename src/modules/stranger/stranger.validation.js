@@ -58,6 +58,8 @@ export const createStrangerPlanSchema = {
     location: z.string().min(2),
     imageUrl: z.string().url().optional(),
     dateRange: z.string().min(2),
+    time: z.string().optional().default('07:00 AM'),
+    startDate: z.string().optional(),
     audience: z.enum(['Everyone', 'Female only', 'Male only']).default('Everyone'),
     totalMembers: z.number().int().min(2).max(100).default(10),
     price: z.number().min(0).default(0),

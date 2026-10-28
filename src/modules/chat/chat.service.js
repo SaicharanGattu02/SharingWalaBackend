@@ -1,3 +1,98 @@
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const storePath = path.resolve(__dirname, '../stranger/stranger_store.json');
+
+function resolveConversationMetadata(conv, currentUserId) {
+  let strangerStore = { strangerMeetups: [], strangerTrips: [], strangerPlans: [] };
+  try {
+    if (fs.existsSync(storePath)) {
+      strangerStore = JSON.parse(fs.readFileSync(storePath, 'utf8'));
+    }
+  } catch (_) {}
+
+  const convId = conv.id || '';
+  const isGroup = conv.type !== 'DIRECT';
+
+  if (convId.startsWith('meetup_chat_') || convId.startsWith('meetup_')) {
+    const meetupId = convId.replace('meetup_chat_', '');
+    const m = (strangerStore.strangerMeetups || []).find((x) => x.id === meetupId);
+    if (m) {
+      return {
+        title: m.title,
+        subtitle: `Meetup Group • ${m.venueName || m.area || m.category || 'Jubilee Hills'}`,
+        avatarUrl: m.imageUrl || m.hostAvatar || '',
+        isGroup: true,
+      };
+    }
+    return {
+      title: 'Weekend Commute Meetup',
+      subtitle: 'Meetup Group • Stranger Mode',
+      avatarUrl: '',
+      isGroup: true,
+    };
+  }
+
+  if (convId.startsWith('plan_') || convId.startsWith('stranger_')) {
+    const tripId = convId.replace('plan_chat_', '').replace('plan_stranger_', '');
+    const t = (strangerStore.strangerTrips || []).find((x) => x.id === tripId || x.id === `stranger_${tripId}`);
+    if (t) {
+      return {
+        title: `${t.origin} ➔ ${t.destination} Road Trip`,
+        subtitle: `Road Trip Group • ${t.mode === 'bikepool' ? 'Bikepool' : 'Carpool'} • ${t.date || 'Weekend Commute'}`,
+        avatarUrl: t.imageUrl || '',
+        isGroup: true,
+      };
+    }
+    const p = (strangerStore.strangerPlans || []).find((x) => x.id === tripId || x.code === tripId);
+    if (p) {
+      return {
+        title: p.title,
+        subtitle: `Road Trip Group • ${p.location || 'Curated Trip'}`,
+        avatarUrl: p.imageUrl || '',
+        isGroup: true,
+      };
+    }
+  }
+
+  if (conv.community) {
+    return {
+      title: conv.community.name,
+      subtitle: 'Community Group • Verified Members',
+      avatarUrl: conv.community.logoUrl || '',
+      isGroup: true,
+    };
+  }
+
+  if (conv.ride) {
+    return {
+      title: `${conv.ride.startLocationName || 'Start'} ➔ ${conv.ride.endLocationName || 'Destination'}`,
+      subtitle: `Carpool Group • Ride #${conv.ride.id}`,
+      avatarUrl: '',
+      isGroup: true,
+    };
+  }
+
+  if (conv.type === 'DIRECT') {
+    const otherParticipant = conv.participants?.find((part) => part.userId !== currentUserId);
+    return {
+      title: otherParticipant?.user?.displayName || 'Direct Chat',
+      subtitle: 'Direct Conversation',
+      avatarUrl: otherParticipant?.user?.avatarUrl || '',
+      isGroup: false,
+    };
+  }
+
+  return {
+    title: conv.title && conv.title !== 'Group Chat' && conv.title !== 'Chat Room' ? conv.title : (isGroup ? 'Commute Group' : 'Direct Chat'),
+    subtitle: isGroup ? 'Commute Group Chat' : 'Direct Conversation',
+    avatarUrl: '',
+    isGroup,
+  };
+}
 import { prisma } from '../../config/db.js';
 import { ApiError } from '../../utils/apiError.js';
 import { getIO } from '../../config/socket.js';
@@ -62,9 +157,24 @@ export const getOrCreateDirectConversation = async (userId, recipientUserId) => 
   return newConversation;
 };
 
-export const getUserConversations = async (userId) => {
+export const getUserConversations = async (userId, typeFilter = null) => {
+  const whereClause = { userId };
+
+  if (typeFilter) {
+    const filter = String(typeFilter).toUpperCase().trim();
+    if (filter === 'DIRECT') {
+      whereClause.conversation = { type: 'DIRECT' };
+    } else if (filter === 'GROUPS' || filter === 'GROUP') {
+      whereClause.conversation = {
+        type: { in: ['COMMUNITY_GROUP', 'RIDE_GROUP', 'TRIP_GROUP', 'JOURNEY_GROUP'] },
+      };
+    } else if (['RIDE_GROUP', 'COMMUNITY_GROUP', 'TRIP_GROUP', 'JOURNEY_GROUP'].includes(filter)) {
+      whereClause.conversation = { type: filter };
+    }
+  }
+
   const participations = await prisma.conversationParticipant.findMany({
-    where: { userId },
+    where: whereClause,
     include: {
       conversation: {
         include: {
@@ -129,15 +239,17 @@ export const getUserConversations = async (userId) => {
         },
       });
 
+      const meta = resolveConversationMetadata(conv, userId);
+
       return {
         id: conv.id,
         uuid: conv.uuid,
         type: conv.type,
-        title:
-          conv.title ||
-          (conv.type === 'DIRECT'
-            ? conv.participants.find((part) => part.userId !== userId)?.user.displayName || 'Direct Chat'
-            : 'Chat Room'),
+        isGroup: meta.isGroup,
+        category: meta.isGroup ? 'groups' : 'direct',
+        title: meta.title,
+        subtitle: meta.subtitle,
+        avatarUrl: meta.avatarUrl,
         ride: conv.ride,
         community: conv.community,
         bikerTrip: conv.bikerTrip,
@@ -154,7 +266,7 @@ export const getUserConversations = async (userId) => {
 
 export const getConversationMessages = async (userId, conversationId, { page = 1, limit = 30 }) => {
   // Validate participant membership
-  const participant = await prisma.conversationParticipant.findUnique({
+  let participant = await prisma.conversationParticipant.findUnique({
     where: {
       conversationId_userId: {
         conversationId,
@@ -165,7 +277,29 @@ export const getConversationMessages = async (userId, conversationId, { page = 1
   });
 
   if (!participant) {
-    throw new ApiError(403, 'You are not a participant in this conversation');
+    let conversation = await prisma.conversation.findUnique({
+      where: { id: conversationId },
+    });
+    if (!conversation) {
+      conversation = await prisma.conversation.create({
+        data: {
+          id: conversationId,
+          type: 'TRIP_GROUP',
+          title: conversationId.startsWith('meetup_chat_')
+            ? 'Meetup Group Chat'
+            : conversationId.startsWith('plan_chat_')
+            ? 'Road Trip Group Chat'
+            : 'Group Chat',
+        },
+      });
+    }
+    participant = await prisma.conversationParticipant.create({
+      data: {
+        conversationId,
+        userId,
+      },
+      include: { conversation: true },
+    });
   }
 
   const skip = (page - 1) * limit;
@@ -207,7 +341,7 @@ export const getConversationMessages = async (userId, conversationId, { page = 1
 };
 
 export const sendChatMessage = async (userId, conversationId, data) => {
-  const participant = await prisma.conversationParticipant.findUnique({
+  let participant = await prisma.conversationParticipant.findUnique({
     where: {
       conversationId_userId: {
         conversationId,
@@ -226,7 +360,33 @@ export const sendChatMessage = async (userId, conversationId, data) => {
   });
 
   if (!participant) {
-    throw new ApiError(403, 'You are not a participant in this conversation');
+    let conversation = await prisma.conversation.findUnique({
+      where: { id: conversationId },
+    });
+    if (!conversation) {
+      conversation = await prisma.conversation.create({
+        data: {
+          id: conversationId,
+          type: 'TRIP_GROUP',
+          title: 'Group Chat',
+        },
+      });
+    }
+    participant = await prisma.conversationParticipant.create({
+      data: {
+        conversationId,
+        userId,
+      },
+      include: {
+        conversation: {
+          include: {
+            participants: {
+              select: { userId: true },
+            },
+          },
+        },
+      },
+    });
   }
 
   if (participant.conversation.isArchived) {
@@ -273,7 +433,7 @@ export const sendChatMessage = async (userId, conversationId, data) => {
           conversationId,
           conversationType: participant.conversation.type,
           senderName: message.sender.displayName,
-          preview: message.messageType === 'LOCATION_SHARE' ? '📍 Shared a location' : message.content,
+          preview: message.messageType === 'LOCATION_SHARE' ? 'ðŸ“ Shared a location' : message.content,
           createdAt: message.createdAt,
         });
       }

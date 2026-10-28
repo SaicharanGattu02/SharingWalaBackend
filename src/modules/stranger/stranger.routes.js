@@ -40,9 +40,10 @@ router.get('/plans/upcoming', optionalAuthenticate, strangerController.getUpcomi
 router.get('/plans/by-interest', optionalAuthenticate, strangerController.getPlansByInterest);
 router.get('/plans/:id', optionalAuthenticate, strangerController.getPlanById);
 router.post('/plans', authenticate, validate(createStrangerPlanSchema), strangerController.createPlan);
-router.post('/plans/:id/join', authenticate, strangerController.joinPlan);
-router.post('/plans/:id/request', authenticate, strangerController.joinPlan);
-router.post('/plans/:id/opt-in', authenticate, strangerController.joinPlan);
+router.post('/plans/:id/join', optionalAuthenticate, strangerController.joinPlan);
+router.post('/plans/:id/request', optionalAuthenticate, strangerController.joinPlan);
+router.post('/plans/:id/opt-in', optionalAuthenticate, strangerController.joinPlan);
+router.post('/plans/:id/leave', optionalAuthenticate, strangerController.leavePlan);
 
 // --- 4. STRANGER REELS ---
 router.get('/reels', optionalAuthenticate, strangerController.getReels);
