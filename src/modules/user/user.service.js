@@ -860,6 +860,21 @@ export const getRideDetails = async (rideId, currentUserId = null) => {
  * 6. Request a Seat on a Ride
  */
 export const requestSeatOnRide = async (passengerUserId, rideId, { seats = 1, pickupPoint, dropoffPoint, notes } = {}) => {
+  // 1. Check if mock commuter preview ride
+  const mockRide = defaultMockRides.find((r) => r.id === rideId);
+  if (mockRide) {
+    const totalFare = Number(mockRide.pricePerSeat || 45.0) * seats;
+    return {
+      bookingId: `booking_mock_${Date.now()}`,
+      rideId: mockRide.id,
+      status: 'pending',
+      seatsBooked: seats,
+      totalFare,
+      message: 'Seat request sent to rider.',
+    };
+  }
+
+  // 2. Check if explicit stranger trip
   if (rideId && rideId.startsWith('stranger_')) {
     try {
       const { joinStrangerTrip } = await import('../stranger/stranger.service.js');
@@ -876,11 +891,12 @@ export const requestSeatOnRide = async (passengerUserId, rideId, { seats = 1, pi
     });
 
     if (!ride) {
+      // Fallback check stranger trip
       try {
         const { joinStrangerTrip } = await import('../stranger/stranger.service.js');
         return await joinStrangerTrip(passengerUserId, rideId, { seats, pickupPoint, dropoffPoint, notes });
       } catch (e) {
-        if (e.statusCode) throw e;
+        // If not a stranger trip either, throw clear 'Ride not found'
       }
       throw new ApiError(404, 'Ride not found');
     }

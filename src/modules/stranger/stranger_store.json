@@ -194,7 +194,7 @@
       "matchReason": "Shares 3 interests: Tech, Filter Coffee & Early Stage Startups",
       "icebreakerPrompt": "What is one wild tech idea or project you are tinkering with right now?",
       "maxAttendees": 6,
-      "attendeesCount": 5,
+      "attendeesCount": 6,
       "attendeesAvatars": [
         "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=200&q=80",
         "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=200&q=80",
@@ -207,7 +207,8 @@
         "Kiran R.",
         "Rahul V.",
         "Kavya M.",
-        "saicharan"
+        "saicharan",
+        "Testing1"
       ],
       "audienceType": "Everyone",
       "isRsvped": true,
@@ -219,7 +220,8 @@
       ],
       "expenseType": "Self-order & split bills at cafe",
       "rsvpedUserIds": [
-        "cmvidzcly0000vaaswh1rsxtf"
+        "cmvidzcly0000vaaswh1rsxtf",
+        "cmvms026c0000vau8s9hz7tk0"
       ]
     },
     {
@@ -325,7 +327,7 @@
       "matchReason": "Women-only professional community & design networking circle",
       "icebreakerPrompt": "Share one career win from this month and one goal for next quarter!",
       "maxAttendees": 6,
-      "attendeesCount": 4,
+      "attendeesCount": 5,
       "attendeesAvatars": [
         "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=200&q=80",
         "https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=200&q=80",
@@ -333,10 +335,11 @@
       ],
       "attendeesNames": [
         "Pooja R.",
-        "Neha K."
+        "Neha K.",
+        "Testing1"
       ],
       "audienceType": "Women Only",
-      "isRsvped": false,
+      "isRsvped": true,
       "tags": [
         "👩 Women In Tech",
         "🥐 Brunch",
@@ -344,7 +347,9 @@
         "💼 Career Growth"
       ],
       "expenseType": "Split brunch bill at venue",
-      "rsvpedUserIds": []
+      "rsvpedUserIds": [
+        "cmvms026c0000vau8s9hz7tk0"
+      ]
     }
   ],
   "strangerPlans": [
