@@ -1,5 +1,97 @@
 import { prisma } from '../../config/db.js';
 
+// Auto-provisions conversation and participants with accurate 1-to-1 DIRECT vs GROUP distinction
+async function ensureConversationAndParticipant(conversationId, userId) {
+  const isExplicitGroup = conversationId.startsWith('meetup_chat_') ||
+    conversationId.startsWith('meetup_') ||
+    conversationId.startsWith('plan_chat_') ||
+    conversationId.startsWith('plan_group_') ||
+    conversationId.startsWith('community_');
+
+  const isDirect = !isExplicitGroup;
+
+  let conversation = await prisma.conversation.findUnique({
+    where: { id: conversationId },
+    include: {
+      participants: { select: { userId: true } },
+    },
+  });
+
+  if (!conversation) {
+    conversation = await prisma.conversation.create({
+      data: {
+        id: conversationId,
+        type: isDirect ? 'DIRECT' : (conversationId.startsWith('meetup_') ? 'MEETUP_GROUP' : 'COMMUNITY_GROUP'),
+        title: isDirect ? 'Direct Message' : 'Group Chat',
+      },
+      include: {
+        participants: { select: { userId: true } },
+      },
+    });
+  } else if (isDirect && conversation.type !== 'DIRECT') {
+    // Correct previously mislabeled group conversation to DIRECT
+    conversation = await prisma.conversation.update({
+      where: { id: conversationId },
+      data: { type: 'DIRECT', title: 'Direct Message' },
+      include: { participants: { select: { userId: true } } },
+    });
+  }
+
+  // Ensure current user is registered as participant
+  let participant = await prisma.conversationParticipant.findUnique({
+    where: { conversationId_userId: { conversationId, userId } },
+    include: {
+      conversation: {
+        include: { participants: { select: { userId: true } } },
+      },
+    },
+  });
+
+  if (!participant) {
+    participant = await prisma.conversationParticipant.create({
+      data: { conversationId, userId },
+      include: {
+        conversation: {
+          include: { participants: { select: { userId: true } } },
+        },
+      },
+    });
+  }
+
+  // If 1-to-1 direct conversation, also ensure peer user is added as participant
+  if (isDirect) {
+    let peerUserId = null;
+    if (conversationId.startsWith('trip_')) {
+      const parts = conversationId.split('_');
+      if (parts.length >= 3 && parts[parts.length - 1] !== userId) {
+        peerUserId = parts[parts.length - 1];
+      }
+    } else if (conversationId.startsWith('direct_')) {
+      const parts = conversationId.split('_');
+      if (parts.length >= 3) {
+        peerUserId = parts[1] === userId ? parts[2] : parts[1];
+      }
+    } else if (conversationId.startsWith('passenger_')) {
+      peerUserId = conversationId.replace('passenger_', '');
+    } else if (conversationId.startsWith('driver_')) {
+      peerUserId = conversationId.replace('driver_', '');
+    }
+
+    if (peerUserId && peerUserId !== userId) {
+      const peerExists = await prisma.user.findUnique({ where: { id: peerUserId } });
+      if (peerExists) {
+        await prisma.conversationParticipant.upsert({
+          where: { conversationId_userId: { conversationId, userId: peerUserId } },
+          update: {},
+          create: { conversationId, userId: peerUserId },
+        }).catch(() => {});
+      }
+    }
+  }
+
+  return participant;
+}
+
 export const registerChatSocketHandlers = (io, socket) => {
   const userId = socket.user.id;
 
@@ -11,43 +103,7 @@ export const registerChatSocketHandlers = (io, socket) => {
     try {
       if (!conversationId) return;
 
-      // Ensure conversation exists
-      let conversation = await prisma.conversation.findUnique({
-        where: { id: conversationId },
-      });
-
-      if (!conversation) {
-        conversation = await prisma.conversation.create({
-          data: {
-            id: conversationId,
-            type: 'TRIP_GROUP',
-            title: conversationId.startsWith('meetup_chat_')
-              ? 'Meetup Group Chat'
-              : conversationId.startsWith('plan_chat_')
-              ? 'Road Trip Group Chat'
-              : 'Group Chat',
-          },
-        });
-      }
-
-      // Ensure user is registered as participant
-      let participant = await prisma.conversationParticipant.findUnique({
-        where: {
-          conversationId_userId: {
-            conversationId,
-            userId,
-          },
-        },
-      });
-
-      if (!participant) {
-        participant = await prisma.conversationParticipant.create({
-          data: {
-            conversationId,
-            userId,
-          },
-        });
-      }
+      await ensureConversationAndParticipant(conversationId, userId);
 
       socket.join(`conv:${conversationId}`);
       socket.emit('joined_conversation', { conversationId });
@@ -70,56 +126,7 @@ export const registerChatSocketHandlers = (io, socket) => {
       try {
         if (!conversationId) return;
 
-        // Auto-provision conversation and participant if needed
-        let participant = await prisma.conversationParticipant.findUnique({
-          where: {
-            conversationId_userId: {
-              conversationId,
-              userId,
-            },
-          },
-          include: {
-            conversation: {
-              include: {
-                participants: {
-                  select: { userId: true },
-                },
-              },
-            },
-          },
-        });
-
-        if (!participant) {
-          let conversation = await prisma.conversation.findUnique({
-            where: { id: conversationId },
-          });
-
-          if (!conversation) {
-            conversation = await prisma.conversation.create({
-              data: {
-                id: conversationId,
-                type: 'TRIP_GROUP',
-                title: 'Group Chat',
-              },
-            });
-          }
-
-          participant = await prisma.conversationParticipant.create({
-            data: {
-              conversationId,
-              userId,
-            },
-            include: {
-              conversation: {
-                include: {
-                  participants: {
-                    select: { userId: true },
-                  },
-                },
-              },
-            },
-          });
-        }
+        const participant = await ensureConversationAndParticipant(conversationId, userId);
 
         if (participant.conversation.isArchived) {
           return socket.emit('chat_error', {
@@ -188,44 +195,36 @@ export const registerChatSocketHandlers = (io, socket) => {
     }
   );
 
-  // 5. Typing Indicators
+  // 5. Typing indicator
   socket.on('typing_start', ({ conversationId }) => {
+    if (!conversationId) return;
     socket.to(`conv:${conversationId}`).emit('user_typing', {
       conversationId,
       userId,
       displayName: socket.user.displayName,
+      isTyping: true,
     });
   });
 
   socket.on('typing_stop', ({ conversationId }) => {
-    socket.to(`conv:${conversationId}`).emit('user_stopped_typing', {
+    if (!conversationId) return;
+    socket.to(`conv:${conversationId}`).emit('user_typing', {
       conversationId,
       userId,
+      displayName: socket.user.displayName,
+      isTyping: false,
     });
   });
 
-  // 6. Mark Conversation Read
-  socket.on('mark_as_read', async ({ conversationId }) => {
-    try {
-      await prisma.conversationParticipant.update({
-        where: {
-          conversationId_userId: {
-            conversationId,
-            userId,
-          },
-        },
-        data: { lastReadAt: new Date() },
-      });
-
-      socket.emit('marked_read', { conversationId });
-      socket.to(`conv:${conversationId}`).emit('messages_read_receipt', {
-        conversationId,
-        readerId: userId,
-        readAt: new Date(),
-      });
-    } catch (error) {
-      socket.emit('chat_error', { message: error.message });
-    }
+  // 6. Community event broadcast
+  socket.on('community_event', ({ communityId, eventType, data }) => {
+    if (!communityId) return;
+    io.to(`conv:community_${communityId}`).emit('community_update', {
+      communityId,
+      eventType,
+      data,
+      emittedBy: socket.user.displayName,
+    });
   });
 
   // 7. VoIP 1-to-1 Calling Events (User ID to User ID)
@@ -254,6 +253,61 @@ export const registerChatSocketHandlers = (io, socket) => {
       receiverId: userId,
       reason,
     });
+  });
+
+  socket.on('call:missed', async ({ toUserId, callType = 'AUDIO', conversationId }) => {
+    if (!toUserId) return;
+    io.to(`user:${toUserId}`).emit('call:missed', {
+      callerId: userId,
+      callerName: socket.user.displayName || socket.user.username,
+      callerAvatar: socket.user.avatarUrl,
+      callType,
+      timestamp: new Date().toISOString(),
+    });
+
+    // Auto-record missed call in direct conversation so both parties see it in chat history
+    try {
+      const targetConvId = conversationId || `direct_${[userId, toUserId].sort().join('_')}`;
+      await ensureConversationAndParticipant(targetConvId, userId);
+      const isVideo = callType === 'VIDEO';
+      const content = isVideo ? 'Missed video call' : 'Missed voice call';
+
+      const message = await prisma.chatMessage.create({
+        data: {
+          conversationId: targetConvId,
+          senderId: userId,
+          messageType: 'MISSED_CALL',
+          content,
+        },
+        include: {
+          sender: {
+            select: { id: true, displayName: true, avatarUrl: true },
+          },
+        },
+      });
+
+      await prisma.conversation.update({
+        where: { id: targetConvId },
+        data: { lastMessageAt: new Date() },
+      }).catch(() => {});
+
+      const socketPayload = {
+        id: message.id,
+        conversationId: targetConvId,
+        senderId: message.senderId,
+        senderName: message.sender?.displayName || 'User',
+        senderAvatar: message.sender?.avatarUrl,
+        content: message.content,
+        messageType: 'MISSED_CALL',
+        createdAt: message.createdAt.toISOString(),
+      };
+
+      io.to(`conv:${targetConvId}`).emit('new_message', socketPayload);
+      io.to(`user:${userId}`).emit('new_message', socketPayload);
+      io.to(`user:${toUserId}`).emit('new_message', socketPayload);
+    } catch (err) {
+      // Non-blocking fallback
+    }
   });
 
   socket.on('call:signal', ({ toUserId, signalData }) => {

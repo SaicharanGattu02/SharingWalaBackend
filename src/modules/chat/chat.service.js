@@ -1,10 +1,106 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { prisma } from '../../config/db.js';
+import { ApiError } from '../../utils/apiError.js';
+import { getIO } from '../../config/socket.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const storePath = path.resolve(__dirname, '../stranger/stranger_store.json');
+
+// Auto-provision or update conversation with strict 1-to-1 DIRECT vs GROUP classification
+async function ensureConversationRecord(conversationId, userId) {
+  const isExplicitGroup =
+    conversationId.startsWith('meetup_chat_') ||
+    conversationId.startsWith('meetup_') ||
+    conversationId.startsWith('plan_chat_') ||
+    conversationId.startsWith('plan_group_') ||
+    conversationId.startsWith('community_');
+
+  const isDirect = !isExplicitGroup;
+
+  let conversation = await prisma.conversation.findUnique({
+    where: { id: conversationId },
+    include: {
+      participants: { select: { userId: true } },
+    },
+  });
+
+  if (!conversation) {
+    conversation = await prisma.conversation.create({
+      data: {
+        id: conversationId,
+        type: isDirect ? 'DIRECT' : (conversationId.startsWith('meetup_') ? 'MEETUP_GROUP' : 'COMMUNITY_GROUP'),
+        title: isDirect ? 'Direct Message' : 'Group Chat',
+      },
+      include: {
+        participants: { select: { userId: true } },
+      },
+    });
+  } else if (isDirect && conversation.type !== 'DIRECT') {
+    // Fix existing erroneously mislabeled group conversation to DIRECT
+    conversation = await prisma.conversation.update({
+      where: { id: conversationId },
+      data: { type: 'DIRECT', title: 'Direct Message' },
+      include: { participants: { select: { userId: true } } },
+    });
+  }
+
+  // Ensure current user is a participant
+  let participant = await prisma.conversationParticipant.findUnique({
+    where: { conversationId_userId: { conversationId, userId } },
+    include: {
+      conversation: {
+        include: { participants: { select: { userId: true } } },
+      },
+    },
+  });
+
+  if (!participant) {
+    participant = await prisma.conversationParticipant.create({
+      data: { conversationId, userId },
+      include: {
+        conversation: {
+          include: { participants: { select: { userId: true } } },
+        },
+      },
+    });
+  }
+
+  // If 1-to-1 direct conversation, also auto-register peer user if discoverable
+  if (isDirect) {
+    let peerUserId = null;
+    if (conversationId.startsWith('trip_')) {
+      const parts = conversationId.split('_');
+      if (parts.length >= 3 && parts[parts.length - 1] !== userId) {
+        peerUserId = parts[parts.length - 1];
+      }
+    } else if (conversationId.startsWith('direct_')) {
+      const parts = conversationId.split('_');
+      if (parts.length >= 3) {
+        peerUserId = parts[1] === userId ? parts[2] : parts[1];
+      }
+    } else if (conversationId.startsWith('passenger_')) {
+      peerUserId = conversationId.replace('passenger_', '');
+    } else if (conversationId.startsWith('driver_')) {
+      peerUserId = conversationId.replace('driver_', '');
+    }
+
+    if (peerUserId && peerUserId !== userId) {
+      const peerExists = await prisma.user.findUnique({ where: { id: peerUserId } });
+      if (peerExists) {
+        await prisma.conversationParticipant.upsert({
+          where: { conversationId_userId: { conversationId, userId: peerUserId } },
+          update: {},
+          create: { conversationId, userId: peerUserId },
+        }).catch(() => {});
+      }
+    }
+  }
+
+  return participant;
+}
 
 function resolveConversationMetadata(conv, currentUserId) {
   let strangerStore = { strangerMeetups: [], strangerTrips: [], strangerPlans: [] };
@@ -15,8 +111,43 @@ function resolveConversationMetadata(conv, currentUserId) {
   } catch (_) {}
 
   const convId = conv.id || '';
-  const isGroup = conv.type !== 'DIRECT';
+  const rawType = (conv.type || '').toUpperCase();
 
+  // 1. Explicit 1-to-1 Individual / Direct Conversations
+  const isDirect =
+    rawType === 'DIRECT' ||
+    convId.startsWith('trip_') ||
+    convId.startsWith('direct_') ||
+    convId.startsWith('passenger_') ||
+    convId.startsWith('driver_') ||
+    (convId.startsWith('stranger_') && !convId.startsWith('stranger_meetup_'));
+
+  if (isDirect) {
+    const otherParticipant = conv.participants?.find((part) => part.userId !== currentUserId);
+    const otherUser = otherParticipant?.user;
+
+    let title = otherUser?.displayName;
+    if (!title && conv.ride) {
+      title = currentUserId === conv.ride.driverId ? 'Passenger' : (conv.ride.driverName || 'Trip Captain');
+    }
+    if (!title) {
+      title = conv.title && conv.title !== 'Group Chat' && conv.title !== 'Road Trip Group Chat' ? conv.title : 'Direct Message';
+    }
+
+    let subtitle = 'Direct 1-on-1 Conversation';
+    if (conv.ride) {
+      subtitle = `1-on-1 Trip • ${conv.ride.startLocationName || 'Origin'} ➔ ${conv.ride.endLocationName || 'Destination'}`;
+    }
+
+    return {
+      title,
+      subtitle,
+      avatarUrl: otherUser?.avatarUrl || '',
+      isGroup: false,
+    };
+  }
+
+  // 2. Meetup Groups
   if (convId.startsWith('meetup_chat_') || convId.startsWith('meetup_')) {
     const meetupId = convId.replace('meetup_chat_', '');
     const m = (strangerStore.strangerMeetups || []).find((x) => x.id === meetupId);
@@ -36,17 +167,9 @@ function resolveConversationMetadata(conv, currentUserId) {
     };
   }
 
-  if (convId.startsWith('plan_') || convId.startsWith('stranger_')) {
-    const tripId = convId.replace('plan_chat_', '').replace('plan_stranger_', '');
-    const t = (strangerStore.strangerTrips || []).find((x) => x.id === tripId || x.id === `stranger_${tripId}`);
-    if (t) {
-      return {
-        title: `${t.origin} ➔ ${t.destination} Road Trip`,
-        subtitle: `Road Trip Group • ${t.mode === 'bikepool' ? 'Bikepool' : 'Carpool'} • ${t.date || 'Weekend Commute'}`,
-        avatarUrl: t.imageUrl || '',
-        isGroup: true,
-      };
-    }
+  // 3. Plan Groups
+  if (convId.startsWith('plan_chat_') || convId.startsWith('plan_group_')) {
+    const tripId = convId.replace('plan_chat_', '').replace('plan_group_', '');
     const p = (strangerStore.strangerPlans || []).find((x) => x.id === tripId || x.code === tripId);
     if (p) {
       return {
@@ -56,46 +179,43 @@ function resolveConversationMetadata(conv, currentUserId) {
         isGroup: true,
       };
     }
-  }
-
-  if (conv.community) {
     return {
-      title: conv.community.name,
-      subtitle: 'Community Group • Verified Members',
-      avatarUrl: conv.community.logoUrl || '',
-      isGroup: true,
-    };
-  }
-
-  if (conv.ride) {
-    return {
-      title: `${conv.ride.startLocationName || 'Start'} ➔ ${conv.ride.endLocationName || 'Destination'}`,
-      subtitle: `Carpool Group • Ride #${conv.ride.id}`,
+      title: 'Road Trip Group',
+      subtitle: 'Road Trip Group • Commute Trip',
       avatarUrl: '',
       isGroup: true,
     };
   }
 
-  if (conv.type === 'DIRECT') {
-    const otherParticipant = conv.participants?.find((part) => part.userId !== currentUserId);
+  // 4. Community Groups
+  if (conv.community || rawType === 'COMMUNITY_GROUP') {
     return {
-      title: otherParticipant?.user?.displayName || 'Direct Chat',
-      subtitle: 'Direct Conversation',
-      avatarUrl: otherParticipant?.user?.avatarUrl || '',
-      isGroup: false,
+      title: conv.community?.name || conv.title || 'Community Hub',
+      subtitle: 'Community Group • Verified Members',
+      avatarUrl: conv.community?.logoUrl || '',
+      isGroup: true,
+    };
+  }
+
+  // 5. Explicit Ride Group (multi-passenger trip group)
+  if (rawType === 'RIDE_GROUP') {
+    return {
+      title: conv.ride
+        ? `${conv.ride.startLocationName || 'Start'} ➔ ${conv.ride.endLocationName || 'Destination'}`
+        : (conv.title || 'Ride Group Chat'),
+      subtitle: conv.ride ? `Carpool Group • Ride #${conv.ride.id}` : 'Carpool Ride Group',
+      avatarUrl: '',
+      isGroup: true,
     };
   }
 
   return {
-    title: conv.title && conv.title !== 'Group Chat' && conv.title !== 'Chat Room' ? conv.title : (isGroup ? 'Commute Group' : 'Direct Chat'),
-    subtitle: isGroup ? 'Commute Group Chat' : 'Direct Conversation',
+    title: conv.title && conv.title !== 'Group Chat' ? conv.title : 'Direct Message',
+    subtitle: 'Direct Conversation',
     avatarUrl: '',
-    isGroup,
+    isGroup: false,
   };
 }
-import { prisma } from '../../config/db.js';
-import { ApiError } from '../../utils/apiError.js';
-import { getIO } from '../../config/socket.js';
 
 export const getOrCreateDirectConversation = async (userId, recipientUserId) => {
   if (userId === recipientUserId) {
@@ -139,6 +259,7 @@ export const getOrCreateDirectConversation = async (userId, recipientUserId) => 
   const newConversation = await prisma.conversation.create({
     data: {
       type: 'DIRECT',
+      title: 'Direct Message',
       participants: {
         create: [{ userId }, { userId: recipientUserId }],
       },
@@ -163,10 +284,24 @@ export const getUserConversations = async (userId, typeFilter = null) => {
   if (typeFilter) {
     const filter = String(typeFilter).toUpperCase().trim();
     if (filter === 'DIRECT') {
-      whereClause.conversation = { type: 'DIRECT' };
+      whereClause.conversation = {
+        OR: [
+          { type: 'DIRECT' },
+          { id: { startsWith: 'trip_' } },
+          { id: { startsWith: 'direct_' } },
+          { id: { startsWith: 'passenger_' } },
+          { id: { startsWith: 'driver_' } },
+        ],
+      };
     } else if (filter === 'GROUPS' || filter === 'GROUP') {
       whereClause.conversation = {
-        type: { in: ['COMMUNITY_GROUP', 'RIDE_GROUP', 'TRIP_GROUP', 'JOURNEY_GROUP'] },
+        type: { in: ['COMMUNITY_GROUP', 'RIDE_GROUP', 'TRIP_GROUP', 'JOURNEY_GROUP', 'MEETUP_GROUP'] },
+        AND: [
+          { NOT: { id: { startsWith: 'trip_' } } },
+          { NOT: { id: { startsWith: 'direct_' } } },
+          { NOT: { id: { startsWith: 'passenger_' } } },
+          { NOT: { id: { startsWith: 'driver_' } } },
+        ],
       };
     } else if (['RIDE_GROUP', 'COMMUNITY_GROUP', 'TRIP_GROUP', 'JOURNEY_GROUP'].includes(filter)) {
       whereClause.conversation = { type: filter };
@@ -185,6 +320,7 @@ export const getUserConversations = async (userId, typeFilter = null) => {
               endLocationName: true,
               departureAt: true,
               status: true,
+              driverId: true,
             },
           },
           community: {
@@ -240,16 +376,18 @@ export const getUserConversations = async (userId, typeFilter = null) => {
       });
 
       const meta = resolveConversationMetadata(conv, userId);
+      const otherParticipant = conv.participants?.find((part) => part.userId !== userId);
 
       return {
         id: conv.id,
         uuid: conv.uuid,
-        type: conv.type,
+        type: meta.isGroup ? conv.type : 'DIRECT',
         isGroup: meta.isGroup,
         category: meta.isGroup ? 'groups' : 'direct',
         title: meta.title,
         subtitle: meta.subtitle,
         avatarUrl: meta.avatarUrl,
+        peerId: otherParticipant?.userId || otherParticipant?.user?.id || null,
         ride: conv.ride,
         community: conv.community,
         bikerTrip: conv.bikerTrip,
@@ -265,42 +403,8 @@ export const getUserConversations = async (userId, typeFilter = null) => {
 };
 
 export const getConversationMessages = async (userId, conversationId, { page = 1, limit = 30 }) => {
-  // Validate participant membership
-  let participant = await prisma.conversationParticipant.findUnique({
-    where: {
-      conversationId_userId: {
-        conversationId,
-        userId,
-      },
-    },
-    include: { conversation: true },
-  });
-
-  if (!participant) {
-    let conversation = await prisma.conversation.findUnique({
-      where: { id: conversationId },
-    });
-    if (!conversation) {
-      conversation = await prisma.conversation.create({
-        data: {
-          id: conversationId,
-          type: 'TRIP_GROUP',
-          title: conversationId.startsWith('meetup_chat_')
-            ? 'Meetup Group Chat'
-            : conversationId.startsWith('plan_chat_')
-            ? 'Road Trip Group Chat'
-            : 'Group Chat',
-        },
-      });
-    }
-    participant = await prisma.conversationParticipant.create({
-      data: {
-        conversationId,
-        userId,
-      },
-      include: { conversation: true },
-    });
-  }
+  // Validate or auto-provision participant membership
+  const participant = await ensureConversationRecord(conversationId, userId);
 
   const skip = (page - 1) * limit;
 
@@ -341,55 +445,9 @@ export const getConversationMessages = async (userId, conversationId, { page = 1
 };
 
 export const sendChatMessage = async (userId, conversationId, data) => {
-  let participant = await prisma.conversationParticipant.findUnique({
-    where: {
-      conversationId_userId: {
-        conversationId,
-        userId,
-      },
-    },
-    include: {
-      conversation: {
-        include: {
-          participants: {
-            select: { userId: true },
-          },
-        },
-      },
-    },
-  });
+  const participant = await ensureConversationRecord(conversationId, userId);
 
-  if (!participant) {
-    let conversation = await prisma.conversation.findUnique({
-      where: { id: conversationId },
-    });
-    if (!conversation) {
-      conversation = await prisma.conversation.create({
-        data: {
-          id: conversationId,
-          type: 'TRIP_GROUP',
-          title: 'Group Chat',
-        },
-      });
-    }
-    participant = await prisma.conversationParticipant.create({
-      data: {
-        conversationId,
-        userId,
-      },
-      include: {
-        conversation: {
-          include: {
-            participants: {
-              select: { userId: true },
-            },
-          },
-        },
-      },
-    });
-  }
-
-  if (participant.conversation.isArchived) {
+  if (participant.conversation && participant.conversation.isArchived) {
     throw new ApiError(400, 'This conversation has been archived and is read-only');
   }
 
@@ -427,17 +485,19 @@ export const sendChatMessage = async (userId, conversationId, data) => {
   try {
     const io = getIO();
     io.to(`conv:${conversationId}`).emit('new_message', message);
-    participant.conversation.participants.forEach((p) => {
-      if (p.userId !== userId) {
-        io.to(`user:${p.userId}`).emit('message_notification', {
-          conversationId,
-          conversationType: participant.conversation.type,
-          senderName: message.sender.displayName,
-          preview: message.messageType === 'LOCATION_SHARE' ? 'ðŸ“ Shared a location' : message.content,
-          createdAt: message.createdAt,
-        });
-      }
-    });
+    if (participant.conversation && participant.conversation.participants) {
+      participant.conversation.participants.forEach((p) => {
+        if (p.userId !== userId) {
+          io.to(`user:${p.userId}`).emit('message_notification', {
+            conversationId,
+            conversationType: participant.conversation.type,
+            senderName: message.sender.displayName,
+            preview: message.messageType === 'LOCATION_SHARE' ? '📍 Shared a location' : message.content,
+            createdAt: message.createdAt,
+          });
+        }
+      });
+    }
   } catch (err) {
     // Socket broadcast is best-effort for REST endpoint
   }

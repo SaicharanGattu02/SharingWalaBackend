@@ -1,6 +1,63 @@
 {
   "strangerTrips": [
     {
+      "id": "TRP-780857",
+      "code": "780857",
+      "uniqueCode": "780857",
+      "structuredId": "TRP-780857",
+      "aliases": [
+        "TRP-780857",
+        "TRP780857",
+        "780857",
+        "stranger_780857",
+        "stranger_1793292658434"
+      ],
+      "hostId": "cmvms026c0000vau8s9hz7tk0",
+      "hostName": "Testing1",
+      "hostAvatar": "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=400&q=80",
+      "hostRating": 5,
+      "totalTrips": 1,
+      "isVerified": true,
+      "origin": "Hyderabad",
+      "destination": "Bengaluru",
+      "date": "Sat, 31 Oct 2026",
+      "time": "7:30 AM",
+      "mode": "carpool",
+      "vibe": "intercityCommute",
+      "availableSeats": 2,
+      "totalSeats": 3,
+      "pricePerPerson": 1200,
+      "notes": "Heading for a weekend trip! Happy to share ride & playlists.",
+      "interests": [
+        "Music",
+        "Tech",
+        "Food"
+      ],
+      "imageUrl": "https://images.unsplash.com/photo-1510312305653-8ed496efae75?auto=format&fit=crop&w=800&q=80",
+      "isWomenOnly": false,
+      "isConnected": true,
+      "status": "PUBLISHED",
+      "passengers": [
+        {
+          "id": "req_1793292801607_3xa0",
+          "requestId": "req_1793292801607_3xa0",
+          "bookingId": "req_1793292801607_3xa0",
+          "passengerId": "cmvidzcly0000vaaswh1rsxtf",
+          "passengerName": "saicharan",
+          "passengerPhone": "+917674952516",
+          "passengerAvatar": "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=400&q=80",
+          "seatsRequested": 1,
+          "totalFare": 1200,
+          "notes": "Looking forward to co-traveling together!",
+          "status": "Confirmed",
+          "requestedAt": "2026-10-29T16:53:21.607Z",
+          "isConfirmed": true,
+          "acceptedAt": "2026-10-29T17:31:43.556Z"
+        }
+      ],
+      "passengerRequests": []
+    },
+    {
       "id": "stranger_1792606140308",
       "hostId": "cmvidzcly0000vaaswh1rsxtf",
       "hostName": "saicharan",
@@ -28,7 +85,22 @@
       "isConnected": true,
       "status": "PUBLISHED",
       "passengers": [],
-      "passengerRequests": []
+      "passengerRequests": [
+        {
+          "id": "req_1793294963831_bi0b",
+          "requestId": "req_1793294963831_bi0b",
+          "bookingId": "req_1793294963831_bi0b",
+          "passengerId": "cmvms026c0000vau8s9hz7tk0",
+          "passengerName": "Testing1",
+          "passengerPhone": "+919999999999",
+          "passengerAvatar": "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=400&q=80",
+          "seatsRequested": 1,
+          "totalFare": 750,
+          "notes": "Looking forward to co-traveling together!",
+          "status": "pending",
+          "requestedAt": "2026-10-29T17:29:23.831Z"
+        }
+      ]
     },
     {
       "id": "stranger_1",
@@ -287,26 +359,31 @@
       "matchReason": "Matches Music & Sunset aesthetic interests from your profile",
       "icebreakerPrompt": "Bring your acoustic guitar, ukulele or just your singing voice!",
       "maxAttendees": 8,
-      "attendeesCount": 5,
+      "attendeesCount": 6,
       "attendeesAvatars": [
         "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=200&q=80",
         "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=200&q=80",
-        "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=200&q=80"
+        "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=200&q=80",
+        "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80"
       ],
       "attendeesNames": [
         "Rahul V.",
         "Kiran R.",
-        "Kavya M."
+        "Kavya M.",
+        "saicharan"
       ],
       "audienceType": "Everyone",
-      "isRsvped": false,
+      "isRsvped": true,
       "tags": [
         "🎸 Acoustic Jam",
         "🌅 Sunset",
         "🌊 Lake Walk",
         "🎶 Indie Music"
       ],
-      "expenseType": "Free community meetup"
+      "expenseType": "Free community meetup",
+      "rsvpedUserIds": [
+        "cmvidzcly0000vaaswh1rsxtf"
+      ]
     },
     {
       "id": "meetup_06",
@@ -327,7 +404,7 @@
       "matchReason": "Women-only professional community & design networking circle",
       "icebreakerPrompt": "Share one career win from this month and one goal for next quarter!",
       "maxAttendees": 6,
-      "attendeesCount": 5,
+      "attendeesCount": 6,
       "attendeesAvatars": [
         "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=200&q=80",
         "https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=200&q=80",
@@ -336,7 +413,8 @@
       "attendeesNames": [
         "Pooja R.",
         "Neha K.",
-        "Testing1"
+        "Testing1",
+        "saicharan"
       ],
       "audienceType": "Women Only",
       "isRsvped": true,
@@ -348,7 +426,8 @@
       ],
       "expenseType": "Split brunch bill at venue",
       "rsvpedUserIds": [
-        "cmvms026c0000vau8s9hz7tk0"
+        "cmvms026c0000vau8s9hz7tk0",
+        "cmvidzcly0000vaaswh1rsxtf"
       ]
     }
   ],
@@ -368,7 +447,7 @@
       "startDate": "2026-11-12",
       "time": "06:00 AM",
       "audience": "Everyone",
-      "joinedMembers": 8,
+      "joinedMembers": 9,
       "totalMembers": 10,
       "isPrivate": false,
       "isTrending": true,
@@ -394,7 +473,8 @@
         "usr_seed_5",
         "usr_seed_6",
         "usr_seed_7",
-        "cmvidzcly0000vaaswh1rsxtf"
+        "cmvidzcly0000vaaswh1rsxtf",
+        "cmvms026c0000vau8s9hz7tk0"
       ],
       "members": [
         {
@@ -439,6 +519,14 @@
           "phone": "+917674952516",
           "gender": "MALE",
           "joinedAt": "2026-10-28T19:36:08.161Z"
+        },
+        {
+          "userId": "cmvms026c0000vau8s9hz7tk0",
+          "name": "Testing1",
+          "avatar": "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=400&q=80",
+          "phone": "+919999999999",
+          "gender": "MALE",
+          "joinedAt": "2026-10-29T16:42:01.710Z"
         }
       ]
     },

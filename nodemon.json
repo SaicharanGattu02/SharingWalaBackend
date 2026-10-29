@@ -1,0 +1,13 @@
+{
+  "watch": [
+    "src"
+  ],
+  "ext": "js,mjs,cjs",
+  "ignore": [
+    "**/*.json",
+    "src/modules/stranger/stranger_store.json",
+    "**/node_modules/**",
+    "**/.git/**"
+  ],
+  "delay": "1000"
+}
