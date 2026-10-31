@@ -3,6 +3,70 @@ import jwt from 'jsonwebtoken';
 import { prisma, withDbTimeout } from '../../config/db.js';
 import { env } from '../../config/env.js';
 import { ApiError } from '../../utils/apiError.js';
+import { getIO } from '../../config/socket.js';
+import { disconnectUserSockets } from '../chat/chat.socket.js';
+
+/**
+ * Single Device Login Policy:
+ * Registers the current device for the user and terminates any previous active device session.
+ */
+export const registerUserDeviceSession = async (userId, deviceId, deviceType = 'ANDROID', appVersion = '1.0.0') => {
+  if (!userId || !deviceId) return null;
+
+  try {
+    // 1. Single Device Policy: Terminate any previous active devices for this user
+    const previousDevices = await prisma.userDevice.findMany({
+      where: {
+        userId,
+        deviceToken: { not: deviceId },
+      },
+    });
+
+    if (previousDevices.length > 0) {
+      await prisma.userDevice.deleteMany({
+        where: {
+          userId,
+          deviceToken: { not: deviceId },
+        },
+      });
+
+      // Real-time notification to kick out the previous device
+      try {
+        const io = getIO();
+        io.to(`user:${userId}`).emit('session:terminated', {
+          reason: 'LOGGED_IN_ON_ANOTHER_DEVICE',
+          message: 'You have been logged in on another device. Please log in again.',
+          newDeviceId: deviceId,
+        });
+      } catch (_) {}
+    }
+
+    // 2. Register / Upsert current active device
+    const normalizedType = ['ANDROID', 'IOS', 'WEB'].includes(String(deviceType).toUpperCase())
+      ? String(deviceType).toUpperCase()
+      : 'ANDROID';
+
+    return await prisma.userDevice.upsert({
+      where: { deviceToken: deviceId },
+      update: {
+        userId,
+        deviceType: normalizedType,
+        appVersion: appVersion || '1.0.0',
+        lastActiveAt: new Date(),
+      },
+      create: {
+        userId,
+        deviceType: normalizedType,
+        deviceToken: deviceId,
+        appVersion: appVersion || '1.0.0',
+        lastActiveAt: new Date(),
+      },
+    });
+  } catch (err) {
+    console.warn('[AuthService] registerUserDeviceSession warning:', err.message);
+    return null;
+  }
+};
 
 /**
  * Helper to compute roles and generate JWT access & refresh tokens
@@ -46,7 +110,7 @@ export const generateAuthTokens = (user) => {
   };
 };
 
-export const registerUser = async ({ username, displayName, phone, email, password, gender }) => {
+export const registerUser = async ({ username, displayName, phone, email, password, gender, deviceId, deviceType }) => {
   const normalizedPhone = phone.trim();
   const normalizedUsername = username.toLowerCase().trim();
   const normalizedEmail = email ? email.toLowerCase().trim() : null;
@@ -104,6 +168,10 @@ export const registerUser = async ({ username, displayName, phone, email, passwo
         },
       });
 
+      if (deviceId) {
+        await registerUserDeviceSession(user.id, deviceId, deviceType);
+      }
+
       const authMeta = generateAuthTokens(user);
 
       return {
@@ -141,7 +209,7 @@ export const registerUser = async ({ username, displayName, phone, email, passwo
   );
 };
 
-export const loginUser = async ({ identifier, password }) => {
+export const loginUser = async ({ identifier, password, deviceId, deviceType, forceLogin = false }) => {
   const trimmedIdentifier = identifier.trim();
 
   return await withDbTimeout(
@@ -179,11 +247,43 @@ export const loginUser = async ({ identifier, password }) => {
         throw new ApiError(401, 'Invalid credentials');
       }
 
+      // Check for an active session on another device
+      if (deviceId) {
+        const existingDevice = await prisma.userDevice.findFirst({
+          where: {
+            userId: user.id,
+            deviceToken: { not: deviceId },
+          },
+          orderBy: { lastActiveAt: 'desc' },
+        });
+
+        if (existingDevice && !forceLogin) {
+          throw new ApiError(
+            409,
+            'You are currently logged into another device. Would you like to remove that device and log in here?',
+            [],
+            '',
+            'ACTIVE_SESSION_EXISTS',
+            {
+              hasActiveSession: true,
+              deviceType: existingDevice.deviceType || 'Mobile Device',
+              deviceId: existingDevice.deviceToken,
+              lastActiveAt: existingDevice.lastActiveAt,
+              appVersion: existingDevice.appVersion || '1.0.0',
+            }
+          );
+        }
+      }
+
       // Update last login
       await prisma.user.update({
         where: { id: user.id },
         data: { lastLoginAt: new Date() },
       });
+
+      if (deviceId) {
+        await registerUserDeviceSession(user.id, deviceId, deviceType);
+      }
 
       const authMeta = generateAuthTokens(user);
       const { passwordHash: _, ...safeUser } = user;
@@ -240,7 +340,7 @@ export const sendPhoneOtp = async ({ phone }) => {
   };
 };
 
-export const loginOrRegisterWithPhone = async ({ phone, otp }) => {
+export const loginOrRegisterWithPhone = async ({ phone, otp, deviceId, deviceType, forceLogin = false }) => {
   const digitsOnly = phone.replace(/\D/g, '');
   const normalizedPhone = digitsOnly.length === 10 ? `+91${digitsOnly}` : (phone.startsWith('+') ? phone : `+${digitsOnly}`);
 
@@ -276,6 +376,34 @@ export const loginOrRegisterWithPhone = async ({ phone, otp }) => {
         },
       });
 
+      // Check for an active session on another device for existing users
+      if (existingUser && deviceId) {
+        const existingDevice = await prisma.userDevice.findFirst({
+          where: {
+            userId: existingUser.id,
+            deviceToken: { not: deviceId },
+          },
+          orderBy: { lastActiveAt: 'desc' },
+        });
+
+        if (existingDevice && !forceLogin) {
+          throw new ApiError(
+            409,
+            'You are currently logged into another device. Would you like to remove that device and log in here?',
+            [],
+            '',
+            'ACTIVE_SESSION_EXISTS',
+            {
+              hasActiveSession: true,
+              deviceType: existingDevice.deviceType || 'Mobile Device',
+              deviceId: existingDevice.deviceToken,
+              lastActiveAt: existingDevice.lastActiveAt,
+              appVersion: existingDevice.appVersion || '1.0.0',
+            }
+          );
+        }
+      }
+
       if (!existingUser) {
         isNewUser = true;
         const defaultPasswordHash = await bcrypt.hash('Share2Go@123', 10);
@@ -306,6 +434,10 @@ export const loginOrRegisterWithPhone = async ({ phone, otp }) => {
           where: { id: existingUser.id },
           data: { lastLoginAt: new Date() },
         });
+      }
+
+      if (deviceId && existingUser?.id) {
+        await registerUserDeviceSession(existingUser.id, deviceId, deviceType);
       }
 
       return existingUser;
@@ -349,7 +481,7 @@ export const loginOrRegisterWithPhone = async ({ phone, otp }) => {
   };
 };
 
-export const refreshAuthToken = async ({ refreshToken }) => {
+export const refreshAuthToken = async ({ refreshToken, deviceId, deviceType }) => {
   if (!refreshToken) {
     throw new ApiError(400, 'Refresh token is required');
   }
@@ -380,6 +512,11 @@ export const refreshAuthToken = async ({ refreshToken }) => {
       if (!dbUser || dbUser.status !== 'ACTIVE') {
         throw new ApiError(401, 'User account not found or deactivated');
       }
+
+      if (deviceId && dbUser?.id) {
+        await registerUserDeviceSession(dbUser.id, deviceId, deviceType);
+      }
+
       return dbUser;
     },
     () => {
@@ -410,4 +547,45 @@ export const refreshAuthToken = async ({ refreshToken }) => {
       roles: authMeta.roles,
     },
   };
+};
+
+export const logoutUser = async (userId, deviceId = null) => {
+  if (!userId) {
+    return { success: true, message: 'Logged out successfully' };
+  }
+
+  return await withDbTimeout(
+    async () => {
+      // 1. Terminate user's active device session in Prisma
+      try {
+        if (deviceId) {
+          await prisma.userDevice.deleteMany({
+            where: {
+              userId,
+              deviceToken: deviceId,
+            },
+          });
+        } else {
+          await prisma.userDevice.deleteMany({
+            where: { userId },
+          });
+        }
+      } catch (devErr) {
+        console.warn('[AuthService] Error clearing user device during logout:', devErr.message);
+      }
+
+      // 2. Broadcast socket disconnect event and forcefully close all sockets of this user
+      try {
+        const io = getIO();
+        io.to(`user:${userId}`).emit('session:logged_out', {
+          userId,
+          message: 'Logged out successfully',
+        });
+        disconnectUserSockets(userId);
+      } catch (_) {}
+
+      return { success: true, message: 'Logged out successfully' };
+    },
+    () => ({ success: true, message: 'Logged out successfully' })
+  );
 };

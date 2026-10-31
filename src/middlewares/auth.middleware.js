@@ -44,7 +44,32 @@ export const authenticate = asyncHandler(async (req, res, next) => {
   }
 
   if (user.status !== 'ACTIVE') {
-    throw new ApiError(403, `Account access restricted: Status is ${user.status}`);
+    throw new ApiError(
+      403,
+      `Account access restricted: Status is ${user.status}`,
+      [],
+      '',
+      'ACCOUNT_INACTIVE'
+    );
+  }
+
+  // Single Device Login Restriction Check
+  const reqDeviceId = req.headers['x-device-id'] || req.headers['device-id'];
+  if (reqDeviceId) {
+    const activeDevice = await prisma.userDevice.findFirst({
+      where: { userId: user.id },
+      orderBy: { lastActiveAt: 'desc' },
+    });
+
+    if (activeDevice && activeDevice.deviceToken !== reqDeviceId) {
+      throw new ApiError(
+        401,
+        'Session expired: You have logged in on another device',
+        [],
+        '',
+        'DEVICE_MISMATCH'
+      );
+    }
   }
 
   const isDriverApproved = user.driverProfile?.verificationStatus === 'APPROVED';

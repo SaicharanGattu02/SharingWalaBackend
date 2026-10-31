@@ -2,7 +2,12 @@ import { z } from 'zod';
 
 export const createDirectChatSchema = {
   body: z.object({
-    recipientUserId: z.string().min(1, 'Recipient user ID is required'),
+    recipientUserId: z.string().optional(),
+    recipientId: z.string().optional(),
+    peerUserId: z.string().optional(),
+    userId: z.string().optional(),
+  }).refine((data) => data.recipientUserId || data.recipientId || data.peerUserId || data.userId, {
+    message: 'Recipient user ID is required',
   }),
 };
 

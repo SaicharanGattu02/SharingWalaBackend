@@ -1,5 +1,6 @@
 import { prisma } from '../../config/db.js';
 import { ApiError } from '../../utils/apiError.js';
+import { getIO } from '../../config/socket.js';
 
 const defaultMockRides = [
   {
@@ -1665,5 +1666,50 @@ export const getRideFeedback = async (userId, rideId) => {
     createdAt: existing.createdAt,
     submittedAt: existing.createdAt,
   };
+};
+
+export const updateUserStatusByAdmin = async (userId, { status, isActive }) => {
+  let targetStatus = status;
+  if (!targetStatus && typeof isActive === 'boolean') {
+    targetStatus = isActive ? 'ACTIVE' : 'SUSPENDED';
+  }
+
+  if (!targetStatus || !['ACTIVE', 'SUSPENDED', 'BLOCKED', 'DELETED'].includes(targetStatus)) {
+    throw new ApiError(400, 'Invalid status. Must be ACTIVE, SUSPENDED, BLOCKED, or DELETED');
+  }
+
+  const updatedUser = await prisma.user.update({
+    where: { id: userId },
+    data: { status: targetStatus },
+    select: {
+      id: true,
+      username: true,
+      displayName: true,
+      phone: true,
+      email: true,
+      status: true,
+    },
+  });
+
+  // If deactivated, terminate active device sessions and notify user in real time
+  if (targetStatus !== 'ACTIVE') {
+    await prisma.userDevice.deleteMany({
+      where: { userId },
+    });
+
+    try {
+      const io = getIO();
+      io.to(`user:${userId}`).emit('account:deactivated', {
+        status: targetStatus,
+        message: `Your account has been set to ${targetStatus} by administration.`,
+      });
+      io.to(`user:${userId}`).emit('session:terminated', {
+        reason: 'ACCOUNT_DEACTIVATED',
+        status: targetStatus,
+      });
+    } catch (_) {}
+  }
+
+  return updatedUser;
 };
 

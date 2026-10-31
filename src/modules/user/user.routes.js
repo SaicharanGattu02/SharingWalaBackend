@@ -51,5 +51,8 @@ router.post('/rides/:id/review', validate(submitFeedbackSchema), userController.
 router.get('/rides/:id/feedback', userController.getRideFeedback);
 router.get('/rides/:id/rating', userController.getRideFeedback);
 
+// Admin / Management User Active & Inactive Status
+router.patch('/admin/users/:id/status', userController.updateUserStatus);
+router.patch('/users/:id/status', userController.updateUserStatus);
 
 export default router;

@@ -51,6 +51,8 @@ export const errorHandler = (err, req, res, next) => {
     success: false,
     statusCode: error.statusCode,
     message: error.message,
+    ...(error.code && { code: error.code }),
+    ...(error.data && { data: error.data }),
     ...(error.errors?.length > 0 && { errors: error.errors }),
     ...(env.nodeEnv === 'development' && { stack: error.stack }),
   };

@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import { env } from './env.js';
+import { ApiError } from '../utils/apiError.js';
 
 const prismaClientSingleton = () => {
   return new PrismaClient({
@@ -58,6 +59,9 @@ export const withDbTimeout = async (dbOperation, fallbackValue = null, timeoutMs
     isDbConnected = true;
     return result;
   } catch (err) {
+    if (err instanceof ApiError) {
+      throw err;
+    }
     isDbConnected = false;
     console.warn('⚠️ [DB TIMEOUT/ERROR] Falling back to instant dev response:', err.message);
     if (fallbackValue !== null) {

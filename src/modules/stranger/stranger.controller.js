@@ -148,7 +148,7 @@ export const leavePlan = asyncHandler(async (req, res) => {
 
 // --- Reels ---
 export const getReels = asyncHandler(async (req, res) => {
-  const reels = await strangerService.getStrangerReels();
+  const reels = await strangerService.getStrangerReels(req.user?.id);
   res.status(200).json(new ApiResponse(200, reels, 'Stranger reels retrieved'));
 });
 
@@ -160,4 +160,18 @@ export const createReel = asyncHandler(async (req, res) => {
 export const likeReel = asyncHandler(async (req, res) => {
   const result = await strangerService.toggleLikeReel(req.user.id, req.params.id);
   res.status(200).json(new ApiResponse(200, result, 'Reel like updated'));
+});
+
+export const getReelComments = asyncHandler(async (req, res) => {
+  const comments = await strangerService.getReelComments(req.params.id);
+  res.status(200).json(new ApiResponse(200, comments, 'Reel comments retrieved'));
+});
+
+export const addReelComment = asyncHandler(async (req, res) => {
+  const text = req.body.comment || req.body.text;
+  if (!text || !text.trim()) {
+    throw new ApiError(400, 'Comment text is required');
+  }
+  const comment = await strangerService.addReelComment(req.user.id, req.params.id, text.trim());
+  res.status(201).json(new ApiResponse(201, comment, 'Comment posted successfully'));
 });

@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { validate } from '../../middlewares/validate.middleware.js';
-import { authenticate } from '../../middlewares/auth.middleware.js';
+import { authenticate, optionalAuthenticate } from '../../middlewares/auth.middleware.js';
 import {
   registerSchema,
   loginSchema,
@@ -20,5 +20,6 @@ router.post('/verify-otp', validate(verifyOtpSchema), authController.verifyOtp);
 router.post('/phone-login', validate(phoneOtpLoginSchema), authController.phoneLogin);
 router.post('/refresh-token', validate(refreshTokenSchema), authController.refreshToken);
 router.get('/me', authenticate, authController.getMe);
+router.post('/logout', optionalAuthenticate, authController.logout);
 
 export default router;

@@ -3,16 +3,18 @@ import { ApiResponse } from '../../utils/apiResponse.js';
 import * as chatService from './chat.service.js';
 
 export const getOrCreateDirectChat = asyncHandler(async (req, res) => {
+  const recipientId = req.body.recipientUserId || req.body.recipientId || req.body.peerUserId || req.body.userId;
   const conversation = await chatService.getOrCreateDirectConversation(
     req.user.id,
-    req.body.recipientUserId
+    recipientId
   );
   res.status(200).json(new ApiResponse(200, conversation, 'Direct conversation ready'));
 });
 
 export const getMyConversations = asyncHandler(async (req, res) => {
   const type = req.query.type || req.query.category;
-  const conversations = await chatService.getUserConversations(req.user.id, type);
+  const search = req.query.search || req.query.q;
+  const conversations = await chatService.getUserConversations(req.user.id, type, search);
   res.status(200).json(new ApiResponse(200, conversations, 'Conversations retrieved'));
 });
 
@@ -28,7 +30,18 @@ export const sendMessage = asyncHandler(async (req, res) => {
   res.status(201).json(new ApiResponse(201, message, 'Message sent successfully'));
 });
 
+import { isUserOnline, getUserLastSeen } from './chat.socket.js';
+
 export const markAsRead = asyncHandler(async (req, res) => {
   const result = await chatService.markAsRead(req.user.id, req.params.id);
   res.status(200).json(new ApiResponse(200, result, 'Conversation marked as read'));
+});
+
+export const getUserOnlineStatus = asyncHandler(async (req, res) => {
+  const targetUserId = req.params.userId;
+  const isOnline = isUserOnline(targetUserId);
+  const lastSeen = getUserLastSeen(targetUserId);
+  res.status(200).json(
+    new ApiResponse(200, { userId: targetUserId, isOnline, lastSeen }, 'User online status retrieved')
+  );
 });

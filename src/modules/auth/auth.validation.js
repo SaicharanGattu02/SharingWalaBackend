@@ -19,6 +19,9 @@ export const loginSchema = {
   body: z.object({
     identifier: z.string().min(1, 'Phone, email, or username is required'),
     password: z.string().min(1, 'Password is required'),
+    forceLogin: z.boolean().or(z.string().transform((v) => v === 'true')).optional().default(false),
+    deviceId: z.string().optional(),
+    deviceType: z.string().optional(),
   }),
 };
 
@@ -26,6 +29,9 @@ export const phoneOtpLoginSchema = {
   body: z.object({
     phone: z.coerce.string().min(10, 'Valid 10-digit phone number is required'),
     otp: z.coerce.string().optional().default('123456'),
+    forceLogin: z.boolean().or(z.string().transform((v) => v === 'true')).optional().default(false),
+    deviceId: z.string().optional(),
+    deviceType: z.string().optional(),
   }),
 };
 
@@ -33,6 +39,9 @@ export const verifyOtpSchema = {
   body: z.object({
     phone: z.coerce.string().min(10, 'Valid 10-digit phone number is required'),
     otp: z.coerce.string().min(4, 'OTP must be at least 4 digits').max(6, 'OTP cannot exceed 6 digits'),
+    forceLogin: z.boolean().or(z.string().transform((v) => v === 'true')).optional().default(false),
+    deviceId: z.string().optional(),
+    deviceType: z.string().optional(),
   }),
 };
 

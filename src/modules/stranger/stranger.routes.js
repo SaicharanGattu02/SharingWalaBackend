@@ -49,5 +49,7 @@ router.post('/plans/:id/leave', optionalAuthenticate, strangerController.leavePl
 router.get('/reels', optionalAuthenticate, strangerController.getReels);
 router.post('/reels', authenticate, validate(createStrangerReelSchema), strangerController.createReel);
 router.post('/reels/:id/like', authenticate, strangerController.likeReel);
+router.get('/reels/:id/comments', optionalAuthenticate, strangerController.getReelComments);
+router.post('/reels/:id/comments', authenticate, strangerController.addReelComment);
 
 export default router;

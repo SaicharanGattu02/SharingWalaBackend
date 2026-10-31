@@ -143,6 +143,20 @@
           "notes": "Looking forward to co-traveling together!",
           "status": "pending",
           "requestedAt": "2026-10-28T19:46:54.746Z"
+        },
+        {
+          "id": "req_1793452102626_y1rk",
+          "requestId": "req_1793452102626_y1rk",
+          "bookingId": "req_1793452102626_y1rk",
+          "passengerId": "cmvms026c0000vau8s9hz7tk0",
+          "passengerName": "Testing1",
+          "passengerPhone": "+919999999999",
+          "passengerAvatar": "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=400&q=80",
+          "seatsRequested": 1,
+          "totalFare": 1200,
+          "notes": "Looking forward to co-traveling together!",
+          "status": "pending",
+          "requestedAt": "2026-10-31T13:08:22.627Z"
         }
       ],
       "passengers": []
@@ -187,6 +201,20 @@
           "notes": "Looking forward to co-traveling together!",
           "status": "pending",
           "requestedAt": "2026-10-28T18:05:26.466Z"
+        },
+        {
+          "id": "req_1793451557701_v7u5",
+          "requestId": "req_1793451557701_v7u5",
+          "bookingId": "req_1793451557701_v7u5",
+          "passengerId": "cmvms026c0000vau8s9hz7tk0",
+          "passengerName": "Testing1",
+          "passengerPhone": "+919999999999",
+          "passengerAvatar": "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=400&q=80",
+          "seatsRequested": 1,
+          "totalFare": 650,
+          "notes": "Looking forward to co-traveling together!",
+          "status": "pending",
+          "requestedAt": "2026-10-31T12:59:17.701Z"
         }
       ],
       "passengers": []
@@ -216,7 +244,24 @@
       ],
       "imageUrl": "https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?auto=format&fit=crop&w=800&q=80",
       "isWomenOnly": false,
-      "isConnected": false
+      "isConnected": true,
+      "passengerRequests": [
+        {
+          "id": "req_1793453251920_1lhi",
+          "requestId": "req_1793453251920_1lhi",
+          "bookingId": "req_1793453251920_1lhi",
+          "passengerId": "cmvms026c0000vau8s9hz7tk0",
+          "passengerName": "Testing1",
+          "passengerPhone": "+919999999999",
+          "passengerAvatar": "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=400&q=80",
+          "seatsRequested": 1,
+          "totalFare": 550,
+          "notes": "Looking forward to co-traveling together!",
+          "status": "pending",
+          "requestedAt": "2026-10-31T13:27:31.920Z"
+        }
+      ],
+      "passengers": []
     },
     {
       "id": "stranger_4",
@@ -243,7 +288,24 @@
       ],
       "imageUrl": "https://images.unsplash.com/photo-1570168007204-dfb528c6958f?auto=format&fit=crop&w=800&q=80",
       "isWomenOnly": false,
-      "isConnected": false
+      "isConnected": true,
+      "passengerRequests": [
+        {
+          "id": "req_1793453845019_82j9",
+          "requestId": "req_1793453845019_82j9",
+          "bookingId": "req_1793453845019_82j9",
+          "passengerId": "cmvms026c0000vau8s9hz7tk0",
+          "passengerName": "Testing1",
+          "passengerPhone": "+919999999999",
+          "passengerAvatar": "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=400&q=80",
+          "seatsRequested": 1,
+          "totalFare": 0,
+          "notes": "Looking forward to co-traveling together!",
+          "status": "pending",
+          "requestedAt": "2026-10-31T13:37:25.019Z"
+        }
+      ],
+      "passengers": []
     }
   ],
   "strangerMeetups": [
@@ -266,7 +328,7 @@
       "matchReason": "Shares 3 interests: Tech, Filter Coffee & Early Stage Startups",
       "icebreakerPrompt": "What is one wild tech idea or project you are tinkering with right now?",
       "maxAttendees": 6,
-      "attendeesCount": 6,
+      "attendeesCount": 5,
       "attendeesAvatars": [
         "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=200&q=80",
         "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=200&q=80",
@@ -279,11 +341,10 @@
         "Kiran R.",
         "Rahul V.",
         "Kavya M.",
-        "saicharan",
-        "Testing1"
+        "saicharan"
       ],
       "audienceType": "Everyone",
-      "isRsvped": true,
+      "isRsvped": false,
       "tags": [
         "☕ Coffee",
         "💻 Tech",
@@ -292,8 +353,7 @@
       ],
       "expenseType": "Self-order & split bills at cafe",
       "rsvpedUserIds": [
-        "cmvidzcly0000vaaswh1rsxtf",
-        "cmvms026c0000vau8s9hz7tk0"
+        "cmvidzcly0000vaaswh1rsxtf"
       ]
     },
     {
@@ -328,7 +388,7 @@
         "saicharan"
       ],
       "audienceType": "Everyone",
-      "isRsvped": true,
+      "isRsvped": false,
       "tags": [
         "🏸 Badminton",
         "🌅 Sunrise",
@@ -373,7 +433,7 @@
         "saicharan"
       ],
       "audienceType": "Everyone",
-      "isRsvped": true,
+      "isRsvped": false,
       "tags": [
         "🎸 Acoustic Jam",
         "🌅 Sunset",
@@ -545,7 +605,7 @@
       "startDate": "2026-11-15",
       "time": "08:30 AM",
       "audience": "Everyone",
-      "joinedMembers": 4,
+      "joinedMembers": 5,
       "totalMembers": 20,
       "isPrivate": false,
       "isTrending": true,
@@ -567,7 +627,8 @@
         "usr_seed_1",
         "usr_seed_2",
         "usr_seed_3",
-        "usr_seed_4"
+        "usr_seed_4",
+        "cmvms026c0000vau8s9hz7tk0"
       ],
       "members": [
         {
@@ -589,6 +650,14 @@
           "userId": "usr_seed_4",
           "name": "Ananya Sen",
           "avatar": "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=400&q=80"
+        },
+        {
+          "userId": "cmvms026c0000vau8s9hz7tk0",
+          "name": "Testing1",
+          "avatar": "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=400&q=80",
+          "phone": "+919999999999",
+          "gender": "MALE",
+          "joinedAt": "2026-10-31T18:53:33.908Z"
         }
       ]
     },
@@ -675,7 +744,7 @@
       "startDate": "2026-11-05",
       "time": "06:30 AM",
       "audience": "Everyone",
-      "joinedMembers": 6,
+      "joinedMembers": 7,
       "totalMembers": 10,
       "isPrivate": false,
       "isTrending": false,
@@ -699,7 +768,8 @@
         "usr_seed_3",
         "usr_seed_4",
         "usr_seed_5",
-        "usr_seed_6"
+        "usr_seed_6",
+        "cmvms026c0000vau8s9hz7tk0"
       ],
       "members": [
         {
@@ -731,6 +801,14 @@
           "userId": "usr_seed_6",
           "name": "Neha Joshi",
           "avatar": "https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=400&q=80"
+        },
+        {
+          "userId": "cmvms026c0000vau8s9hz7tk0",
+          "name": "Testing1",
+          "avatar": "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=400&q=80",
+          "phone": "+919999999999",
+          "gender": "MALE",
+          "joinedAt": "2026-10-31T16:50:01.446Z"
         }
       ]
     },
@@ -748,7 +826,7 @@
       "startDate": "2026-11-14",
       "time": "07:30 AM",
       "audience": "Everyone",
-      "joinedMembers": 3,
+      "joinedMembers": 4,
       "totalMembers": 6,
       "isPrivate": false,
       "isTrending": false,
@@ -769,7 +847,8 @@
       "joinedUserIds": [
         "usr_seed_1",
         "usr_seed_2",
-        "usr_seed_3"
+        "usr_seed_3",
+        "cmvms026c0000vau8s9hz7tk0"
       ],
       "members": [
         {
@@ -786,6 +865,14 @@
           "userId": "usr_seed_3",
           "name": "Siddharth Rao",
           "avatar": "https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?auto=format&fit=crop&w=400&q=80"
+        },
+        {
+          "userId": "cmvms026c0000vau8s9hz7tk0",
+          "name": "Testing1",
+          "avatar": "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=400&q=80",
+          "phone": "+919999999999",
+          "gender": "MALE",
+          "joinedAt": "2026-10-31T18:55:17.242Z"
         }
       ]
     },

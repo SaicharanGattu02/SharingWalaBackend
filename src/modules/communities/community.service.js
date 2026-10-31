@@ -17,6 +17,24 @@ export const createCommunity = async (userId, data) => {
     },
   });
 
+  // Automatically provision the community group conversation and add creator
+  try {
+    await prisma.conversation.create({
+      data: {
+        id: `community_${community.id}`,
+        type: 'COMMUNITY_GROUP',
+        communityId: community.id,
+        title: community.name,
+        lastMessageAt: new Date(),
+        participants: {
+          create: [{ userId }],
+        },
+      },
+    });
+  } catch (convErr) {
+    console.warn('[CommunityService] Failed to create community conversation:', convErr.message);
+  }
+
   return community;
 };
 
@@ -56,6 +74,43 @@ export const joinCommunity = async (userId, communityId) => {
     },
   });
 
+  // Ensure community group conversation exists and register user as a participant
+  try {
+    let conv = await prisma.conversation.findFirst({
+      where: {
+        OR: [{ id: `community_${communityId}` }, { communityId }],
+      },
+    });
+
+    if (!conv) {
+      conv = await prisma.conversation.create({
+        data: {
+          id: `community_${communityId}`,
+          type: 'COMMUNITY_GROUP',
+          communityId,
+          title: community.name,
+          lastMessageAt: new Date(),
+        },
+      });
+    }
+
+    await prisma.conversationParticipant.upsert({
+      where: {
+        conversationId_userId: {
+          conversationId: conv.id,
+          userId,
+        },
+      },
+      update: {},
+      create: {
+        conversationId: conv.id,
+        userId,
+      },
+    });
+  } catch (partErr) {
+    console.warn('[CommunityService] Failed to register conversation participant:', partErr.message);
+  }
+
   // Broadcast real-time community member count update via WebSocket
   try {
     const io = getIO();
@@ -79,6 +134,26 @@ export const leaveCommunity = async (userId, communityId) => {
       userId,
     },
   });
+
+  // Remove user from the community group conversation
+  try {
+    const conv = await prisma.conversation.findFirst({
+      where: {
+        OR: [{ id: `community_${communityId}` }, { communityId }],
+      },
+    });
+
+    if (conv) {
+      await prisma.conversationParticipant.deleteMany({
+        where: {
+          conversationId: conv.id,
+          userId,
+        },
+      });
+    }
+  } catch (partErr) {
+    console.warn('[CommunityService] Failed to remove conversation participant:', partErr.message);
+  }
 
   // Broadcast real-time community member count update via WebSocket
   try {

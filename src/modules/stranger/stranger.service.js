@@ -503,7 +503,7 @@ const saveStore = () => {
   try {
     fs.writeFileSync(
       storeFilePath,
-      JSON.stringify({ strangerTrips, strangerMeetups, strangerPlans }, null, 2)
+      JSON.stringify({ strangerTrips, strangerMeetups, strangerPlans, strangerReels }, null, 2)
     );
   } catch (e) {}
 };
@@ -523,6 +523,9 @@ const loadStore = () => {
       }
       if (Array.isArray(data.strangerMeetups)) strangerMeetups = data.strangerMeetups;
       if (Array.isArray(data.strangerPlans)) strangerPlans = data.strangerPlans;
+      if (Array.isArray(data.strangerReels) && data.strangerReels.length > 0) {
+        strangerReels = data.strangerReels;
+      }
     } else {
       saveStore();
     }
@@ -1459,12 +1462,22 @@ export const getStrangerMeetups = async (query = {}, currentUserId = null) => {
 
   let list = [...strangerMeetups];
 
-  // 1. Category Filter (Supports exact, partial, or comma-separated: 'Coffee,Tech')
-  if (category && category !== 'All' && category !== 'all') {
-    const cats = category.split(',').map((c) => c.trim().toLowerCase()).filter(Boolean);
+  // 1. Category Filter (Supports exact, partial, tag-level, or comma-separated: 'Coffee,Tech')
+  const catFilter = (category || tag || tags || interest || '').trim().toLowerCase();
+  if (catFilter && catFilter !== 'all') {
+    const cats = catFilter.split(',').map((c) => c.trim().toLowerCase()).filter(Boolean);
+    const catWords = catFilter.split(/[\s,&]+/).filter((w) => w.length > 2);
     list = list.filter((m) => {
       const mCat = (m.category || '').toLowerCase();
-      return cats.some((c) => mCat.includes(c));
+      const inCat = cats.some((c) => mCat.includes(c) || c.includes(mCat)) ||
+                    catWords.some((w) => mCat.includes(w));
+      const inTags = Array.isArray(m.tags) && m.tags.some((t) => {
+        const tLow = t.toLowerCase();
+        return cats.some((c) => tLow.includes(c) || c.includes(tLow)) ||
+               catWords.some((w) => tLow.includes(w));
+      });
+      const inTitle = catWords.some((w) => (m.title || '').toLowerCase().includes(w));
+      return inCat || inTags || inTitle;
     });
   }
 
@@ -1835,29 +1848,46 @@ export const formatStrangerPlan = (p, currentUserId = null, currentUserGender = 
   };
 };
 
-export const getStrangerPlans = async ({ filter, interest, search, host } = {}, currentUserId = null, currentUserGender = null) => {
+export const getStrangerPlans = async (
+  { filter, interest, category, tag, type, search, host } = {},
+  currentUserId = null,
+  currentUserGender = null
+) => {
   let list = [...strangerPlans];
   if (filter === 'trending') list = list.filter((p) => p.isTrending);
   if (filter === 'upcoming') list = list.filter((p) => p.isUpcoming);
-  if (interest && interest !== 'All') {
-    const intLower = interest.toLowerCase().trim();
-    const intStem = intLower.replace(/s\b/g, '');
-    const words = intLower.split(/\s+/).filter(Boolean);
-    list = list.filter(
-      (p) =>
-        p.tags &&
+
+  const filterCategory = (category || tag || interest || type || '').trim().toLowerCase();
+  if (filterCategory && filterCategory !== 'all') {
+    const normFilter = filterCategory.replace(/&/g, '').replace(/s\b/g, '').trim();
+    const words = filterCategory.split(/[\s,&]+/).filter((w) => w.length > 2);
+    list = list.filter((p) => {
+      const pCat = (p.category || '').toLowerCase();
+      const normPCat = pCat.replace(/&/g, '').replace(/s\b/g, '').trim();
+      const catMatch =
+        pCat.includes(filterCategory) ||
+        filterCategory.includes(pCat) ||
+        normPCat.includes(normFilter) ||
+        normFilter.includes(normPCat) ||
+        words.some((w) => pCat.includes(w));
+
+      const tagMatch =
+        Array.isArray(p.tags) &&
         p.tags.some((t) => {
-          const tagLower = t.toLowerCase().trim();
-          const tagStem = tagLower.replace(/s\b/g, '');
+          const tLow = t.toLowerCase();
+          const tNorm = tLow.replace(/&/g, '').replace(/s\b/g, '').trim();
           return (
-            tagLower.includes(intLower) ||
-            intLower.includes(tagLower) ||
-            tagStem.includes(intStem) ||
-            intStem.includes(tagStem) ||
-            words.some((w) => w.length > 3 && tagLower.includes(w))
+            tLow.includes(filterCategory) ||
+            filterCategory.includes(tLow) ||
+            tNorm.includes(normFilter) ||
+            normFilter.includes(tNorm) ||
+            words.some((w) => tLow.includes(w))
           );
-        })
-    );
+        });
+
+      const titleMatch = words.some((w) => (p.title || '').toLowerCase().includes(w));
+      return catMatch || tagMatch || titleMatch;
+    });
   }
   if (host) {
     const h = host.toLowerCase();
@@ -2297,10 +2327,18 @@ export const leaveStrangerPlan = async (userId, planId) => {
 };
 
 // --- 4. STRANGER REELS ---
-export const getStrangerReels = async () => {
+export const getStrangerReels = async (userId = null) => {
   return strangerReels.map((r) => {
     const linkedTrip = strangerTrips.find((t) => t.id === r.tripId) || strangerTrips[0];
-    return { ...r, trip: linkedTrip };
+    const isLiked = Array.isArray(r.likedUserIds) && userId
+      ? r.likedUserIds.includes(userId)
+      : (r.isLiked || false);
+    return {
+      ...r,
+      isLiked,
+      commentsCount: Array.isArray(r.comments) ? r.comments.length : (r.commentsCount || 3),
+      trip: linkedTrip,
+    };
   });
 };
 
@@ -2312,31 +2350,107 @@ export const createStrangerReel = async (userId, data) => {
     id: `reel_${Date.now()}`,
     hostName: user?.displayName || 'Creator',
     hostAvatar: user?.avatarUrl || 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&w=400&q=80',
-    isVerified: true,
+    isVerified: user?.isVerified ?? true,
     route: data.route,
     thumbnailUrl: data.thumbnailUrl,
-    vibe: data.vibe,
+    vibe: data.vibe || 'weekendGetaway',
     caption: data.caption,
     audioTrack: data.audioTrack || 'Original Sound',
     likesCount: 1,
     viewsCount: '1',
-    isLiked: false,
+    isLiked: true,
+    likedUserIds: [userId],
+    comments: [],
+    commentsCount: 0,
     tripId: linkedTrip.id,
     trip: linkedTrip,
+    createdAt: new Date().toISOString(),
   };
 
   strangerReels.unshift(newReel);
+  saveStore();
   return newReel;
 };
 
 export const toggleLikeReel = async (userId, reelId) => {
   const reel = strangerReels.find((r) => r.id === reelId);
   if (!reel) throw new ApiError(404, 'Reel not found');
-  reel.isLiked = !reel.isLiked;
-  reel.likesCount += reel.isLiked ? 1 : -1;
+  if (!Array.isArray(reel.likedUserIds)) {
+    reel.likedUserIds = reel.isLiked ? ['usr_seed_1'] : [];
+  }
+  const idx = reel.likedUserIds.indexOf(userId);
+  let isLiked = false;
+  if (idx === -1) {
+    reel.likedUserIds.push(userId);
+    reel.likesCount = (reel.likesCount || 0) + 1;
+    isLiked = true;
+  } else {
+    reel.likedUserIds.splice(idx, 1);
+    reel.likesCount = Math.max(0, (reel.likesCount || 1) - 1);
+    isLiked = false;
+  }
+  reel.isLiked = isLiked;
+  saveStore();
   return {
     reelId,
-    isLiked: reel.isLiked,
+    isLiked,
     likesCount: reel.likesCount,
   };
+};
+
+export const getReelComments = async (reelId) => {
+  const reel = strangerReels.find((r) => r.id === reelId);
+  if (!reel) throw new ApiError(404, 'Reel not found');
+  if (!Array.isArray(reel.comments) || reel.comments.length === 0) {
+    return [
+      {
+        id: `com_${reelId}_1`,
+        userId: 'usr_seed_1',
+        name: 'Vikram Verma',
+        avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=400&q=80',
+        comment: 'Looks amazing! Is there 1 seat left for this trip?',
+        time: '10m ago',
+        createdAt: new Date(Date.now() - 10 * 60 * 1000).toISOString(),
+      },
+      {
+        id: `com_${reelId}_2`,
+        userId: 'usr_seed_2',
+        name: 'Ananya Sharma',
+        avatar: 'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=400&q=80',
+        comment: 'Super clean SUV drive! Sent connect request!',
+        time: '1h ago',
+        createdAt: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
+      },
+      {
+        id: `com_${reelId}_3`,
+        userId: 'usr_seed_3',
+        name: 'Rahul Sen',
+        avatar: 'https://images.unsplash.com/photo-1501196354995-cbb51c65aaea?auto=format&fit=crop&w=400&q=80',
+        comment: 'What time are you starting? Great music vibe in this clip! 🚗',
+        time: '3h ago',
+        createdAt: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString(),
+      },
+    ];
+  }
+  return reel.comments;
+};
+
+export const addReelComment = async (userId, reelId, text) => {
+  const reel = strangerReels.find((r) => r.id === reelId);
+  if (!reel) throw new ApiError(404, 'Reel not found');
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!Array.isArray(reel.comments)) reel.comments = [];
+  const newComment = {
+    id: `com_${Date.now()}`,
+    userId,
+    name: user?.displayName || 'Traveler',
+    avatar: user?.avatarUrl || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=400&q=80',
+    comment: text,
+    time: 'Just now',
+    createdAt: new Date().toISOString(),
+  };
+  reel.comments.unshift(newComment);
+  reel.commentsCount = reel.comments.length;
+  saveStore();
+  return newComment;
 };

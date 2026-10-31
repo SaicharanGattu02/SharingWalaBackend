@@ -9,50 +9,330 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const storePath = path.resolve(__dirname, '../stranger/stranger_store.json');
 
+/**
+ * Broadcasts real-time read receipt across socket rooms and private channels
+ */
+export async function broadcastReadReceipt(userId, conversationId, targetConvId) {
+  try {
+    const io = getIO();
+    const payload = {
+      conversationId: targetConvId,
+      aliasConversationId: conversationId !== targetConvId ? conversationId : undefined,
+      readByUserId: userId,
+      readAt: new Date().toISOString(),
+    };
+
+    io.to(`conv:${targetConvId}`).emit('read_receipt', payload);
+    io.to(`conv:${targetConvId}`).emit('messages_read_receipt', payload);
+    io.to(`conv:${targetConvId}`).emit('message:read', payload);
+
+    if (conversationId && conversationId !== targetConvId) {
+      io.to(`conv:${conversationId}`).emit('read_receipt', payload);
+      io.to(`conv:${conversationId}`).emit('messages_read_receipt', payload);
+      io.to(`conv:${conversationId}`).emit('message:read', payload);
+    }
+
+    // Also notify other participants directly on their user channel
+    const conv = await prisma.conversation.findUnique({
+      where: { id: targetConvId },
+      include: { participants: { select: { userId: true } } },
+    });
+
+    if (conv?.participants) {
+      conv.participants.forEach((p) => {
+        if (p.userId !== userId) {
+          io.to(`user:${p.userId}`).emit('read_receipt', payload);
+          io.to(`user:${p.userId}`).emit('messages_read_receipt', payload);
+          io.to(`user:${p.userId}`).emit('message:read', payload);
+        }
+      });
+    }
+  } catch (_) {}
+}
+
+/**
+ * Resolves the peer user ID from any conversation ID format
+ * Validates that candidate IDs actually exist in the DB (prevents foreign key errors on mock IDs)
+ */
+export async function resolvePeerUserId(conversationId, currentUserId) {
+  if (!conversationId || typeof conversationId !== 'string') return null;
+
+  // Skip sample / mock trip chats like trip_match_01, trip_match_02
+  if (conversationId.startsWith('trip_match_')) {
+    return null;
+  }
+
+  let candidateId = null;
+
+  // 1. direct_${id1}_${id2}
+  if (conversationId.startsWith('direct_')) {
+    const parts = conversationId.split('_');
+    if (parts.length >= 3) {
+      candidateId = parts[1] === currentUserId ? parts[2] : parts[1];
+    }
+  }
+
+  // 2. passenger_${userId}
+  else if (conversationId.startsWith('passenger_')) {
+    candidateId = conversationId.replace('passenger_', '');
+  }
+
+  // 3. driver_${userId}
+  else if (conversationId.startsWith('driver_')) {
+    candidateId = conversationId.replace('driver_', '');
+  }
+
+  // 4. trip_${rideId}_${peer}
+  else if (conversationId.startsWith('trip_')) {
+    const parts = conversationId.split('_');
+    if (parts.length >= 3) {
+      const rideId = parts[1];
+      const rawPeer = parts.slice(2).join('_');
+
+      try {
+        const ride = await prisma.ride.findUnique({
+          where: { id: rideId },
+          include: {
+            driver: { select: { userId: true, id: true } },
+          },
+        });
+        if (ride) {
+          const driverUserId = ride.driver?.userId;
+          if (driverUserId) {
+            if (driverUserId !== currentUserId) {
+              candidateId = driverUserId;
+            } else if (rawPeer === driverUserId || rawPeer === ride.driver?.id) {
+              candidateId = currentUserId;
+            }
+          }
+        }
+      } catch (_) {}
+
+      if (!candidateId) {
+        try {
+          const driverProfile = await prisma.driverProfile.findUnique({
+            where: { id: rawPeer },
+            select: { userId: true },
+          });
+          if (driverProfile?.userId) {
+            candidateId = driverProfile.userId;
+          }
+        } catch (_) {}
+      }
+
+      if (!candidateId && rawPeer && rawPeer !== 'host' && rawPeer.length > 5) {
+        candidateId = rawPeer;
+      }
+    }
+  }
+
+  // 5. stranger_${id} or plan_${id}
+  else if (conversationId.startsWith('stranger_') || conversationId.startsWith('plan_')) {
+    const rawId = conversationId.replace('stranger_', '').replace('plan_', '');
+    try {
+      if (fs.existsSync(storePath)) {
+        const store = JSON.parse(fs.readFileSync(storePath, 'utf8'));
+        const allItems = [
+          ...(store.strangerTrips || []),
+          ...(store.strangerPlans || []),
+        ];
+        const match = allItems.find((x) => x.id === rawId || x.code === rawId);
+        if (match && match.hostId) {
+          candidateId = match.hostId;
+        }
+      }
+    } catch (_) {}
+  }
+
+  // 6. Check existing conversation in DB
+  if (!candidateId) {
+    try {
+      const existing = await prisma.conversation.findUnique({
+        where: { id: conversationId },
+        include: {
+          participants: { select: { userId: true } },
+        },
+      });
+      if (existing && existing.type === 'DIRECT') {
+        const other = existing.participants.find((p) => p.userId !== currentUserId);
+        if (other) candidateId = other.userId;
+      }
+    } catch (_) {}
+  }
+
+  // Self check: if candidate is current user, return currentUserId so caller can reject self-chat
+  if (candidateId === currentUserId) {
+    return currentUserId;
+  }
+
+  // Critical Validation: verify that candidateId exists in the user database
+  if (candidateId) {
+    try {
+      const userExists = await prisma.user.findUnique({
+        where: { id: candidateId },
+        select: { id: true },
+      });
+      if (userExists) {
+        return userExists.id;
+      }
+    } catch (_) {}
+  }
+
+  return null;
+}
+
 // Auto-provision or update conversation with strict 1-to-1 DIRECT vs GROUP classification
-async function ensureConversationRecord(conversationId, userId) {
+export async function ensureConversationRecord(conversationId, userId) {
   const isExplicitGroup =
     conversationId.startsWith('meetup_chat_') ||
     conversationId.startsWith('meetup_') ||
     conversationId.startsWith('plan_chat_') ||
     conversationId.startsWith('plan_group_') ||
-    conversationId.startsWith('community_');
+    conversationId.startsWith('community_') ||
+    conversationId.startsWith('ride_group_');
 
   const isDirect = !isExplicitGroup;
 
+  // 1-on-1 Direct Chats: Canonical deterministic ID direct_${[u1, u2].sort().join('_')}
+  if (isDirect) {
+    const peerUserId = await resolvePeerUserId(conversationId, userId);
+
+    if (peerUserId && peerUserId === userId) {
+      throw new ApiError(400, 'You cannot start a direct conversation with yourself');
+    }
+
+    const targetConvId = peerUserId
+      ? `direct_${[userId, peerUserId].sort().join('_')}`
+      : conversationId;
+
+    let conversation = await prisma.conversation.findUnique({
+      where: { id: targetConvId },
+      include: {
+        participants: { select: { userId: true, lastReadAt: true } },
+      },
+    });
+
+    if (!conversation) {
+      conversation = await prisma.conversation.create({
+        data: {
+          id: targetConvId,
+          type: 'DIRECT',
+          title: 'Direct Message',
+          participants: {
+            create: peerUserId
+              ? [{ userId }, { userId: peerUserId }]
+              : [{ userId }],
+          },
+        },
+        include: {
+          participants: { select: { userId: true, lastReadAt: true } },
+        },
+      });
+    } else {
+      if (conversation.type !== 'DIRECT') {
+        conversation = await prisma.conversation.update({
+          where: { id: targetConvId },
+          data: { type: 'DIRECT', title: 'Direct Message' },
+          include: { participants: { select: { userId: true, lastReadAt: true } } },
+        });
+      }
+
+      // Ensure both current user and peer are participants
+      await prisma.conversationParticipant.upsert({
+        where: { conversationId_userId: { conversationId: targetConvId, userId } },
+        update: {},
+        create: { conversationId: targetConvId, userId },
+      }).catch(() => {});
+
+      if (peerUserId) {
+        await prisma.conversationParticipant.upsert({
+          where: { conversationId_userId: { conversationId: targetConvId, userId: peerUserId } },
+          update: {},
+          create: { conversationId: targetConvId, userId: peerUserId },
+        }).catch(() => {});
+      }
+    }
+
+    // Migrate any legacy messages that were sent under an alias conversationId
+    if (conversationId !== targetConvId) {
+      try {
+        await prisma.chatMessage.updateMany({
+          where: { conversationId },
+          data: { conversationId: targetConvId },
+        });
+      } catch (_) {}
+    }
+
+    const participant = await prisma.conversationParticipant.findUnique({
+      where: { conversationId_userId: { conversationId: targetConvId, userId } },
+      include: {
+        conversation: {
+          include: {
+            participants: {
+              include: {
+                user: { select: { id: true, displayName: true, avatarUrl: true } },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    return {
+      ...participant,
+      targetConvId,
+      peerUserId,
+    };
+  }
+
+  // Explicit Group Handling
   let conversation = await prisma.conversation.findUnique({
     where: { id: conversationId },
     include: {
-      participants: { select: { userId: true } },
+      participants: { select: { userId: true, lastReadAt: true } },
     },
   });
 
   if (!conversation) {
+    let communityId = null;
+    let groupTitle = 'Group Chat';
+    if (conversationId.startsWith('community_')) {
+      communityId = conversationId.replace('community_', '');
+      try {
+        const c = await prisma.community.findUnique({
+          where: { id: communityId },
+          select: { name: true },
+        });
+        if (c?.name) groupTitle = c.name;
+      } catch (_) {}
+    }
+
     conversation = await prisma.conversation.create({
       data: {
         id: conversationId,
-        type: isDirect ? 'DIRECT' : (conversationId.startsWith('meetup_') ? 'MEETUP_GROUP' : 'COMMUNITY_GROUP'),
-        title: isDirect ? 'Direct Message' : 'Group Chat',
+        type: conversationId.startsWith('community_')
+          ? 'COMMUNITY_GROUP'
+          : 'TRIP_GROUP',
+        communityId,
+        title: groupTitle,
       },
       include: {
-        participants: { select: { userId: true } },
+        participants: { select: { userId: true, lastReadAt: true } },
       },
-    });
-  } else if (isDirect && conversation.type !== 'DIRECT') {
-    // Fix existing erroneously mislabeled group conversation to DIRECT
-    conversation = await prisma.conversation.update({
-      where: { id: conversationId },
-      data: { type: 'DIRECT', title: 'Direct Message' },
-      include: { participants: { select: { userId: true } } },
     });
   }
 
-  // Ensure current user is a participant
   let participant = await prisma.conversationParticipant.findUnique({
     where: { conversationId_userId: { conversationId, userId } },
     include: {
       conversation: {
-        include: { participants: { select: { userId: true } } },
+        include: {
+          participants: {
+            include: {
+              user: { select: { id: true, displayName: true, avatarUrl: true } },
+            },
+          },
+        },
       },
     },
   });
@@ -62,44 +342,23 @@ async function ensureConversationRecord(conversationId, userId) {
       data: { conversationId, userId },
       include: {
         conversation: {
-          include: { participants: { select: { userId: true } } },
+          include: {
+            participants: {
+              include: {
+                user: { select: { id: true, displayName: true, avatarUrl: true } },
+              },
+            },
+          },
         },
       },
     });
   }
 
-  // If 1-to-1 direct conversation, also auto-register peer user if discoverable
-  if (isDirect) {
-    let peerUserId = null;
-    if (conversationId.startsWith('trip_')) {
-      const parts = conversationId.split('_');
-      if (parts.length >= 3 && parts[parts.length - 1] !== userId) {
-        peerUserId = parts[parts.length - 1];
-      }
-    } else if (conversationId.startsWith('direct_')) {
-      const parts = conversationId.split('_');
-      if (parts.length >= 3) {
-        peerUserId = parts[1] === userId ? parts[2] : parts[1];
-      }
-    } else if (conversationId.startsWith('passenger_')) {
-      peerUserId = conversationId.replace('passenger_', '');
-    } else if (conversationId.startsWith('driver_')) {
-      peerUserId = conversationId.replace('driver_', '');
-    }
-
-    if (peerUserId && peerUserId !== userId) {
-      const peerExists = await prisma.user.findUnique({ where: { id: peerUserId } });
-      if (peerExists) {
-        await prisma.conversationParticipant.upsert({
-          where: { conversationId_userId: { conversationId, userId: peerUserId } },
-          update: {},
-          create: { conversationId, userId: peerUserId },
-        }).catch(() => {});
-      }
-    }
-  }
-
-  return participant;
+  return {
+    ...participant,
+    targetConvId: conversationId,
+    peerUserId: null,
+  };
 }
 
 function resolveConversationMetadata(conv, currentUserId) {
@@ -218,28 +477,27 @@ function resolveConversationMetadata(conv, currentUserId) {
 }
 
 export const getOrCreateDirectConversation = async (userId, recipientUserId) => {
+  if (!recipientUserId) {
+    throw new ApiError(400, 'Recipient user ID is required');
+  }
+
   if (userId === recipientUserId) {
     throw new ApiError(400, 'You cannot start a direct chat with yourself');
   }
 
   const recipient = await prisma.user.findUnique({
     where: { id: recipientUserId },
-    select: { id: true, displayName: true, status: true },
+    select: { id: true, displayName: true, status: true, avatarUrl: true },
   });
 
   if (!recipient || recipient.status !== 'ACTIVE') {
     throw new ApiError(404, 'Recipient user not found or inactive');
   }
 
-  // Look for existing DIRECT conversation containing both participants
-  const existingConv = await prisma.conversation.findFirst({
-    where: {
-      type: 'DIRECT',
-      AND: [
-        { participants: { some: { userId } } },
-        { participants: { some: { userId: recipientUserId } } },
-      ],
-    },
+  const canonicalId = `direct_${[userId, recipientUserId].sort().join('_')}`;
+
+  let conv = await prisma.conversation.findUnique({
+    where: { id: canonicalId },
     include: {
       participants: {
         include: {
@@ -251,34 +509,90 @@ export const getOrCreateDirectConversation = async (userId, recipientUserId) => 
     },
   });
 
-  if (existingConv) {
-    return existingConv;
+  if (!conv) {
+    conv = await prisma.conversation.create({
+      data: {
+        id: canonicalId,
+        type: 'DIRECT',
+        title: 'Direct Message',
+        participants: {
+          create: [{ userId }, { userId: recipientUserId }],
+        },
+      },
+      include: {
+        participants: {
+          include: {
+            user: {
+              select: { id: true, displayName: true, avatarUrl: true },
+            },
+          },
+        },
+      },
+    });
+  } else {
+    // Ensure both are participants
+    await Promise.all([
+      prisma.conversationParticipant.upsert({
+        where: { conversationId_userId: { conversationId: canonicalId, userId } },
+        update: {},
+        create: { conversationId: canonicalId, userId },
+      }),
+      prisma.conversationParticipant.upsert({
+        where: { conversationId_userId: { conversationId: canonicalId, userId: recipientUserId } },
+        update: {},
+        create: { conversationId: canonicalId, userId: recipientUserId },
+      }),
+    ]);
   }
 
-  // Create new DIRECT conversation with both participants
-  const newConversation = await prisma.conversation.create({
-    data: {
-      type: 'DIRECT',
-      title: 'Direct Message',
-      participants: {
-        create: [{ userId }, { userId: recipientUserId }],
-      },
-    },
-    include: {
-      participants: {
-        include: {
-          user: {
-            select: { id: true, displayName: true, avatarUrl: true },
-          },
-        },
-      },
-    },
-  });
-
-  return newConversation;
+  return conv;
 };
 
-export const getUserConversations = async (userId, typeFilter = null) => {
+export const getUserConversations = async (userId, typeFilter = null, search = null) => {
+  // Auto-sync / backfill community group conversations for the user's approved memberships
+  try {
+    const userMemberships = await prisma.communityMember.findMany({
+      where: { userId, isApproved: true },
+      include: {
+        community: { select: { id: true, name: true, isActive: true } },
+      },
+    });
+
+    for (const m of userMemberships) {
+      if (!m.community || !m.community.isActive) continue;
+      const convId = `community_${m.community.id}`;
+      let conv = await prisma.conversation.findFirst({
+        where: { OR: [{ id: convId }, { communityId: m.community.id }] },
+      });
+      if (!conv) {
+        conv = await prisma.conversation.create({
+          data: {
+            id: convId,
+            type: 'COMMUNITY_GROUP',
+            communityId: m.community.id,
+            title: m.community.name,
+            lastMessageAt: new Date(),
+          },
+        });
+      }
+      await prisma.conversationParticipant.upsert({
+        where: {
+          conversationId_userId: {
+            conversationId: conv.id,
+            userId,
+          },
+        },
+        update: {},
+        create: {
+          conversationId: conv.id,
+          userId,
+        },
+      }).catch(() => {});
+    }
+  } catch (syncErr) {
+    console.warn('[ChatService] Community auto-sync error:', syncErr.message);
+  }
+
   const whereClause = { userId };
 
   if (typeFilter) {
@@ -295,7 +609,7 @@ export const getUserConversations = async (userId, typeFilter = null) => {
       };
     } else if (filter === 'GROUPS' || filter === 'GROUP') {
       whereClause.conversation = {
-        type: { in: ['COMMUNITY_GROUP', 'RIDE_GROUP', 'TRIP_GROUP', 'JOURNEY_GROUP', 'MEETUP_GROUP'] },
+        type: { in: ['COMMUNITY_GROUP', 'RIDE_GROUP', 'TRIP_GROUP', 'JOURNEY_GROUP'] },
         AND: [
           { NOT: { id: { startsWith: 'trip_' } } },
           { NOT: { id: { startsWith: 'direct_' } } },
@@ -303,8 +617,42 @@ export const getUserConversations = async (userId, typeFilter = null) => {
           { NOT: { id: { startsWith: 'driver_' } } },
         ],
       };
-    } else if (['RIDE_GROUP', 'COMMUNITY_GROUP', 'TRIP_GROUP', 'JOURNEY_GROUP'].includes(filter)) {
+    } else if (filter === 'COMMUNITIES' || filter === 'COMMUNITY') {
+      whereClause.conversation = { type: 'COMMUNITY_GROUP' };
+    } else if (['RIDE_GROUP', 'COMMUNITY_GROUP', 'TRIP_GROUP', 'JOURNEY_GROUP', 'DIRECT'].includes(filter)) {
       whereClause.conversation = { type: filter };
+    }
+  }
+
+  if (search && typeof search === 'string' && search.trim().length > 0) {
+    const s = search.trim();
+    const searchCondition = {
+      OR: [
+        { title: { contains: s } },
+        {
+          messages: {
+            some: {
+              content: { contains: s },
+            },
+          },
+        },
+        {
+          participants: {
+            some: {
+              user: {
+                displayName: { contains: s },
+              },
+            },
+          },
+        },
+      ],
+    };
+    if (whereClause.conversation) {
+      whereClause.conversation = {
+        AND: [whereClause.conversation, searchCondition],
+      };
+    } else {
+      whereClause.conversation = searchCondition;
     }
   }
 
@@ -378,6 +726,21 @@ export const getUserConversations = async (userId, typeFilter = null) => {
       const meta = resolveConversationMetadata(conv, userId);
       const otherParticipant = conv.participants?.find((part) => part.userId !== userId);
 
+      const lastMsg = conv.messages[0] || null;
+      let formattedLastMessage = null;
+      if (lastMsg) {
+        formattedLastMessage = {
+          id: lastMsg.id,
+          conversationId: conv.id,
+          senderId: lastMsg.senderId,
+          content: lastMsg.content,
+          messageType: lastMsg.messageType,
+          createdAt: lastMsg.createdAt.toISOString(),
+          sender: lastMsg.sender,
+          isMe: lastMsg.senderId === userId,
+        };
+      }
+
       return {
         id: conv.id,
         uuid: conv.uuid,
@@ -391,7 +754,7 @@ export const getUserConversations = async (userId, typeFilter = null) => {
         ride: conv.ride,
         community: conv.community,
         bikerTrip: conv.bikerTrip,
-        lastMessage: conv.messages[0] || null,
+        lastMessage: formattedLastMessage,
         unreadCount,
         isArchived: conv.isArchived,
         lastMessageAt: conv.lastMessageAt,
@@ -399,18 +762,74 @@ export const getUserConversations = async (userId, typeFilter = null) => {
     })
   );
 
-  return results;
+  // Group and deduplicate direct conversations by peerId or peer title so each peer user appears EXACTLY ONCE
+  const directMap = new Map();
+  const groupList = [];
+
+  for (const item of results) {
+    if (!item.isGroup && item.peerId && item.peerId === userId) {
+      continue;
+    }
+
+    if (item.isGroup) {
+      groupList.push(item);
+    } else {
+      const peerKey = item.peerId || (item.title ? item.title.trim().toLowerCase() : item.id);
+      if (!directMap.has(peerKey)) {
+        directMap.set(peerKey, item);
+      } else {
+        const existing = directMap.get(peerKey);
+        const existingTime = existing.lastMessageAt ? new Date(existing.lastMessageAt).getTime() : 0;
+        const itemTime = item.lastMessageAt ? new Date(item.lastMessageAt).getTime() : 0;
+
+        existing.unreadCount = (existing.unreadCount || 0) + (item.unreadCount || 0);
+
+        if (itemTime > existingTime) {
+          existing.id = item.id;
+          existing.uuid = item.uuid;
+          existing.lastMessage = item.lastMessage;
+          existing.lastMessageAt = item.lastMessageAt;
+          existing.title = item.title;
+          existing.subtitle = item.subtitle;
+          existing.avatarUrl = item.avatarUrl || existing.avatarUrl;
+        }
+      }
+    }
+  }
+
+  const finalResults = [...groupList, ...Array.from(directMap.values())];
+  finalResults.sort((a, b) => {
+    const timeA = a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : 0;
+    const timeB = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : 0;
+    return timeB - timeA;
+  });
+
+  return finalResults;
 };
 
 export const getConversationMessages = async (userId, conversationId, { page = 1, limit = 30 }) => {
   // Validate or auto-provision participant membership
   const participant = await ensureConversationRecord(conversationId, userId);
+  const targetConvId = participant.targetConvId || conversationId;
+  const conv = participant.conversation;
+
+  // Find other participant's last read timestamp for seen receipts
+  const otherParticipant = conv?.participants?.find((p) => p.userId !== userId);
+  const otherLastRead = otherParticipant?.lastReadAt
+    ? new Date(otherParticipant.lastReadAt).getTime()
+    : 0;
 
   const skip = (page - 1) * limit;
 
+  // Search messages in target canonical conversation OR legacy conversation ID
+  const searchConvIds = targetConvId === conversationId ? [targetConvId] : [targetConvId, conversationId];
+
   const [messages, total] = await Promise.all([
     prisma.chatMessage.findMany({
-      where: { conversationId, isDeleted: false },
+      where: {
+        conversationId: { in: searchConvIds },
+        isDeleted: false,
+      },
       skip,
       take: limit,
       orderBy: { createdAt: 'desc' },
@@ -421,20 +840,67 @@ export const getConversationMessages = async (userId, conversationId, { page = 1
       },
     }),
     prisma.chatMessage.count({
-      where: { conversationId, isDeleted: false },
+      where: {
+        conversationId: { in: searchConvIds },
+        isDeleted: false,
+      },
     }),
   ]);
 
   // Mark conversation as read upon fetching messages
   await prisma.conversationParticipant.update({
     where: {
-      conversationId_userId: { conversationId, userId },
+      conversationId_userId: { conversationId: targetConvId, userId },
     },
     data: { lastReadAt: new Date() },
+  }).catch(() => {});
+
+  // Real-time socket broadcast read receipt
+  broadcastReadReceipt(userId, conversationId, targetConvId);
+
+  // Map messages and compute accurate isRead / status
+  const formattedMessages = messages.reverse().map((m) => {
+    const isMe = m.senderId === userId;
+    const msgTime = new Date(m.createdAt).getTime();
+
+    let isRead = false;
+    let status = 'SENT';
+
+    if (isMe) {
+      if (otherLastRead >= msgTime) {
+        isRead = true;
+        status = 'READ';
+      } else {
+        isRead = false;
+        status = 'DELIVERED';
+      }
+    } else {
+      isRead = true;
+      status = 'READ';
+    }
+
+    return {
+      id: m.id,
+      conversationId: targetConvId,
+      senderId: m.senderId,
+      senderName: m.sender?.displayName || 'User',
+      senderAvatar: m.sender?.avatarUrl || '',
+      content: m.content,
+      messageType: m.messageType,
+      latitude: m.latitude,
+      longitude: m.longitude,
+      mediaUrl: m.mediaUrl,
+      isMe,
+      isRead,
+      status, // 'READ' | 'DELIVERED' | 'SENT'
+      createdAt: m.createdAt.toISOString(),
+      sender: m.sender,
+    };
   });
 
   return {
-    messages: messages.reverse(), // Ascending chronological order for chat UI
+    conversationId: targetConvId,
+    messages: formattedMessages,
     pagination: {
       total,
       page,
@@ -446,6 +912,7 @@ export const getConversationMessages = async (userId, conversationId, { page = 1
 
 export const sendChatMessage = async (userId, conversationId, data) => {
   const participant = await ensureConversationRecord(conversationId, userId);
+  const targetConvId = participant.targetConvId || conversationId;
 
   if (participant.conversation && participant.conversation.isArchived) {
     throw new ApiError(400, 'This conversation has been archived and is read-only');
@@ -453,7 +920,7 @@ export const sendChatMessage = async (userId, conversationId, data) => {
 
   const message = await prisma.chatMessage.create({
     data: {
-      conversationId,
+      conversationId: targetConvId,
       senderId: userId,
       messageType: data.messageType || 'TEXT',
       content: data.content ? data.content.trim() : '',
@@ -470,12 +937,12 @@ export const sendChatMessage = async (userId, conversationId, data) => {
 
   await Promise.all([
     prisma.conversation.update({
-      where: { id: conversationId },
+      where: { id: targetConvId },
       data: { lastMessageAt: new Date() },
     }),
     prisma.conversationParticipant.update({
       where: {
-        conversationId_userId: { conversationId, userId },
+        conversationId_userId: { conversationId: targetConvId, userId },
       },
       data: { lastReadAt: new Date() },
     }),
@@ -484,17 +951,39 @@ export const sendChatMessage = async (userId, conversationId, data) => {
   // Broadcast via Socket.io if active
   try {
     const io = getIO();
-    io.to(`conv:${conversationId}`).emit('new_message', message);
+    const payload = {
+      id: message.id,
+      conversationId: targetConvId,
+      aliasConversationId: conversationId !== targetConvId ? conversationId : undefined,
+      senderId: message.senderId,
+      senderName: message.sender?.displayName || 'User',
+      senderAvatar: message.sender?.avatarUrl,
+      content: message.content,
+      messageType: message.messageType,
+      latitude: message.latitude,
+      longitude: message.longitude,
+      mediaUrl: message.mediaUrl,
+      isRead: false,
+      status: 'SENT',
+      createdAt: message.createdAt.toISOString(),
+    };
+
+    io.to(`conv:${targetConvId}`).emit('new_message', payload);
+    if (conversationId !== targetConvId) {
+      io.to(`conv:${conversationId}`).emit('new_message', payload);
+    }
+
     if (participant.conversation && participant.conversation.participants) {
       participant.conversation.participants.forEach((p) => {
         if (p.userId !== userId) {
           io.to(`user:${p.userId}`).emit('message_notification', {
-            conversationId,
+            conversationId: targetConvId,
             conversationType: participant.conversation.type,
             senderName: message.sender.displayName,
             preview: message.messageType === 'LOCATION_SHARE' ? '📍 Shared a location' : message.content,
             createdAt: message.createdAt,
           });
+          io.to(`user:${p.userId}`).emit('new_message', payload);
         }
       });
     }
@@ -506,15 +995,23 @@ export const sendChatMessage = async (userId, conversationId, data) => {
 };
 
 export const markAsRead = async (userId, conversationId) => {
+  const peerUserId = await resolvePeerUserId(conversationId, userId);
+  const targetConvId = peerUserId
+    ? `direct_${[userId, peerUserId].sort().join('_')}`
+    : conversationId;
+
   await prisma.conversationParticipant.update({
     where: {
       conversationId_userId: {
-        conversationId,
+        conversationId: targetConvId,
         userId,
       },
     },
     data: { lastReadAt: new Date() },
-  });
+  }).catch(() => {});
 
-  return { conversationId, readAt: new Date() };
+  // Real-time socket broadcast read receipt
+  broadcastReadReceipt(userId, conversationId, targetConvId);
+
+  return { conversationId: targetConvId, readAt: new Date() };
 };

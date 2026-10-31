@@ -35,6 +35,18 @@ const startServer = async () => {
 
   const networkIp = getNetworkIp();
 
+  httpServer.on('error', (err) => {
+    if (err.code === 'EADDRINUSE') {
+      console.warn(`⚠️ Port ${env.port} is busy, retrying in 1.5s...`);
+      setTimeout(() => {
+        httpServer.close();
+        httpServer.listen(env.port, '0.0.0.0');
+      }, 1500);
+    } else {
+      console.error('Server error:', err);
+    }
+  });
+
   httpServer.listen(env.port, '0.0.0.0', () => {
     console.log(`🚀 SHARE2GO API Server running in [${env.nodeEnv}] mode:`);
     console.log(`   ➜  Local:   http://localhost:${env.port}`);
@@ -62,6 +74,11 @@ const startServer = async () => {
 
   process.on('SIGTERM', () => shutdown('SIGTERM'));
   process.on('SIGINT', () => shutdown('SIGINT'));
+  process.once('SIGUSR2', () => {
+    httpServer.close(() => {
+      process.kill(process.pid, 'SIGUSR2');
+    });
+  });
 };
 
 startServer().catch((error) => {
