@@ -175,3 +175,8 @@ export const addReelComment = asyncHandler(async (req, res) => {
   const comment = await strangerService.addReelComment(req.user.id, req.params.id, text.trim());
   res.status(201).json(new ApiResponse(201, comment, 'Comment posted successfully'));
 });
+
+export const deleteReel = asyncHandler(async (req, res) => {
+  const result = await strangerService.deleteStrangerReel(req.user.id, req.params.id);
+  res.status(200).json(new ApiResponse(200, result, 'Reel deleted successfully'));
+});

@@ -459,6 +459,7 @@ let strangerReels = [
     isVerified: true,
     route: 'Hyderabad ➔ Goa Beach Drive 🌅',
     thumbnailUrl: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=800&q=80',
+    videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4',
     vibe: 'weekendGetaway',
     caption: 'Sunset coastal drive heading to Goa this Friday! Carpool SUV seats available. Who is up for a weekend trip? 🌊🚗',
     audioTrack: 'Sunset Roadtrip Vibe • Original Sound',
@@ -474,6 +475,7 @@ let strangerReels = [
     isVerified: true,
     route: 'Hyderabad ➔ Bengaluru Train 🚆',
     thumbnailUrl: 'https://images.unsplash.com/photo-1474487548417-781cb71495f3?auto=format&fit=crop&w=800&q=80',
+    videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
     vibe: 'intercityCommute',
     caption: 'Night sleeper train journey vibes to Bangalore! Looking for fellow women travelers to connect & share stories ✨',
     audioTrack: 'Night Express Chill • Lofi Mix',
@@ -489,6 +491,7 @@ let strangerReels = [
     isVerified: true,
     route: 'Hyderabad ➔ Vijayawada Highway 🏎️',
     thumbnailUrl: 'https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?auto=format&fit=crop&w=800&q=80',
+    videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/WeAreGoingOnBullrun.mp4',
     vibe: 'intercityCommute',
     caption: 'Early morning coffee stop on Vijayawada highway. Fast & clean drive. Connect to join our morning ride! ☕🛣️',
     audioTrack: 'Highway Cruising • Synthwave',
@@ -524,8 +527,16 @@ const loadStore = () => {
       if (Array.isArray(data.strangerMeetups)) strangerMeetups = data.strangerMeetups;
       if (Array.isArray(data.strangerPlans)) strangerPlans = data.strangerPlans;
       if (Array.isArray(data.strangerReels) && data.strangerReels.length > 0) {
-        strangerReels = data.strangerReels;
+        strangerReels = data.strangerReels.map((r, i) => ({
+          ...r,
+          videoUrl: r.videoUrl || (i % 3 === 0
+            ? 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4'
+            : i % 3 === 1
+            ? 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4'
+            : 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/WeAreGoingOnBullrun.mp4'),
+        }));
       }
+      saveStore();
     } else {
       saveStore();
     }
@@ -2333,9 +2344,14 @@ export const getStrangerReels = async (userId = null) => {
     const isLiked = Array.isArray(r.likedUserIds) && userId
       ? r.likedUserIds.includes(userId)
       : (r.isLiked || false);
+    const isOwner = Boolean(
+      userId && (r.userId === userId || r.hostId === userId)
+    );
     return {
       ...r,
       isLiked,
+      isOwner,
+      isHost: isOwner,
       commentsCount: Array.isArray(r.comments) ? r.comments.length : (r.commentsCount || 3),
       trip: linkedTrip,
     };
@@ -2348,17 +2364,22 @@ export const createStrangerReel = async (userId, data) => {
 
   const newReel = {
     id: `reel_${Date.now()}`,
+    userId: userId,
+    hostId: userId,
     hostName: user?.displayName || 'Creator',
     hostAvatar: user?.avatarUrl || 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&w=400&q=80',
     isVerified: user?.isVerified ?? true,
     route: data.route,
     thumbnailUrl: data.thumbnailUrl,
+    videoUrl: data.videoUrl || 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4',
     vibe: data.vibe || 'weekendGetaway',
     caption: data.caption,
     audioTrack: data.audioTrack || 'Original Sound',
     likesCount: 1,
     viewsCount: '1',
     isLiked: true,
+    isOwner: true,
+    isHost: true,
     likedUserIds: [userId],
     comments: [],
     commentsCount: 0,
@@ -2370,6 +2391,18 @@ export const createStrangerReel = async (userId, data) => {
   strangerReels.unshift(newReel);
   saveStore();
   return newReel;
+};
+
+export const deleteStrangerReel = async (userId, reelId) => {
+  const index = strangerReels.findIndex((r) => r.id === reelId);
+  if (index === -1) throw new ApiError(404, 'Reel not found');
+  const reel = strangerReels[index];
+  if (reel.userId && userId && reel.userId !== userId && reel.hostId !== userId) {
+    throw new ApiError(403, 'You can only delete your own uploaded reels');
+  }
+  strangerReels.splice(index, 1);
+  saveStore();
+  return { success: true, message: 'Reel deleted successfully' };
 };
 
 export const toggleLikeReel = async (userId, reelId) => {

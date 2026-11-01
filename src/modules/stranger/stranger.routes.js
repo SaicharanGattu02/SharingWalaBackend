@@ -51,5 +51,6 @@ router.post('/reels', authenticate, validate(createStrangerReelSchema), stranger
 router.post('/reels/:id/like', authenticate, strangerController.likeReel);
 router.get('/reels/:id/comments', optionalAuthenticate, strangerController.getReelComments);
 router.post('/reels/:id/comments', authenticate, strangerController.addReelComment);
+router.delete('/reels/:id', authenticate, strangerController.deleteReel);
 
 export default router;

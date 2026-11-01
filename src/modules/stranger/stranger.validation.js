@@ -72,7 +72,8 @@ export const createStrangerPlanSchema = {
 export const createStrangerReelSchema = {
   body: z.object({
     route: z.string().min(2),
-    thumbnailUrl: z.string().url(),
+    thumbnailUrl: z.string().min(1),
+    videoUrl: z.string().optional(),
     vibe: z.enum(['weekendGetaway', 'intercityCommute', 'roadTrip', 'backpacking', 'cityExplore', 'eventConcert']).default('weekendGetaway'),
     caption: z.string().max(500),
     audioTrack: z.string().default('Original Sound'),
