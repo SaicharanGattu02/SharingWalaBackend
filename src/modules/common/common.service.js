@@ -245,3 +245,117 @@ export const getBannerById = async (bannerId) => {
   }
   return banner;
 };
+
+// ==========================================
+// APP UPDATE & FORCE UPDATE ENGINE
+// ==========================================
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const CONFIG_FILE = path.join(__dirname, 'app_config.json');
+
+const loadConfig = () => {
+  try {
+    if (!fs.existsSync(CONFIG_FILE)) {
+      return {
+        android: {
+          latestVersion: '1.0.0',
+          minSupportedVersion: '1.0.0',
+          forceUpdate: false,
+          title: 'Update Available',
+          message: 'A newer version of SharingWala is available.',
+          releaseNotes: [],
+          storeUrl: 'https://play.google.com/store/apps/details?id=com.sharingwala.app',
+          enabled: false,
+        },
+        ios: {
+          latestVersion: '1.0.0',
+          minSupportedVersion: '1.0.0',
+          forceUpdate: false,
+          title: 'Update Available',
+          message: 'A newer version of SharingWala is available.',
+          releaseNotes: [],
+          storeUrl: 'https://apps.apple.com/app/sharingwala/id123456789',
+          enabled: false,
+        },
+      };
+    }
+    const raw = fs.readFileSync(CONFIG_FILE, 'utf-8');
+    return JSON.parse(raw);
+  } catch (err) {
+    console.error('Error reading app_config.json:', err);
+    return {};
+  }
+};
+
+const semverCompare = (v1, v2) => {
+  const parse = (v) => (v || '0.0.0').split('.').map((n) => parseInt(n, 10) || 0);
+  const p1 = parse(v1);
+  const p2 = parse(v2);
+  for (let i = 0; i < Math.max(p1.length, p2.length); i++) {
+    const num1 = p1[i] || 0;
+    const num2 = p2[i] || 0;
+    if (num1 > num2) return 1;
+    if (num1 < num2) return -1;
+  }
+  return 0;
+};
+
+export const checkAppUpdate = async (query = {}) => {
+  const platform = (query.platform || 'android').toLowerCase();
+  const currentVersion = query.version || '1.0.0';
+
+  const fullConfig = loadConfig();
+  const platformConfig = fullConfig[platform] || fullConfig['android'];
+
+  if (!platformConfig || !platformConfig.enabled) {
+    return {
+      updateAvailable: false,
+      forceUpdate: false,
+      currentVersion,
+      latestVersion: currentVersion,
+    };
+  }
+
+  const latest = platformConfig.latestVersion || '1.0.0';
+  const minSupported = platformConfig.minSupportedVersion || '1.0.0';
+
+  const isBelowMin = semverCompare(currentVersion, minSupported) < 0;
+  const isBelowLatest = semverCompare(currentVersion, latest) < 0;
+
+  const forceUpdate = isBelowMin || Boolean(platformConfig.forceUpdate);
+  const updateAvailable = isBelowLatest;
+
+  return {
+    updateAvailable,
+    forceUpdate,
+    currentVersion,
+    latestVersion: latest,
+    minSupportedVersion: minSupported,
+    title: platformConfig.title || 'App Update Available',
+    message: isBelowMin
+      ? 'This version of SharingWala is no longer supported. Please update immediately to continue booking rides safely.'
+      : platformConfig.message || 'A new update is available with safety improvements.',
+    releaseNotes: platformConfig.releaseNotes || [],
+    storeUrl: platformConfig.storeUrl || '',
+    platform,
+  };
+};
+
+export const getAppConfig = async () => {
+  return loadConfig();
+};
+
+export const updateAppConfig = async (newConfig) => {
+  const current = loadConfig();
+  const updated = {
+    ...current,
+    ...newConfig,
+  };
+  fs.writeFileSync(CONFIG_FILE, JSON.stringify(updated, null, 2), 'utf-8');
+  return updated;
+};
+

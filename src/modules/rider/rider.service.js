@@ -10,6 +10,7 @@ export const getRiderStatus = async (userId) => {
     where: { userId },
     include: {
       vehicles: true,
+      documents: true,
       user: {
         select: { displayName: true, phone: true, avatarUrl: true },
       },
@@ -26,10 +27,20 @@ export const getRiderStatus = async (userId) => {
     };
   }
 
+  const dlDoc = profile.documents?.find((d) => d.documentType === 'DRIVING_LICENSE');
+  const selfieDoc = profile.documents?.find(
+    (d) => d.documentNumber === 'LIVE_CAMERA_SELFIE' || d.documentType === 'OTHER'
+  );
+
   return {
     isDriver: true,
     driverId: profile.id,
+    licenseNumber: profile.licenseNumber,
+    licenseExpiryDate: profile.licenseExpiryDate,
     verificationStatus: profile.verificationStatus,
+    rejectedReason: profile.rejectedReason,
+    licenseFrontUrl: dlDoc?.fileUrl || null,
+    selfieUrl: selfieDoc?.fileUrl || profile.user?.avatarUrl || null,
     rating: Number(profile.averageRating),
     totalRidesOffered: profile.totalRidesOffered,
     vehicles: profile.vehicles.map((v) => ({
@@ -44,28 +55,128 @@ export const getRiderStatus = async (userId) => {
 };
 
 /**
- * 2. Apply for Driver
+ * 2. Apply / Re-submit for Driver KYC Verification
  */
-export const applyAsDriver = async (userId, { licenseNumber, licenseExpiryDate }) => {
-  const existing = await prisma.driverProfile.findUnique({ where: { userId } });
+export const applyAsDriver = async (
+  userId,
+  { licenseNumber, licenseExpiryDate, licenseFrontUrl, licenseBackUrl, selfieUrl }
+) => {
+  const existing = await prisma.driverProfile.findUnique({
+    where: { userId },
+    include: { documents: true },
+  });
+
+  let profile;
+  const expiry = new Date(licenseExpiryDate);
+
   if (existing) {
-    throw new ApiError(409, 'Driver profile already exists for this account');
+    if (existing.verificationStatus === 'APPROVED') {
+      return {
+        driverId: existing.id,
+        verificationStatus: 'APPROVED',
+        message: 'Driver profile is already approved and active.',
+      };
+    }
+
+    // Re-submission case (PENDING or REJECTED)
+    profile = await prisma.driverProfile.update({
+      where: { id: existing.id },
+      data: {
+        licenseNumber: licenseNumber.trim(),
+        licenseExpiryDate: expiry,
+        verificationStatus: 'PENDING',
+        rejectedReason: null, // Clear any previous rejection reason
+        updatedAt: new Date(),
+      },
+    });
+  } else {
+    // New submission
+    profile = await prisma.driverProfile.create({
+      data: {
+        userId,
+        licenseNumber: licenseNumber.trim(),
+        licenseExpiryDate: expiry,
+        verificationStatus: 'PENDING',
+      },
+    });
   }
 
-  const profile = await prisma.driverProfile.create({
-    data: {
-      userId,
-      licenseNumber: licenseNumber.trim(),
-      licenseExpiryDate: new Date(licenseExpiryDate),
-      verificationStatus: 'APPROVED', // auto-approve in development mode for instant friction-free testing
-      verifiedAt: new Date(),
-    },
-  });
+  // Upsert Driving License Document
+  if (licenseFrontUrl) {
+    const existingDl = await prisma.driverDocument.findFirst({
+      where: { driverId: profile.id, documentType: 'DRIVING_LICENSE' },
+    });
+    if (existingDl) {
+      await prisma.driverDocument.update({
+        where: { id: existingDl.id },
+        data: {
+          fileUrl: licenseFrontUrl,
+          documentNumber: licenseNumber.trim(),
+          expiryDate: expiry,
+          status: 'PENDING',
+          rejectedReason: null,
+        },
+      });
+    } else {
+      await prisma.driverDocument.create({
+        data: {
+          driverId: profile.id,
+          documentType: 'DRIVING_LICENSE',
+          documentNumber: licenseNumber.trim(),
+          fileUrl: licenseFrontUrl,
+          expiryDate: expiry,
+          status: 'PENDING',
+        },
+      });
+    }
+  }
+
+  // Upsert Live Camera Selfie Document
+  if (selfieUrl) {
+    const existingSelfie = await prisma.driverDocument.findFirst({
+      where: {
+        driverId: profile.id,
+        OR: [
+          { documentNumber: 'LIVE_CAMERA_SELFIE' },
+          { documentType: 'OTHER' },
+        ],
+      },
+    });
+    if (existingSelfie) {
+      await prisma.driverDocument.update({
+        where: { id: existingSelfie.id },
+        data: {
+          fileUrl: selfieUrl,
+          documentNumber: 'LIVE_CAMERA_SELFIE',
+          status: 'PENDING',
+          rejectedReason: null,
+        },
+      });
+    } else {
+      await prisma.driverDocument.create({
+        data: {
+          driverId: profile.id,
+          documentType: 'OTHER',
+          documentNumber: 'LIVE_CAMERA_SELFIE',
+          fileUrl: selfieUrl,
+          status: 'PENDING',
+        },
+      });
+    }
+
+    // Also update user's avatar if not set
+    try {
+      await prisma.user.update({
+        where: { id: userId },
+        data: { avatarUrl: selfieUrl },
+      });
+    } catch (_) {}
+  }
 
   return {
     driverId: profile.id,
     verificationStatus: profile.verificationStatus,
-    message: 'Driver profile activated successfully!',
+    message: 'Driving license and camera selfie submitted successfully! Under administrative review.',
   };
 };
 
@@ -323,19 +434,38 @@ const parseDateTime = (timeStr, dateStr) => {
  * 4. Offer a Ride (Carpool / Bikepool / Other / Recurring)
  */
 export const offerRide = async (userId, data) => {
-  let driver = await prisma.driverProfile.findUnique({
+  const driver = await prisma.driverProfile.findUnique({
     where: { userId },
   });
 
-  if (!driver) {
-    driver = await prisma.driverProfile.create({
-      data: {
-        userId,
-        licenseNumber: `DL_${Date.now()}`,
-        licenseExpiryDate: new Date('2035-12-31'),
-        verificationStatus: 'APPROVED',
-      },
-    });
+  if (!driver || driver.verificationStatus === 'NOT_APPLIED') {
+    throw new ApiError(
+      403,
+      'Driving License Verification Required: You must submit your Driving License and live camera selfie before offering rides.',
+      [],
+      '',
+      'KYC_REQUIRED'
+    );
+  }
+
+  if (driver.verificationStatus === 'PENDING') {
+    throw new ApiError(
+      403,
+      'Driving License Under Review: Your driver verification is currently under administrative review.',
+      [],
+      '',
+      'KYC_IN_REVIEW'
+    );
+  }
+
+  if (driver.verificationStatus === 'REJECTED') {
+    throw new ApiError(
+      403,
+      `Driver Verification Rejected: ${driver.rejectedReason || 'Your driving license was not approved. Please re-submit or contact support.'}`,
+      [],
+      '',
+      'KYC_REJECTED'
+    );
   }
 
   let vehicleId = data.vehicleId;

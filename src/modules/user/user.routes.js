@@ -27,6 +27,8 @@ router.get('/profile', userController.getProfile);
 router.put('/profile', validate(updateProfileSchema), userController.updateProfile);
 router.patch('/switch-role', validate(switchRoleSchema), userController.switchRole);
 router.post('/switch-role', validate(switchRoleSchema), userController.switchRole);
+router.post('/fcm-token', userController.saveFcmToken);
+router.post('/device-token', userController.saveFcmToken);
 
 // Trusted Contacts (Emergency / SOS)
 router.get('/trusted-contacts', userController.getTrustedContacts);

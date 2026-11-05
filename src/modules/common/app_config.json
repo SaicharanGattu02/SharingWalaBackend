@@ -1,0 +1,22 @@
+{
+  "android": {
+    "latestVersion": "1.0.0",
+    "minSupportedVersion": "1.0.0",
+    "forceUpdate": false,
+    "title": "Update Available",
+    "message": "A newer version of SharingWala is available.",
+    "releaseNotes": [],
+    "storeUrl": "https://play.google.com/store/apps/details?id=com.sharingwala.app",
+    "enabled": false
+  },
+  "ios": {
+    "latestVersion": "1.0.0",
+    "minSupportedVersion": "1.0.0",
+    "forceUpdate": false,
+    "title": "Update Available",
+    "message": "A newer version of SharingWala is available.",
+    "releaseNotes": [],
+    "storeUrl": "https://apps.apple.com/app/sharingwala/id123456789",
+    "enabled": false
+  }
+}

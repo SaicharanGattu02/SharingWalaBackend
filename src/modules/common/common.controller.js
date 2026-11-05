@@ -24,3 +24,37 @@ export const getBannerById = asyncHandler(async (req, res) => {
     new ApiResponse(200, banner, 'Banner details retrieved successfully')
   );
 });
+
+/**
+ * GET /api/v1/common/app-update?platform=android&version=1.0.0
+ * Check if app update or force update is required
+ */
+export const checkAppUpdate = asyncHandler(async (req, res) => {
+  const updateInfo = await commonService.checkAppUpdate(req.query);
+  res.status(200).json(
+    new ApiResponse(200, updateInfo, 'App update status retrieved successfully')
+  );
+});
+
+/**
+ * GET /api/v1/common/config
+ * Retrieve global app configuration
+ */
+export const getAppConfig = asyncHandler(async (req, res) => {
+  const config = await commonService.getAppConfig();
+  res.status(200).json(
+    new ApiResponse(200, config, 'App configuration retrieved successfully')
+  );
+});
+
+/**
+ * PUT /api/v1/common/config (Admin)
+ * Update app configuration (latest version, force update toggle, notes, store urls)
+ */
+export const updateAppConfig = asyncHandler(async (req, res) => {
+  const config = await commonService.updateAppConfig(req.body);
+  res.status(200).json(
+    new ApiResponse(200, config, 'App configuration updated successfully')
+  );
+});
+

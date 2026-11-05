@@ -459,7 +459,7 @@ let strangerReels = [
     isVerified: true,
     route: 'Hyderabad ➔ Goa Beach Drive 🌅',
     thumbnailUrl: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=800&q=80',
-    videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4',
+    videoUrl: 'https://vjs.zencdn.net/v/oceans.mp4',
     vibe: 'weekendGetaway',
     caption: 'Sunset coastal drive heading to Goa this Friday! Carpool SUV seats available. Who is up for a weekend trip? 🌊🚗',
     audioTrack: 'Sunset Roadtrip Vibe • Original Sound',
@@ -475,7 +475,7 @@ let strangerReels = [
     isVerified: true,
     route: 'Hyderabad ➔ Bengaluru Train 🚆',
     thumbnailUrl: 'https://images.unsplash.com/photo-1474487548417-781cb71495f3?auto=format&fit=crop&w=800&q=80',
-    videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
+    videoUrl: 'https://vjs.zencdn.net/v/oceans.mp4',
     vibe: 'intercityCommute',
     caption: 'Night sleeper train journey vibes to Bangalore! Looking for fellow women travelers to connect & share stories ✨',
     audioTrack: 'Night Express Chill • Lofi Mix',
@@ -491,7 +491,7 @@ let strangerReels = [
     isVerified: true,
     route: 'Hyderabad ➔ Vijayawada Highway 🏎️',
     thumbnailUrl: 'https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?auto=format&fit=crop&w=800&q=80',
-    videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/WeAreGoingOnBullrun.mp4',
+    videoUrl: 'https://vjs.zencdn.net/v/oceans.mp4',
     vibe: 'intercityCommute',
     caption: 'Early morning coffee stop on Vijayawada highway. Fast & clean drive. Connect to join our morning ride! ☕🛣️',
     audioTrack: 'Highway Cruising • Synthwave',
@@ -527,13 +527,14 @@ const loadStore = () => {
       if (Array.isArray(data.strangerMeetups)) strangerMeetups = data.strangerMeetups;
       if (Array.isArray(data.strangerPlans)) strangerPlans = data.strangerPlans;
       if (Array.isArray(data.strangerReels) && data.strangerReels.length > 0) {
-        strangerReels = data.strangerReels.map((r, i) => ({
+        strangerReels = data.strangerReels.map((r) => ({
           ...r,
-          videoUrl: r.videoUrl || (i % 3 === 0
-            ? 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4'
-            : i % 3 === 1
-            ? 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4'
-            : 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/WeAreGoingOnBullrun.mp4'),
+          videoUrl: (r.videoUrl && r.videoUrl.trim().length > 0)
+            ? r.videoUrl
+            : 'https://vjs.zencdn.net/v/oceans.mp4',
+          thumbnailUrl: (r.thumbnailUrl && r.thumbnailUrl.trim().length > 0)
+            ? r.thumbnailUrl
+            : 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=800&q=80',
         }));
       }
       saveStore();
@@ -2359,19 +2360,23 @@ export const getStrangerReels = async (userId = null) => {
 };
 
 export const createStrangerReel = async (userId, data) => {
-  const user = await prisma.user.findUnique({ where: { id: userId } });
+  const user = userId ? await prisma.user.findUnique({ where: { id: userId } }).catch(() => null) : null;
   const linkedTrip = strangerTrips.find((t) => t.id === data.tripId) || strangerTrips[0];
 
   const newReel = {
     id: `reel_${Date.now()}`,
     userId: userId,
     hostId: userId,
-    hostName: user?.displayName || 'Creator',
-    hostAvatar: user?.avatarUrl || 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&w=400&q=80',
+    hostName: data.userName || user?.displayName || 'SharingWala Creator',
+    hostAvatar: data.userAvatar || user?.avatarUrl || 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&w=400&q=80',
     isVerified: user?.isVerified ?? true,
     route: data.route,
-    thumbnailUrl: data.thumbnailUrl,
-    videoUrl: data.videoUrl || 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4',
+    thumbnailUrl: (data.thumbnailUrl && data.thumbnailUrl.trim().length > 0)
+      ? data.thumbnailUrl.trim()
+      : 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=800&q=80',
+    videoUrl: (data.videoUrl && data.videoUrl.trim().length > 0)
+      ? data.videoUrl.trim()
+      : 'https://vjs.zencdn.net/v/oceans.mp4',
     vibe: data.vibe || 'weekendGetaway',
     caption: data.caption,
     audioTrack: data.audioTrack || 'Original Sound',

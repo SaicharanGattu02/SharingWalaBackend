@@ -1,0 +1,139 @@
+[
+  {
+    "id": "SOS-MVZLO0AF-OD0M",
+    "userId": "cmvidzcly0000vaaswh1rsxtf",
+    "userName": "saicharan",
+    "userPhone": "+917674952516",
+    "userEmail": "N/A",
+    "rideId": null,
+    "rideDetails": null,
+    "latitude": 17.4332455,
+    "longitude": 78.4404432,
+    "address": "Live Location (17.43325, 78.44044)",
+    "emergencyType": "SAFETY_THREAT",
+    "notes": "🚨 Triggered automatically via 3 physical phone shakes",
+    "status": "ACTIVE",
+    "adminNotes": null,
+    "resolvedBy": null,
+    "resolvedAt": null,
+    "emergencyContacts": [
+      {
+        "id": "cmvmotwl30001vassekegg35s",
+        "name": "Chandu",
+        "phone": "9666739598",
+        "relationship": "Friend",
+        "isPrimary": false
+      }
+    ],
+    "createdAt": "2026-11-02T18:36:10.744Z",
+    "updatedAt": "2026-11-02T18:36:10.744Z"
+  },
+  {
+    "id": "SOS-MVXS0JUU-G61A",
+    "userId": "cmvidzcly0000vaaswh1rsxtf",
+    "userName": "saicharan",
+    "userPhone": "+917674952516",
+    "userEmail": "N/A",
+    "rideId": null,
+    "rideDetails": null,
+    "latitude": 17.4406185,
+    "longitude": 78.4472413,
+    "address": "Current Live GPS Location (SOS-MVXRZ7XV-X48N)",
+    "emergencyType": "SAFETY_THREAT",
+    "notes": "",
+    "status": "ACTIVE",
+    "adminNotes": null,
+    "resolvedBy": null,
+    "resolvedAt": null,
+    "emergencyContacts": [
+      {
+        "id": "cmvmotwl30001vassekegg35s",
+        "name": "Chandu",
+        "phone": "9666739598",
+        "relationship": "Friend",
+        "isPrimary": false
+      }
+    ],
+    "createdAt": "2026-11-01T11:58:21.318Z",
+    "updatedAt": "2026-11-01T11:58:21.318Z"
+  },
+  {
+    "id": "SOS-MVXRZMED-UKIX",
+    "userId": "cmvidzcly0000vaaswh1rsxtf",
+    "userName": "saicharan",
+    "userPhone": "+917674952516",
+    "userEmail": "N/A",
+    "rideId": null,
+    "rideDetails": null,
+    "latitude": 17.4406212,
+    "longitude": 78.4472453,
+    "address": "Current Live GPS Location (SOS-MVXRZ7XV-X48N)",
+    "emergencyType": "SAFETY_THREAT",
+    "notes": "",
+    "status": "ACTIVE",
+    "adminNotes": null,
+    "resolvedBy": null,
+    "resolvedAt": null,
+    "emergencyContacts": [
+      {
+        "id": "cmvmotwl30001vassekegg35s",
+        "name": "Chandu",
+        "phone": "9666739598",
+        "relationship": "Friend",
+        "isPrimary": false
+      }
+    ],
+    "createdAt": "2026-11-01T11:57:37.957Z",
+    "updatedAt": "2026-11-01T11:57:37.957Z"
+  },
+  {
+    "id": "SOS-MVXRZ7XV-X48N",
+    "userId": "cmvidzcly0000vaaswh1rsxtf",
+    "userName": "saicharan",
+    "userPhone": "+917674952516",
+    "userEmail": "N/A",
+    "rideId": null,
+    "rideDetails": null,
+    "latitude": 17.448293,
+    "longitude": 78.391487,
+    "address": "Live Location (17.44829, 78.39149)",
+    "emergencyType": "SAFETY_THREAT",
+    "notes": "🚨 Triggered automatically via 3 physical phone shakes",
+    "status": "ACTIVE",
+    "adminNotes": null,
+    "resolvedBy": null,
+    "resolvedAt": null,
+    "emergencyContacts": [
+      {
+        "id": "cmvmotwl30001vassekegg35s",
+        "name": "Chandu",
+        "phone": "9666739598",
+        "relationship": "Friend",
+        "isPrimary": false
+      }
+    ],
+    "createdAt": "2026-11-01T11:57:19.219Z",
+    "updatedAt": "2026-11-01T11:57:19.219Z"
+  },
+  {
+    "id": "SOS-MVXM2L95-JIXU",
+    "userId": "test-user-id-123",
+    "userName": "SharingWala Passenger",
+    "userPhone": "+91 98765 43210",
+    "userEmail": "safety-alert@sharingwala.com",
+    "rideId": null,
+    "rideDetails": null,
+    "latitude": 17.448293,
+    "longitude": 78.391487,
+    "address": "Madhapur Cyber Towers, Hyderabad",
+    "emergencyType": "SAFETY_THREAT",
+    "notes": "Testing real-time emergency dispatch flow",
+    "status": "RESOLVED",
+    "adminNotes": "Officer dispatched to Cyber Towers",
+    "resolvedBy": "cmvxiqyi90006vak4s5sei22z",
+    "resolvedAt": "2026-11-01T11:55:25.017Z",
+    "emergencyContacts": [],
+    "createdAt": "2026-11-01T09:11:58.746Z",
+    "updatedAt": "2026-11-01T11:55:25.017Z"
+  }
+]

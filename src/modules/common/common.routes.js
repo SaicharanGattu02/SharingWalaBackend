@@ -1,9 +1,15 @@
 import { Router } from 'express';
 import { validate } from '../../middlewares/validate.middleware.js';
+import { authenticateAdmin } from '../../middlewares/adminAuth.middleware.js';
 import { getBannersSchema } from './common.validation.js';
 import * as commonController from './common.controller.js';
 
 const router = Router();
+
+// --- App Version & Force Update Endpoints ---
+router.get('/app-update', commonController.checkAppUpdate);
+router.get('/config', commonController.getAppConfig);
+router.put('/config', authenticateAdmin, commonController.updateAppConfig);
 
 // --- Banners Endpoints ---
 // Supports:

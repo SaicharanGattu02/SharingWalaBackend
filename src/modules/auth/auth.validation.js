@@ -22,6 +22,14 @@ export const loginSchema = {
     forceLogin: z.boolean().or(z.string().transform((v) => v === 'true')).optional().default(false),
     deviceId: z.string().optional(),
     deviceType: z.string().optional(),
+    device_id: z.string().optional(),
+    device_type: z.string().optional(),
+    deviceName: z.string().optional(),
+    device_name: z.string().optional(),
+    fcmToken: z.string().optional(),
+    fcm_token: z.string().optional(),
+    push_token: z.string().optional(),
+    device_token: z.string().optional(),
   }),
 };
 
@@ -32,6 +40,14 @@ export const phoneOtpLoginSchema = {
     forceLogin: z.boolean().or(z.string().transform((v) => v === 'true')).optional().default(false),
     deviceId: z.string().optional(),
     deviceType: z.string().optional(),
+    device_id: z.string().optional(),
+    device_type: z.string().optional(),
+    deviceName: z.string().optional(),
+    device_name: z.string().optional(),
+    fcmToken: z.string().optional(),
+    fcm_token: z.string().optional(),
+    push_token: z.string().optional(),
+    device_token: z.string().optional(),
   }),
 };
 
@@ -42,6 +58,14 @@ export const verifyOtpSchema = {
     forceLogin: z.boolean().or(z.string().transform((v) => v === 'true')).optional().default(false),
     deviceId: z.string().optional(),
     deviceType: z.string().optional(),
+    device_id: z.string().optional(),
+    device_type: z.string().optional(),
+    deviceName: z.string().optional(),
+    device_name: z.string().optional(),
+    fcmToken: z.string().optional(),
+    fcm_token: z.string().optional(),
+    push_token: z.string().optional(),
+    device_token: z.string().optional(),
   }),
 };
 

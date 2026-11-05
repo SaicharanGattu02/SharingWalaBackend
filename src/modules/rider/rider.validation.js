@@ -6,6 +6,9 @@ export const applyDriverSchema = {
     licenseExpiryDate: z.string().refine((val) => !isNaN(Date.parse(val)), {
       message: 'Invalid ISO date string',
     }),
+    licenseFrontUrl: z.string().optional(),
+    licenseBackUrl: z.string().optional(),
+    selfieUrl: z.string().optional(),
   }),
 };
 

@@ -1,6 +1,15 @@
 import { asyncHandler } from '../../utils/asyncHandler.js';
 import { ApiResponse } from '../../utils/apiResponse.js';
 import * as userService from './user.service.js';
+import { registerUserFcmToken } from '../../config/firebase.js';
+
+export const saveFcmToken = asyncHandler(async (req, res) => {
+  const fcmToken = req.body.fcm_token || req.body.fcmToken || req.body.token || req.body.deviceToken || req.body.device_token || req.body.push_token;
+  if (fcmToken && req.user?.id) {
+    registerUserFcmToken(req.user.id, fcmToken);
+  }
+  res.status(200).json(new ApiResponse(200, { registered: true }, 'FCM token registered'));
+});
 
 export const getProfile = asyncHandler(async (req, res) => {
   const profile = await userService.getUserProfile(req.user.id);

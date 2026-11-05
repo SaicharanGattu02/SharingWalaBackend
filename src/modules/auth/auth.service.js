@@ -5,6 +5,7 @@ import { env } from '../../config/env.js';
 import { ApiError } from '../../utils/apiError.js';
 import { getIO } from '../../config/socket.js';
 import { disconnectUserSockets } from '../chat/chat.socket.js';
+import { registerUserFcmToken } from '../../config/firebase.js';
 
 /**
  * Single Device Login Policy:
@@ -172,6 +173,10 @@ export const registerUser = async ({ username, displayName, phone, email, passwo
         await registerUserDeviceSession(user.id, deviceId, deviceType);
       }
 
+      if (fcmToken && user?.id) {
+        registerUserFcmToken(user.id, fcmToken);
+      }
+
       const authMeta = generateAuthTokens(user);
 
       return {
@@ -209,7 +214,7 @@ export const registerUser = async ({ username, displayName, phone, email, passwo
   );
 };
 
-export const loginUser = async ({ identifier, password, deviceId, deviceType, forceLogin = false }) => {
+export const loginUser = async ({ identifier, password, deviceId, deviceType, fcmToken, forceLogin = false }) => {
   const trimmedIdentifier = identifier.trim();
 
   return await withDbTimeout(
@@ -285,6 +290,10 @@ export const loginUser = async ({ identifier, password, deviceId, deviceType, fo
         await registerUserDeviceSession(user.id, deviceId, deviceType);
       }
 
+      if (fcmToken && user?.id) {
+        registerUserFcmToken(user.id, fcmToken);
+      }
+
       const authMeta = generateAuthTokens(user);
       const { passwordHash: _, ...safeUser } = user;
 
@@ -340,7 +349,7 @@ export const sendPhoneOtp = async ({ phone }) => {
   };
 };
 
-export const loginOrRegisterWithPhone = async ({ phone, otp, deviceId, deviceType, forceLogin = false }) => {
+export const loginOrRegisterWithPhone = async ({ phone, otp, deviceId, deviceType, fcmToken, forceLogin = false }) => {
   const digitsOnly = phone.replace(/\D/g, '');
   const normalizedPhone = digitsOnly.length === 10 ? `+91${digitsOnly}` : (phone.startsWith('+') ? phone : `+${digitsOnly}`);
 
@@ -465,6 +474,10 @@ export const loginOrRegisterWithPhone = async ({ phone, otp, deviceId, deviceTyp
   const authMeta = generateAuthTokens(user);
   const { passwordHash: _, ...safeUser } = user;
 
+  if (fcmToken && user?.id) {
+    registerUserFcmToken(user.id, fcmToken);
+  }
+
   const isProfileCompleted = !isNewUser && user.displayName !== 'New Commuter';
 
   return {
@@ -539,6 +552,10 @@ export const refreshAuthToken = async ({ refreshToken, deviceId, deviceType }) =
   const authMeta = generateAuthTokens(user);
   const { passwordHash: _, ...safeUser } = user;
 
+  if (fcmToken && user?.id) {
+    registerUserFcmToken(user.id, fcmToken);
+  }
+
   return {
     ...authMeta,
     user: {
@@ -587,5 +604,68 @@ export const logoutUser = async (userId, deviceId = null) => {
       return { success: true, message: 'Logged out successfully' };
     },
     () => ({ success: true, message: 'Logged out successfully' })
+  );
+};
+
+export const getAccountStatus = async (token) => {
+  if (!token) {
+    throw new ApiError(401, 'No authorization token provided');
+  }
+
+  let decoded;
+  try {
+    decoded = jwt.verify(token, env.jwt.secret);
+  } catch (err) {
+    throw new ApiError(401, 'Invalid or expired authorization token');
+  }
+
+  return await withDbTimeout(
+    async () => {
+      const user = await prisma.user.findUnique({
+        where: { id: decoded.userId },
+        select: {
+          id: true,
+          uuid: true,
+          username: true,
+          displayName: true,
+          phone: true,
+          email: true,
+          status: true,
+          driverProfile: {
+            select: {
+              id: true,
+              verificationStatus: true,
+            },
+          },
+        },
+      });
+
+      if (!user) {
+        throw new ApiError(404, 'User account no longer exists');
+      }
+
+      const isActive = user.status === 'ACTIVE';
+
+      return {
+        userId: user.id,
+        uuid: user.uuid,
+        username: user.username,
+        displayName: user.displayName,
+        phone: user.phone,
+        email: user.email,
+        status: user.status,
+        isActive,
+        isDriverApproved: user.driverProfile?.verificationStatus === 'APPROVED',
+        message: isActive
+          ? 'Account is active and verified.'
+          : `Account status is ${user.status}. Please contact support to submit an appeal.`,
+      };
+    },
+    () => ({
+      userId: decoded.userId,
+      status: 'ACTIVE',
+      isActive: true,
+      message: 'Account status check (fallback mode)',
+    })
   );
 };

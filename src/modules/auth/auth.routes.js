@@ -19,6 +19,8 @@ router.post('/send-otp', validate(sendOtpSchema), authController.sendOtp);
 router.post('/verify-otp', validate(verifyOtpSchema), authController.verifyOtp);
 router.post('/phone-login', validate(phoneOtpLoginSchema), authController.phoneLogin);
 router.post('/refresh-token', validate(refreshTokenSchema), authController.refreshToken);
+router.get('/status', authController.getAccountStatus);
+router.get('/account-status', authController.getAccountStatus);
 router.get('/me', authenticate, authController.getMe);
 router.post('/logout', optionalAuthenticate, authController.logout);
 

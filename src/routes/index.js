@@ -11,6 +11,11 @@ import chatRoutes from '../modules/chat/chat.routes.js';
 import communityRoutes from '../modules/communities/community.routes.js';
 import healthRoutes from '../modules/health/health.routes.js';
 import commonRoutes from '../modules/common/common.routes.js';
+import supportRoutes from '../modules/support/support.routes.js';
+import { userSosRouter, adminSosRouter } from '../modules/sos/sos.routes.js';
+
+// 🛡️ Platform Administration Module
+import adminRoutes from '../modules/admin/admin.routes.js';
 
 const router = Router();
 
@@ -33,6 +38,8 @@ router.use('/rider', riderPersonaRoutes);
 // ==============================================================================
 
 // 📢 Common Banners & App Config
+router.use('/common/support', supportRoutes);
+router.use('/support', supportRoutes);
 router.use('/common', commonRoutes);
 router.use('/banners', commonRoutes);
 
@@ -42,10 +49,20 @@ router.use('/auth', authRoutes);
 // 💬 Real-Time Messaging & Chat
 router.use('/chat', chatRoutes);
 
+// 🚨 Emergency SOS System
+router.use('/user/sos', userSosRouter);
+router.use('/sos', userSosRouter);
+router.use('/admin/sos', adminSosRouter);
+
 // 🏢 Corporate & Commute Communities
 router.use('/communities', communityRoutes);
 
 // 📡 System & Database Health
 router.use('/health', healthRoutes);
+
+// ==============================================================================
+// 3. PLATFORM ADMINISTRATION & OPERATIONS
+// ==============================================================================
+router.use('/admin', adminRoutes);
 
 export default router;

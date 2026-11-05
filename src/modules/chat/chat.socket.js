@@ -3,6 +3,7 @@ import { prisma } from '../../config/db.js';
 import { env } from '../../config/env.js';
 import { getIO } from '../../config/socket.js';
 import { ensureConversationRecord, markAsRead } from './chat.service.js';
+import { sendIncomingCallPush, registerUserFcmToken } from '../../config/firebase.js';
 
 // In-memory active connected socket tracking per user
 const onlineUsers = new Map(); // userId -> Set<socketId>
@@ -289,20 +290,82 @@ export const registerChatSocketHandlers = (io, socket) => {
     });
   });
 
-  // 7. VoIP 1-to-1 Calling Events (User ID to User ID)
-  socket.on('call:initiate', ({ toUserId, callType = 'AUDIO' }) => {
-    if (!toUserId) return;
-    io.to(`user:${toUserId}`).emit('call:incoming', {
+  // 7. VoIP 1-to-1 Calling Events (User ID to User ID & Conversation Room)
+  socket.on('call:initiate', async ({ toUserId, callType = 'AUDIO', conversationId }) => {
+    if (!toUserId && !conversationId) return;
+
+    const targetUserIds = new Set();
+    if (toUserId && toUserId.trim().length > 0) {
+      targetUserIds.add(toUserId.trim());
+    }
+
+    // Also support resolving peer from conversation if conversationId is provided or if toUserId is a conversation ID
+    const potentialConvId = conversationId || (toUserId && (toUserId.startsWith('direct_') || toUserId.startsWith('conv_') || toUserId.startsWith('trip_')) ? toUserId : null);
+    if (potentialConvId) {
+      try {
+        const conv = await prisma.conversation.findUnique({
+          where: { id: potentialConvId },
+          include: { participants: { select: { userId: true } } },
+        });
+        if (conv?.participants) {
+          conv.participants.forEach((p) => {
+            if (p.userId !== userId) targetUserIds.add(p.userId);
+          });
+        }
+      } catch (_) {}
+
+      if (potentialConvId.startsWith('direct_')) {
+        const raw = potentialConvId.replace('direct_', '');
+        if (raw.contains ? raw.contains(userId) : raw.includes(userId)) {
+          const peer = raw.replace(userId, '').replace(/^_+|_+$/g, '');
+          if (peer) targetUserIds.add(peer);
+        }
+      }
+    }
+
+    const payload = {
       callerId: userId,
-      callerName: socket.user.displayName || socket.user.username,
+      callerName: socket.user.displayName || socket.user.username || 'Caller',
       callerAvatar: socket.user.avatarUrl,
       callType,
+      conversationId: conversationId || potentialConvId,
       timestamp: new Date().toISOString(),
+    };
+
+    console.log(`📞 [Socket] call:initiate from ${userId} (${payload.callerName}) ➔ to users:`, Array.from(targetUserIds));
+
+    targetUserIds.forEach((targetId) => {
+      // 1. Live WebSocket delivery for Foreground / Locked / Active Background states
+      io.to(`user:${targetId}`).emit('call:incoming', payload);
+
+      // 2. High-Priority FCM Push Notification for Killed / Swiped Away states
+      sendIncomingCallPush({
+        recipientUserId: targetId,
+        callerId: payload.callerId,
+        callerName: payload.callerName,
+        callerAvatar: payload.callerAvatar,
+        callType: payload.callType,
+        conversationId: payload.conversationId,
+      }).catch((err) => console.error('FCM push error:', err));
     });
+
+    if (potentialConvId) {
+      io.to(`conv:${potentialConvId}`).emit('call:incoming_in_room', {
+        ...payload,
+        toUserIds: Array.from(targetUserIds),
+      });
+    }
+  });
+
+  socket.on('register_fcm_token', ({ fcmToken }) => {
+    if (fcmToken && userId) {
+      registerUserFcmToken(userId, fcmToken);
+    }
   });
 
   socket.on('call:accept', ({ callerId }) => {
     if (!callerId) return;
+    console.log(`📞 [Socket] call:accept from ${userId} to caller ${callerId}`);
     io.to(`user:${callerId}`).emit('call:accepted', {
       receiverId: userId,
       receiverName: socket.user.displayName || socket.user.username,
@@ -311,6 +374,7 @@ export const registerChatSocketHandlers = (io, socket) => {
 
   socket.on('call:reject', ({ callerId, reason = 'DECLINED' }) => {
     if (!callerId) return;
+    console.log(`📞 [Socket] call:reject from ${userId} to caller ${callerId} (reason: ${reason})`);
     io.to(`user:${callerId}`).emit('call:rejected', {
       receiverId: userId,
       reason,

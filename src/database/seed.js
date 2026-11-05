@@ -43,6 +43,10 @@ async function main() {
     { name: 'rides.cancel', description: 'Admin force-cancellation of problematic rides' },
     { name: 'reports.view', description: 'View safety complaints and incident reports' },
     { name: 'reports.resolve', description: 'Take resolution action on safety reports' },
+    { name: 'communities.manage', description: 'Create and moderate corporate and campus communities' },
+    { name: 'pricing.manage', description: 'Manage non-commercial fuel cost sharing pricing rules' },
+    { name: 'banners.manage', description: 'Publish and manage promotional banners' },
+    { name: 'staff.manage', description: 'Manage administrative staff accounts and roles' },
   ];
 
   for (const perm of permissionsList) {
@@ -67,6 +71,33 @@ async function main() {
       },
     });
   }
+
+  // 2.1 Seed Super Administrator Account
+  const defaultAdminPassword = await bcrypt.hash('Admin@123', 10);
+  const adminUser = await prisma.adminUser.upsert({
+    where: { email: 'admin@share2go.com' },
+    update: {},
+    create: {
+      name: 'Master Super Administrator',
+      email: 'admin@share2go.com',
+      passwordHash: defaultAdminPassword,
+      isActive: true,
+    },
+  });
+
+  await prisma.adminUserRole.upsert({
+    where: {
+      adminUserId_roleId: {
+        adminUserId: adminUser.id,
+        roleId: superAdminRole.id,
+      },
+    },
+    update: {},
+    create: {
+      adminUserId: adminUser.id,
+      roleId: superAdminRole.id,
+    },
+  });
 
   // 3. Seed Pricing Rules (Non-commercial fuel cost sharing guardrails)
   await prisma.pricingRule.createMany({

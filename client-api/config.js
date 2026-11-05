@@ -2,7 +2,6 @@
  * Centralized API Configuration for Frontend Applications
  * Works across Web (React, Vue, Next.js) and Mobile (React Native, Expo)
  */
-
 export const API_CONFIG = {
   // Network IP: Accessible across physical devices, emulators, and browsers
   BASE_URL: process.env.REACT_APP_API_URL 
@@ -19,7 +18,6 @@ export const API_CONFIG = {
   STORAGE_TOKEN_KEY: 'share2go_auth_token',
   STORAGE_USER_KEY: 'share2go_user_profile',
 };
-
 /**
  * Universal Token Storage Helper
  * Supports browser localStorage and fallback memory for React Native / SSR
