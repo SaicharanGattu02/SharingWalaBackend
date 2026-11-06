@@ -3,7 +3,8 @@ import { z } from 'zod';
 export const updateProfileSchema = {
   body: z.object({
     displayName: z.string().min(2).max(100).optional(),
-    avatarUrl: z.string().max(1000).optional().nullable(),
+    avatarUrl: z.string().optional().nullable(),
+    email: z.string().email().optional().nullable().or(z.literal('')),
     gender: z.enum(['MALE', 'FEMALE', 'OTHER', 'PREFER_NOT_TO_SAY']).optional(),
     homeArea: z.string().max(200).optional().nullable(),
     workArea: z.string().max(200).optional().nullable(),

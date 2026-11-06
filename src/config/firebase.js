@@ -182,3 +182,80 @@ export const sendIncomingCallPush = async ({
 
   return successCount > 0;
 };
+
+/**
+ * Send Standard Push Notification (for Ride Requests, Seat Confirmed, Cancellations, etc.)
+ */
+export const sendRideNotificationPush = async ({
+  recipientUserId,
+  title,
+  body,
+  data = {},
+}) => {
+  if (!firebaseApp) {
+    console.warn('⚠️ [Firebase Admin] Cannot send push notification: Firebase not initialized');
+    return false;
+  }
+
+  let targetUserId = recipientUserId;
+  try {
+    const dp = await prisma.driverProfile.findUnique({
+      where: { id: recipientUserId },
+      select: { userId: true },
+    });
+    if (dp?.userId) targetUserId = dp.userId;
+  } catch (_) {}
+
+  let tokens = getUserFcmTokens(targetUserId);
+  if (!tokens || tokens.length === 0) {
+    try {
+      const devices = await prisma.userDevice.findMany({
+        where: { userId: targetUserId },
+        select: { fcmToken: true },
+      });
+      tokens = devices.map((d) => d.fcmToken).filter(Boolean);
+      tokens.forEach((t) => registerUserFcmToken(targetUserId, t));
+    } catch (_) {}
+  }
+
+  if (!tokens || tokens.length === 0) {
+    console.log(`ℹ️ [FCM] No registered push token for user ${targetUserId}`);
+    return false;
+  }
+
+  console.log(`📲 [FCM] Sending ride notification push to user ${targetUserId}: "${title}"`);
+
+  const payloadData = {
+    ...data,
+    title: String(title),
+    body: String(body),
+    timestamp: new Date().toISOString(),
+  };
+
+  const stringifiedData = {};
+  for (const [k, v] of Object.entries(payloadData)) {
+    stringifiedData[k] = String(v ?? '');
+  }
+
+  await Promise.allSettled(
+    tokens.map((token) =>
+      getMessaging(firebaseApp).send({
+        token,
+        notification: {
+          title: String(title),
+          body: String(body),
+        },
+        data: stringifiedData,
+        android: {
+          priority: 'high',
+          notification: {
+            channelId: 'high_importance_channel',
+            sound: 'default',
+          },
+        },
+      })
+    )
+  );
+
+  return true;
+};

@@ -4,6 +4,7 @@ import { fileURLToPath } from 'url';
 import { prisma } from '../../config/db.js';
 import { ApiError } from '../../utils/apiError.js';
 import { getIO } from '../../config/socket.js';
+import { sendRideNotificationPush } from '../../config/firebase.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -1338,6 +1339,48 @@ export const joinStrangerTrip = async (userId, tripId, body = {}) => {
       });
     }
   } catch (err) {}
+
+  // Real-time Push & Socket alert to host
+  if (trip.hostId && trip.hostId !== userId) {
+    try {
+      await sendRideNotificationPush({
+        recipientUserId: trip.hostId,
+        title: 'New Seat Request 🚗',
+        body: `${user?.displayName || 'A commuter'} requested ${seatsRequested} seat(s) on your trip to ${trip.destination}`,
+        data: {
+          type: 'RIDE_REQUEST',
+          rideId: trip.id,
+          bookingId: requestId,
+          passengerId: userId,
+          passengerName: user?.displayName || 'Passenger',
+          seats: String(seatsRequested),
+        },
+      });
+    } catch (_) {}
+
+    try {
+      const io = getIO();
+      const eventPayload = {
+        rideId: trip.id,
+        bookingId: requestId,
+        passengerId: userId,
+        passengerName: user?.displayName || 'Passenger',
+        passengerAvatar: user?.avatarUrl || null,
+        passengerPhone: user?.phone || null,
+        seatsRequested,
+        totalFare,
+        status: 'pending',
+        requestedAt: new Date().toISOString(),
+        message: `${user?.displayName || 'A commuter'} requested a seat on your ride`,
+      };
+      io.to(`user:${trip.hostId}`).emit('ride:seat_requested', eventPayload);
+      io.to(`user:${trip.hostId}`).emit('notification', {
+        title: 'New Seat Request 🚗',
+        body: `${user?.displayName || 'A commuter'} requested ${seatsRequested} seat(s) on your trip to ${trip.destination}`,
+        data: eventPayload,
+      });
+    } catch (_) {}
+  }
 
   return {
     success: true,

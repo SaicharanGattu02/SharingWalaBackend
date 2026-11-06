@@ -1,6 +1,9 @@
+import fs from 'fs';
+import path from 'path';
 import { prisma, withDbTimeout } from '../../config/db.js';
 import { ApiError } from '../../utils/apiError.js';
 import { getIO } from '../../config/socket.js';
+import { sendRideNotificationPush } from '../../config/firebase.js';
 
 const defaultMockRides = [
   {
@@ -146,14 +149,32 @@ const formatUserProfile = (user) => {
     (user.rolePreference && (user.rolePreference === 'offerRide' || user.rolePreference.toUpperCase() === 'HOST'));
   const activeRole = isDriver ? 'Host' : 'Guest';
 
+  let formattedAvatar = user.avatarUrl;
+  if (formattedAvatar) {
+    if (
+      formattedAvatar.startsWith('/data/') ||
+      formattedAvatar.startsWith('/cache/') ||
+      formattedAvatar.startsWith('file:') ||
+      formattedAvatar.includes('com.sharing.wala/cache')
+    ) {
+      formattedAvatar = 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80';
+    } else if (formattedAvatar.startsWith('/uploads/') || formattedAvatar.startsWith('uploads/')) {
+      const cleanPath = formattedAvatar.startsWith('/') ? formattedAvatar : `/${formattedAvatar}`;
+      const base = process.env.BASE_URL || 'https://api.sharingwala.com';
+      formattedAvatar = `${base.replace(/\/api\/v1\/?$/, '')}${cleanPath}`;
+    }
+  } else {
+    formattedAvatar = 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80';
+  }
+
   return {
     id: user.id,
     name: user.displayName,
     phone: user.phone,
-    avatarUrl: user.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80',
+    avatarUrl: formattedAvatar,
     gender: user.gender === 'MALE' ? 'Male' : user.gender === 'FEMALE' ? 'Female' : 'Other',
-    homeArea: user.homeArea || 'Kondapur, Hyderabad',
-    workArea: user.workArea || 'Hitech City, Hyderabad',
+    homeArea: user.homeArea || '',
+    workArea: user.workArea || '',
     preferredMode: user.preferredMode || 'both',
     rolePreference: user.rolePreference || 'both',
     activeRole: activeRole,
@@ -211,20 +232,29 @@ export const formatRideForFlutter = (ride) => {
     status = 'in_progress';
   } else if (isPast) {
     if (hasBookings) {
-      // Departure passed with passengers -> Completed ride, not expired
       status = 'completed';
-    } else if (is24HoursPast) {
-      // 0 bookings and more than 24 hours passed since departure -> Expired
-      status = 'expired';
     } else {
-      // Within 24-hour cycle of offered trip -> Stays active/available
-      status = 'available';
+      status = 'expired';
     }
   } else {
     status = rawStatus === 'PUBLISHED' ? 'available' : rawStatus.toLowerCase();
   }
 
   const isExpired = status === 'expired';
+
+  const pendingRequests = (ride.bookings || [])
+    .filter((b) => b.status === 'PENDING')
+    .map((b) => ({
+      bookingId: b.id,
+      passengerId: b.passenger?.id || b.passengerId,
+      passengerName: b.passenger?.displayName || 'Passenger',
+      passengerPhone: b.passenger?.phone || '',
+      passengerAvatar: b.passenger?.avatarUrl || '',
+      seatsRequested: b.seatsRequested,
+      status: 'pending',
+      totalFare: Number(b.totalCostContribution || 0),
+      requestedAt: b.requestedAt || b.createdAt,
+    }));
 
   return {
     id: ride.id,
@@ -257,6 +287,8 @@ export const formatRideForFlutter = (ride) => {
     price: price,
     isFree: price === 0 || ride.pricing?.pricingType === 'FREE',
     pricingType: (price === 0 || ride.pricing?.pricingType === 'FREE') ? 'FREE' : 'COST_SHARING',
+    passengerRequests: pendingRequests,
+    pendingRequestsCount: pendingRequests.length,
   };
 };
 
@@ -315,7 +347,32 @@ export const updateUserProfile = async (userId, data) => {
   const updatePayload = {};
 
   if (data.displayName !== undefined) updatePayload.displayName = data.displayName;
-  if (data.avatarUrl !== undefined) updatePayload.avatarUrl = data.avatarUrl;
+  if (data.email !== undefined) updatePayload.email = data.email;
+  if (data.avatarUrl !== undefined) {
+    let cleanAvatar = data.avatarUrl;
+    // Check if client sent base64 image data
+    if (cleanAvatar && cleanAvatar.startsWith('data:image/')) {
+      try {
+        const matches = cleanAvatar.match(/^data:([A-Za-z-+/]+);base64,(.+)$/);
+        if (matches && matches.length === 3) {
+          const mimeType = matches[1];
+          const ext = mimeType.split('/')[1] === 'png' ? 'png' : 'jpg';
+          const buffer = Buffer.from(matches[2], 'base64');
+          const uploadDir = path.join(process.cwd(), 'public', 'uploads', 'avatars');
+          if (!fs.existsSync(uploadDir)) {
+            fs.mkdirSync(uploadDir, { recursive: true });
+          }
+          const fileName = `avatar_${userId}_${Date.now()}.${ext}`;
+          const filePath = path.join(uploadDir, fileName);
+          fs.writeFileSync(filePath, buffer);
+          cleanAvatar = `/uploads/avatars/${fileName}`;
+        }
+      } catch (err) {
+        console.error('[UserService] Failed to save base64 avatar image:', err);
+      }
+    }
+    updatePayload.avatarUrl = cleanAvatar;
+  }
   if (data.gender !== undefined) updatePayload.gender = data.gender;
   if (data.homeArea !== undefined) updatePayload.homeArea = data.homeArea;
   if (data.workArea !== undefined) updatePayload.workArea = data.workArea;
@@ -543,25 +600,28 @@ export const searchUserRides = async (query = {}, currentUserId = null) => {
   const startOfToday = new Date();
   startOfToday.setHours(0, 0, 0, 0);
 
-  const whereClause = {
-    status: 'PUBLISHED',
-    availableSeats: { gt: 0 },
-    departureAt: { gte: new Date() },
-  };
+  const futureCutoff = new Date(Date.now() - 10 * 60 * 1000);
+  let departureAtFilter = { gte: futureCutoff };
 
   if (date) {
     if (date.toLowerCase() === 'today') {
       const endOfToday = new Date(startOfToday);
       endOfToday.setHours(23, 59, 59, 999);
-      whereClause.departureAt = { gte: new Date(), lte: endOfToday };
+      departureAtFilter = { gte: futureCutoff, lte: endOfToday };
     } else if (date.toLowerCase() === 'tomorrow') {
       const startOfTomorrow = new Date(startOfToday);
       startOfTomorrow.setDate(startOfTomorrow.getDate() + 1);
       const endOfTomorrow = new Date(startOfTomorrow);
       endOfTomorrow.setHours(23, 59, 59, 999);
-      whereClause.departureAt = { gte: startOfTomorrow, lte: endOfTomorrow };
+      departureAtFilter = { gte: startOfTomorrow, lte: endOfTomorrow };
     }
   }
+
+  const whereClause = {
+    status: 'PUBLISHED',
+    availableSeats: { gt: 0 },
+    departureAt: departureAtFilter,
+  };
 
   const isWomenOnly = womenOnly === 'true' || womenOnly === true;
   if (isWomenOnly) {
@@ -663,6 +723,7 @@ export const searchUserRides = async (query = {}, currentUserId = null) => {
     const relaxedWhere = {
       status: 'PUBLISHED',
       availableSeats: { gt: 0 },
+      departureAt: departureAtFilter,
     };
     if (isWomenOnly) relaxedWhere.womenOnly = true;
     if (isVerifiedOnly) relaxedWhere.driver = { verificationStatus: 'APPROVED' };
@@ -715,6 +776,7 @@ export const searchUserRides = async (query = {}, currentUserId = null) => {
     const broadWhere = {
       status: 'PUBLISHED',
       availableSeats: { gt: 0 },
+      departureAt: departureAtFilter,
     };
     if (isWomenOnly) broadWhere.womenOnly = true;
     if (isVerifiedOnly) broadWhere.driver = { verificationStatus: 'APPROVED' };
@@ -747,8 +809,16 @@ export const searchUserRides = async (query = {}, currentUserId = null) => {
     });
   }
 
-  if (rides.length > 0) {
-    return rides.map((r) => enrichRideWithUserBooking(formatRideForFlutter(r), r.bookings, currentUserId));
+  // Strictly filter out any past rides to ensure future-only rides for commuters
+  const nowMs = Date.now() - 10 * 60 * 1000;
+  const futureRides = rides.filter((r) => {
+    if (!r.departureAt) return false;
+    const depTime = new Date(r.departureAt).getTime();
+    return !isNaN(depTime) && depTime >= nowMs;
+  });
+
+  if (futureRides.length > 0) {
+    return futureRides.map((r) => enrichRideWithUserBooking(formatRideForFlutter(r), r.bookings, currentUserId));
   }
 
   // Final fallback initial commuter rides from Flutter MockDataService for instant preview
@@ -1027,6 +1097,81 @@ export const requestSeatOnRide = async (passengerUserId, rideId, { seats = 1, pi
           ...(ride.availableSeats - seats === 0 ? { status: 'FULL' } : {}),
         },
       });
+    }
+
+    // Fetch passenger info for rich notification & real-time badge update
+    const passenger = await tx.user.findUnique({
+      where: { id: passengerUserId },
+      select: { id: true, displayName: true, avatarUrl: true, phone: true },
+    });
+    const passengerName = passenger?.displayName || 'A commuter';
+    const hostUserId = ride.driver?.userId;
+
+    if (hostUserId) {
+      try {
+        await tx.notification.create({
+          data: {
+            userId: hostUserId,
+            title: 'New Seat Request 🚗',
+            body: `${passengerName} requested ${seats} seat(s) on your trip to ${ride.endLocationName}`,
+            type: 'RIDE_REQUEST',
+            metadata: JSON.stringify({
+              rideId,
+              bookingId: booking.id,
+              passengerId: passengerUserId,
+              passengerName,
+              seatsRequested: seats,
+            }),
+          },
+        });
+      } catch (err) {
+        console.warn('⚠️ Could not insert notification to DB:', err.message);
+      }
+
+      // 1. FCM Push Notification to host's device
+      try {
+        await sendRideNotificationPush({
+          recipientUserId: hostUserId,
+          title: 'New Seat Request 🚗',
+          body: `${passengerName} requested ${seats} seat(s) on your trip to ${ride.endLocationName}`,
+          data: {
+            type: 'RIDE_REQUEST',
+            rideId,
+            bookingId: booking.id,
+            passengerId: passengerUserId,
+            passengerName,
+            seats: String(seats),
+          },
+        });
+      } catch (pushErr) {
+        console.warn('⚠️ Push notification dispatch failed:', pushErr.message);
+      }
+
+      // 2. Real-time WebSocket emission to Host for badge & in-app alert
+      try {
+        const io = getIO();
+        const eventPayload = {
+          rideId,
+          bookingId: booking.id,
+          passengerId: passengerUserId,
+          passengerName,
+          passengerAvatar: passenger?.avatarUrl || null,
+          passengerPhone: passenger?.phone || null,
+          seatsRequested: seats,
+          totalFare,
+          status: booking.status.toLowerCase(),
+          requestedAt: new Date().toISOString(),
+          message: `${passengerName} requested a seat on your ride`,
+        };
+        io.to(`user:${hostUserId}`).emit('ride:seat_requested', eventPayload);
+        io.to(`user:${hostUserId}`).emit('notification', {
+          title: 'New Seat Request 🚗',
+          body: `${passengerName} requested ${seats} seat(s) on your trip to ${ride.endLocationName}`,
+          data: eventPayload,
+        });
+      } catch (ioErr) {
+        console.warn('⚠️ Socket emission failed:', ioErr.message);
+      }
     }
 
     return {
