@@ -5,13 +5,14 @@
   "type": "module",
   "scripts": {
     "dev": "nodemon --config nodemon.json src/server.js",
-    "start": "node src/server.js",
-    "build": "prisma generate && mkdir -p dist && cp -r src dist/ && cp -r prisma dist/ && cp package.json dist/ && cp .env dist/ 2>/dev/null || true",
+    "start": "npx prisma db push --skip-generate && node src/server.js",
+    "build": "prisma generate",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:push": "prisma db push",
     "prisma:studio": "prisma studio",
-    "prisma:seed": "node src/database/seed.js"
+    "prisma:seed": "node src/database/seed.js",
+    "prisma:sql-dump": "prisma migrate diff --from-empty --to-schema-datamodel prisma/schema.prisma --script"
   },
   "keywords": [],
   "author": "",

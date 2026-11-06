@@ -21,13 +21,14 @@ export let isDbConnected = false;
 export const connectDB = async () => {
   try {
     const timeoutPromise = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('Connection timed out (2s)')), 2000)
+      setTimeout(() => reject(new Error('Connection timed out (8s)')), 8000)
     );
     await Promise.race([prisma.$connect(), timeoutPromise]);
     isDbConnected = true;
     console.log('✅ Connected to MySQL Database successfully via Prisma');
   } catch (error) {
     isDbConnected = false;
+    console.warn(`⚠️ MySQL connection error: ${error.message}`);
     console.warn('⚠️ MySQL not reachable on localhost:3306. Operating in instant in-memory dev mode.');
   }
 };

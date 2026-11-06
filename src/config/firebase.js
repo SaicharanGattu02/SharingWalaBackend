@@ -3,6 +3,7 @@ import { getMessaging } from 'firebase-admin/messaging';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { prisma } from './db.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -36,14 +37,24 @@ const saveTokens = () => {
 loadTokens();
 
 try {
-  if (fs.existsSync(serviceAccountPath)) {
-    const serviceAccount = JSON.parse(fs.readFileSync(serviceAccountPath, 'utf8'));
+  let serviceAccount = null;
+  if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+    try {
+      serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+    } catch (_) {}
+  }
+
+  if (!serviceAccount && fs.existsSync(serviceAccountPath)) {
+    serviceAccount = JSON.parse(fs.readFileSync(serviceAccountPath, 'utf8'));
+  }
+
+  if (serviceAccount) {
     firebaseApp = initializeApp({
       credential: cert(serviceAccount),
     });
     console.log('🔥 [Firebase Admin] Initialized successfully for project:', serviceAccount.project_id);
   } else {
-    console.warn('⚠️ [Firebase Admin] Service account file not found at:', serviceAccountPath);
+    console.warn('⚠️ [Firebase Admin] Service account not found in env FIREBASE_SERVICE_ACCOUNT or file:', serviceAccountPath);
   }
 } catch (e) {
   console.error('❌ [Firebase Admin] Initialization failed:', e.message);
@@ -81,7 +92,18 @@ export const sendIncomingCallPush = async ({
     return false;
   }
 
-  const tokens = getUserFcmTokens(recipientUserId);
+  let tokens = getUserFcmTokens(recipientUserId);
+  if (!tokens || tokens.length === 0) {
+    try {
+      const devices = await prisma.userDevice.findMany({
+        where: { userId: recipientUserId },
+        select: { fcmToken: true },
+      });
+      tokens = devices.map((d) => d.fcmToken).filter(Boolean);
+      tokens.forEach((t) => registerUserFcmToken(recipientUserId, t));
+    } catch (_) {}
+  }
+
   if (!tokens || tokens.length === 0) {
     console.log(`ℹ️ [FCM] No registered push token for user ${recipientUserId}`);
     return false;
@@ -103,10 +125,21 @@ export const sendIncomingCallPush = async ({
     tokens.map((token) =>
       getMessaging(firebaseApp).send({
         token,
+        notification: {
+          title: `Incoming ${callType === 'VIDEO' ? 'Video' : 'Voice'} Call`,
+          body: `${callerName || 'Someone'} is calling you...`,
+        },
         data: payloadData,
         android: {
           priority: 'high',
           ttl: 60, // 60 seconds
+          notification: {
+            channelId: 'call_channel_v3',
+            priority: 'max',
+            sound: 'default',
+            defaultVibrateTimings: true,
+            visibility: 'public',
+          },
         },
       })
     )

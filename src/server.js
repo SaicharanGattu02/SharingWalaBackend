@@ -3,6 +3,7 @@ import os from 'os';
 import app from './app.js';
 import { env } from './config/env.js';
 import { connectDB, prisma } from './config/db.js';
+import { autoMigrateDatabase } from './config/autoMigrate.js';
 import { initSocket } from './config/socket.js';
 import { registerChatSocketHandlers } from './modules/chat/chat.socket.js';
 
@@ -21,6 +22,9 @@ const getNetworkIp = () => {
 const startServer = async () => {
   // Test Prisma database connection
   await connectDB();
+
+  // Automatically migrate/push schema to MySQL (no manual SQL exports needed for DevOps)
+  await autoMigrateDatabase();
 
   // Create HTTP server instance
   const httpServer = http.createServer(app);
