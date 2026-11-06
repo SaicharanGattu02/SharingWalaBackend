@@ -92,25 +92,41 @@ export const sendIncomingCallPush = async ({
     return false;
   }
 
-  let tokens = getUserFcmTokens(recipientUserId);
+  // Defensive: If recipient is a DriverProfile ID, resolve to User ID
+  let targetUserId = recipientUserId;
+  try {
+    const dp = await prisma.driverProfile.findUnique({
+      where: { id: recipientUserId },
+      select: { userId: true },
+    });
+    if (dp?.userId) {
+      targetUserId = dp.userId;
+    }
+  } catch (_) {}
+
+  let tokens = getUserFcmTokens(targetUserId);
   if (!tokens || tokens.length === 0) {
     try {
       const devices = await prisma.userDevice.findMany({
-        where: { userId: recipientUserId },
+        where: { userId: targetUserId },
         select: { fcmToken: true },
       });
       tokens = devices.map((d) => d.fcmToken).filter(Boolean);
-      tokens.forEach((t) => registerUserFcmToken(recipientUserId, t));
+      tokens.forEach((t) => registerUserFcmToken(targetUserId, t));
     } catch (_) {}
   }
 
   if (!tokens || tokens.length === 0) {
-    console.log(`ℹ️ [FCM] No registered push token for user ${recipientUserId}`);
+    console.log(`ℹ️ [FCM] No registered push token for user ${targetUserId}`);
     return false;
   }
 
-  console.log(`📲 [FCM] Sending high-priority incoming call push to user ${recipientUserId} (${tokens.length} devices)`);
+  console.log(`📲 [FCM] Sending high-priority incoming call push to user ${targetUserId} (${tokens.length} devices)`);
 
+  // NOTE: For Android VoIP / Incoming calls to wake up from killed/swiped-from-recents state,
+  // the push MUST be a pure DATA-ONLY payload (no top-level 'notification' block).
+  // A top-level 'notification' key causes Android OS to swallow the message in the tray,
+  // bypassing Flutter's _firebaseMessagingBackgroundHandler!
   const payloadData = {
     type: 'CALL_INCOMING',
     callerId: String(callerId || ''),
@@ -118,6 +134,8 @@ export const sendIncomingCallPush = async ({
     callerAvatar: String(callerAvatar || ''),
     callType: String(callType || 'AUDIO'),
     conversationId: String(conversationId || ''),
+    title: `Incoming ${callType === 'VIDEO' ? 'Video' : 'Voice'} Call`,
+    body: `${callerName || 'Someone'} is calling you...`,
     timestamp: new Date().toISOString(),
   };
 
@@ -125,20 +143,21 @@ export const sendIncomingCallPush = async ({
     tokens.map((token) =>
       getMessaging(firebaseApp).send({
         token,
-        notification: {
-          title: `Incoming ${callType === 'VIDEO' ? 'Video' : 'Voice'} Call`,
-          body: `${callerName || 'Someone'} is calling you...`,
-        },
         data: payloadData,
         android: {
           priority: 'high',
           ttl: 60, // 60 seconds
-          notification: {
-            channelId: 'call_channel_v3',
-            priority: 'max',
-            sound: 'default',
-            defaultVibrateTimings: true,
-            visibility: 'public',
+        },
+        apns: {
+          headers: {
+            'apns-priority': '10',
+            'apns-push-type': 'background',
+          },
+          payload: {
+            aps: {
+              contentAvailable: true,
+              sound: 'default',
+            },
           },
         },
       })
@@ -152,7 +171,7 @@ export const sendIncomingCallPush = async ({
     } else {
       console.warn(`⚠️ [FCM] Failed to deliver push to token: ${res.reason?.message}`);
       if (res.reason?.code === 'messaging/registration-token-not-registered') {
-        const set = userFcmTokens.get(recipientUserId);
+        const set = userFcmTokens.get(targetUserId);
         if (set) {
           set.delete(tokens[index]);
           saveTokens();

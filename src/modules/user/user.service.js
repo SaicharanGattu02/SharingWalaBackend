@@ -228,7 +228,7 @@ export const formatRideForFlutter = (ride) => {
 
   return {
     id: ride.id,
-    driverId: driver?.id || ride.driverId,
+    driverId: driver?.userId || user?.id || driver?.id || ride.driverId,
     driverName: user?.displayName || 'Driver',
     driverAvatar: user?.avatarUrl || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=400&q=80',
     rating: driver ? Number(driver.averageRating) : 4.9,
@@ -1473,7 +1473,7 @@ export const getActiveRideTracking = async (userId, rideId) => {
     date: formattedDate,
     departureTime: formattedTime,
     mode: ride.vehicle?.vehicleType === 'BIKE' ? 'bikepool' : 'carpool',
-    driverId: ride.driver?.id,
+    driverId: ride.driver?.userId || ride.driver?.user?.id || ride.driver?.id,
     driverName: ride.driver?.user?.displayName || 'Driver',
     driverPhone: ride.driver?.user?.phone || '',
     driverAvatar:

@@ -290,17 +290,50 @@ export const registerChatSocketHandlers = (io, socket) => {
     });
   });
 
-  // 7. VoIP 1-to-1 Calling Events (User ID to User ID & Conversation Room)
-  socket.on('call:initiate', async ({ toUserId, callType = 'AUDIO', conversationId }) => {
-    if (!toUserId && !conversationId) return;
+  // Helper to resolve any peer ID (User.id, DriverProfile.id, passenger_<id>, trip_<rideId>, etc.)
+  async function resolveTargetUsers(inputIdentifier, convId) {
+    const resolved = new Set();
+    let candidate = (inputIdentifier || '').trim();
+    if (candidate.startsWith('passenger_')) candidate = candidate.replace('passenger_', '');
+    if (candidate.startsWith('driver_')) candidate = candidate.replace('driver_', '');
 
-    const targetUserIds = new Set();
-    if (toUserId && toUserId.trim().length > 0) {
-      targetUserIds.add(toUserId.trim());
+    if (candidate && candidate !== 'host' && candidate !== userId) {
+      try {
+        const user = await prisma.user.findUnique({
+          where: { id: candidate },
+          select: { id: true },
+        });
+        if (user) resolved.add(user.id);
+      } catch (_) {}
+
+      if (resolved.size === 0) {
+        try {
+          const dp = await prisma.driverProfile.findUnique({
+            where: { id: candidate },
+            select: { userId: true },
+          });
+          if (dp?.userId) resolved.add(dp.userId);
+        } catch (_) {}
+      }
+
+      if (resolved.size === 0) {
+        try {
+          const booking = await prisma.booking.findUnique({
+            where: { id: candidate },
+            select: { passengerId: true, ride: { select: { driver: { select: { userId: true } } } } },
+          });
+          if (booking) {
+            if (booking.passengerId && booking.passengerId !== userId) {
+              resolved.add(booking.passengerId);
+            } else if (booking.ride?.driver?.userId && booking.ride.driver.userId !== userId) {
+              resolved.add(booking.ride.driver.userId);
+            }
+          }
+        } catch (_) {}
+      }
     }
 
-    // Also support resolving peer from conversation if conversationId is provided or if toUserId is a conversation ID
-    const potentialConvId = conversationId || (toUserId && (toUserId.startsWith('direct_') || toUserId.startsWith('conv_') || toUserId.startsWith('trip_')) ? toUserId : null);
+    const potentialConvId = convId || (candidate.startsWith('direct_') || candidate.startsWith('conv_') || candidate.startsWith('trip_') ? candidate : null);
     if (potentialConvId) {
       try {
         const conv = await prisma.conversation.findUnique({
@@ -309,18 +342,68 @@ export const registerChatSocketHandlers = (io, socket) => {
         });
         if (conv?.participants) {
           conv.participants.forEach((p) => {
-            if (p.userId !== userId) targetUserIds.add(p.userId);
+            if (p.userId && p.userId !== userId) resolved.add(p.userId);
           });
         }
       } catch (_) {}
 
-      if (potentialConvId.startsWith('direct_')) {
-        const raw = potentialConvId.replace('direct_', '');
-        if (raw.contains ? raw.contains(userId) : raw.includes(userId)) {
-          const peer = raw.replace(userId, '').replace(/^_+|_+$/g, '');
-          if (peer) targetUserIds.add(peer);
+      if (potentialConvId.startsWith('trip_')) {
+        const parts = potentialConvId.split('_');
+        const rideId = parts[1];
+        if (rideId) {
+          try {
+            const ride = await prisma.ride.findUnique({
+              where: { id: rideId },
+              include: {
+                driver: { select: { userId: true } },
+                bookings: { select: { passengerId: true, status: true } },
+              },
+            });
+            if (ride) {
+              const hostUserId = ride.driver?.userId;
+              if (userId === hostUserId) {
+                const lastPart = parts.length >= 3 ? parts[2] : null;
+                if (lastPart && lastPart !== 'host') {
+                  resolved.add(lastPart);
+                } else {
+                  ride.bookings.forEach((b) => {
+                    if (b.passengerId && b.passengerId !== userId) {
+                      resolved.add(b.passengerId);
+                    }
+                  });
+                }
+              } else {
+                if (hostUserId) resolved.add(hostUserId);
+              }
+            }
+          } catch (_) {}
         }
       }
+
+      if (potentialConvId.startsWith('direct_')) {
+        const raw = potentialConvId.replace('direct_', '');
+        if (raw.includes(userId)) {
+          const peer = raw.replace(userId, '').replace(/^_+|_+$/g, '');
+          if (peer) resolved.add(peer);
+        }
+      }
+    }
+
+    if (resolved.size === 0 && candidate && candidate !== 'host' && candidate !== userId) {
+      resolved.add(candidate);
+    }
+
+    resolved.delete(userId);
+    return Array.from(resolved);
+  }
+
+  // 7. VoIP 1-to-1 Calling Events (User ID to User ID & Conversation Room)
+  socket.on('call:initiate', async ({ toUserId, callType = 'AUDIO', conversationId }) => {
+    if (!toUserId && !conversationId) return;
+
+    const targets = await resolveTargetUsers(toUserId, conversationId);
+    if (targets.length === 0 && toUserId) {
+      targets.push(toUserId.trim());
     }
 
     const payload = {
@@ -328,17 +411,17 @@ export const registerChatSocketHandlers = (io, socket) => {
       callerName: socket.user.displayName || socket.user.username || 'Caller',
       callerAvatar: socket.user.avatarUrl,
       callType,
-      conversationId: conversationId || potentialConvId,
+      conversationId: conversationId || (toUserId && toUserId.startsWith('trip_') ? toUserId : null),
       timestamp: new Date().toISOString(),
     };
 
-    console.log(`📞 [Socket] call:initiate from ${userId} (${payload.callerName}) ➔ to users:`, Array.from(targetUserIds));
+    console.log(`📞 [Socket] call:initiate from ${userId} (${payload.callerName}) ➔ to users:`, targets);
 
-    targetUserIds.forEach((targetId) => {
+    targets.forEach((targetId) => {
       // 1. Live WebSocket delivery for Foreground / Locked / Active Background states
       io.to(`user:${targetId}`).emit('call:incoming', payload);
 
-      // 2. High-Priority FCM Push Notification for Killed / Swiped Away states
+      // 2. High-Priority Data-Only FCM Push for Killed / Swiped Away states
       sendIncomingCallPush({
         recipientUserId: targetId,
         callerId: payload.callerId,
@@ -349,10 +432,10 @@ export const registerChatSocketHandlers = (io, socket) => {
       }).catch((err) => console.error('FCM push error:', err));
     });
 
-    if (potentialConvId) {
-      io.to(`conv:${potentialConvId}`).emit('call:incoming_in_room', {
+    if (conversationId) {
+      io.to(`conv:${conversationId}`).emit('call:incoming_in_room', {
         ...payload,
-        toUserIds: Array.from(targetUserIds),
+        toUserIds: targets,
       });
     }
   });
@@ -363,19 +446,23 @@ export const registerChatSocketHandlers = (io, socket) => {
     }
   });
 
-  socket.on('call:accept', ({ callerId }) => {
+  socket.on('call:accept', async ({ callerId }) => {
     if (!callerId) return;
-    console.log(`📞 [Socket] call:accept from ${userId} to caller ${callerId}`);
-    io.to(`user:${callerId}`).emit('call:accepted', {
+    const targets = await resolveTargetUsers(callerId);
+    const targetId = targets[0] || callerId;
+    console.log(`📞 [Socket] call:accept from ${userId} to caller ${targetId}`);
+    io.to(`user:${targetId}`).emit('call:accepted', {
       receiverId: userId,
       receiverName: socket.user.displayName || socket.user.username,
     });
   });
 
-  socket.on('call:reject', ({ callerId, reason = 'DECLINED' }) => {
+  socket.on('call:reject', async ({ callerId, reason = 'DECLINED' }) => {
     if (!callerId) return;
-    console.log(`📞 [Socket] call:reject from ${userId} to caller ${callerId} (reason: ${reason})`);
-    io.to(`user:${callerId}`).emit('call:rejected', {
+    const targets = await resolveTargetUsers(callerId);
+    const targetId = targets[0] || callerId;
+    console.log(`📞 [Socket] call:reject from ${userId} to caller ${targetId} (reason: ${reason})`);
+    io.to(`user:${targetId}`).emit('call:rejected', {
       receiverId: userId,
       reason,
     });
@@ -383,7 +470,9 @@ export const registerChatSocketHandlers = (io, socket) => {
 
   socket.on('call:missed', async ({ toUserId, callType = 'AUDIO', conversationId }) => {
     if (!toUserId) return;
-    io.to(`user:${toUserId}`).emit('call:missed', {
+    const targets = await resolveTargetUsers(toUserId, conversationId);
+    const targetId = targets[0] || toUserId;
+    io.to(`user:${targetId}`).emit('call:missed', {
       callerId: userId,
       callerName: socket.user.displayName || socket.user.username,
       callerAvatar: socket.user.avatarUrl,
@@ -393,7 +482,7 @@ export const registerChatSocketHandlers = (io, socket) => {
 
     // Auto-record missed call in direct conversation so both parties see it in chat history
     try {
-      const targetConvId = conversationId || `direct_${[userId, toUserId].sort().join('_')}`;
+      const targetConvId = conversationId || `direct_${[userId, targetId].sort().join('_')}`;
       await ensureConversationRecord(targetConvId, userId);
       const isVideo = callType === 'VIDEO';
       const content = isVideo ? 'Missed video call' : 'Missed voice call';
@@ -430,23 +519,27 @@ export const registerChatSocketHandlers = (io, socket) => {
 
       io.to(`conv:${targetConvId}`).emit('new_message', socketPayload);
       io.to(`user:${userId}`).emit('new_message', socketPayload);
-      io.to(`user:${toUserId}`).emit('new_message', socketPayload);
+      io.to(`user:${targetId}`).emit('new_message', socketPayload);
     } catch (err) {
       // Non-blocking fallback
     }
   });
 
-  socket.on('call:signal', ({ toUserId, signalData }) => {
+  socket.on('call:signal', async ({ toUserId, signalData }) => {
     if (!toUserId || !signalData) return;
-    io.to(`user:${toUserId}`).emit('call:signal', {
+    const targets = await resolveTargetUsers(toUserId);
+    const targetId = targets[0] || toUserId;
+    io.to(`user:${targetId}`).emit('call:signal', {
       fromUserId: userId,
       signalData,
     });
   });
 
-  socket.on('call:end', ({ toUserId, reason = 'HUNG_UP' }) => {
+  socket.on('call:end', async ({ toUserId, reason = 'HUNG_UP' }) => {
     if (!toUserId) return;
-    io.to(`user:${toUserId}`).emit('call:ended', {
+    const targets = await resolveTargetUsers(toUserId);
+    const targetId = targets[0] || toUserId;
+    io.to(`user:${targetId}`).emit('call:ended', {
       byUserId: userId,
       reason,
     });
