@@ -48,15 +48,11 @@ export const joinCommunity = async (userId, communityId) => {
     throw new ApiError(404, 'Community not found or inactive');
   }
 
-  // Domain verification check if required
-  if (community.domainRestriction) {
-    if (!user.email || !user.email.endsWith(community.domainRestriction)) {
-      throw new ApiError(
-        403,
-        `Joining this community requires a verified email ending with ${community.domainRestriction}`
-      );
-    }
-  }
+  // Domain check: If user has a matching corporate email, they are marked verified.
+  // We allow users to join community groups so they can access carpools & shared rides without hard blocking.
+  const isCorporateVerified = community.domainRestriction && user?.email
+    ? user.email.toLowerCase().endsWith(community.domainRestriction.toLowerCase())
+    : true;
 
   const membership = await prisma.communityMember.upsert({
     where: {
