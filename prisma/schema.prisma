@@ -63,6 +63,7 @@ enum MessageType {
   LOCATION_SHARE
   IMAGE
   SYSTEM_ALERT
+  MISSED_CALL
 }
 
 enum FuelType {
@@ -180,6 +181,7 @@ enum NotificationType {
   TRIP_CANCELLED
   TRIP_COMPLETED
   TRIP_MEETUP_ALERT
+  CHAT_MESSAGE
 }
 
 enum JourneyTransportMode {

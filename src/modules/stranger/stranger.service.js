@@ -6,6 +6,7 @@ import { ApiError } from '../../utils/apiError.js';
 import { getIO } from '../../config/socket.js';
 import { sendRideNotificationPush } from '../../config/firebase.js';
 import { toAbsoluteVideoUrl, toAbsoluteUrl } from '../../utils/urlHelper.js';
+import { createNotification } from '../notification/notification.service.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -1347,23 +1348,24 @@ export const joinStrangerTrip = async (userId, tripId, body = {}) => {
     }
   } catch (err) {}
 
-  // Real-time Push & Socket alert to host
+  // Real-time Push & In-App Notification alert to host
   if (trip.hostId && trip.hostId !== userId) {
-    try {
-      await sendRideNotificationPush({
-        recipientUserId: trip.hostId,
-        title: 'New Seat Request 🚗',
-        body: `${user?.displayName || 'A commuter'} requested ${seatsRequested} seat(s) on your trip to ${trip.destination}`,
-        data: {
-          type: 'RIDE_REQUEST',
-          rideId: trip.id,
-          bookingId: requestId,
-          passengerId: userId,
-          passengerName: user?.displayName || 'Passenger',
-          seats: String(seatsRequested),
-        },
-      });
-    } catch (_) {}
+    createNotification({
+      userId: trip.hostId,
+      type: 'TRIP_JOIN_REQUEST',
+      title: 'New Trip Join Request 🎒',
+      message: `${user?.displayName || 'A commuter'} requested ${seatsRequested} seat(s) on your trip to ${trip.destination}`,
+      data: {
+        tripId: trip.id,
+        rideId: trip.id,
+        bookingId: requestId,
+        passengerId: userId,
+        passengerName: user?.displayName || 'Passenger',
+        seats: String(seatsRequested),
+        route: '/my-rides',
+      },
+      sendPush: true,
+    }).catch((e) => console.warn('Failed to dispatch stranger join notification:', e.message));
 
     try {
       const io = getIO();

@@ -9,6 +9,7 @@ import commonRoutes from '../modules/common/common.routes.js';
 import supportRoutes from '../modules/support/support.routes.js';
 import uploadRoutes from '../modules/upload/upload.routes.js';
 import { userSosRouter } from '../modules/sos/sos.routes.js';
+import notificationRoutes from '../modules/notification/notification.routes.js';
 
 const router = Router();
 
@@ -33,6 +34,11 @@ router.use('/auth', authRoutes);
 
 // 💬 Real-Time Messaging & Chat
 router.use('/chat', chatRoutes);
+
+// 🔔 Centralized In-App Notifications (User & Rider)
+router.use('/notifications', notificationRoutes);
+router.use('/user/notifications', notificationRoutes);
+router.use('/rider/notifications', notificationRoutes);
 
 // 🚨 Emergency SOS (User / Commuter trigger)
 router.use('/user/sos', userSosRouter);

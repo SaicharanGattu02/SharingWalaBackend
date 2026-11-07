@@ -1,6 +1,7 @@
 import { prisma } from '../../config/db.js';
 import { ApiError } from '../../utils/apiError.js';
 import { formatRideForFlutter } from '../user/user.service.js';
+import { createNotification } from '../notification/notification.service.js';
 
 /**
  * Helper to ensure a user has an active, approved DriverProfile.
@@ -1122,6 +1123,20 @@ export const respondToPassengerRequest = async (userId, bookingId, actionOrStatu
         },
       });
 
+      // Dispatch notification to passenger
+      createNotification({
+        userId: booking.passenger.id,
+        type: 'BOOKING_ACCEPTED',
+        title: 'Seat Request Accepted! 🎉',
+        message: `Your seat request for ${booking.ride?.endLocationName || 'the commute'} was confirmed by the host.`,
+        data: {
+          rideId: booking.rideId,
+          bookingId: updatedBooking.id,
+          route: '/active-ride',
+        },
+        sendPush: true,
+      }).catch((e) => console.warn('Failed to notify passenger of acceptance:', e.message));
+
       return {
         bookingId: updatedBooking.id,
         rideId: booking.rideId,
@@ -1157,6 +1172,20 @@ export const respondToPassengerRequest = async (userId, bookingId, actionOrStatu
         passengerNotes: (booking.passengerNotes || '').replace(/\[ONBOARD\]/g, '').trim(),
       },
     });
+
+    // Dispatch decline notification to passenger
+    createNotification({
+      userId: booking.passenger.id,
+      type: 'BOOKING_REJECTED',
+      title: 'Seat Request Declined',
+      message: `Your seat request for ${booking.ride?.endLocationName || 'the commute'} was declined by the host.`,
+      data: {
+        rideId: booking.rideId,
+        bookingId: updatedBooking.id,
+        route: '/my-rides',
+      },
+      sendPush: true,
+    }).catch((e) => console.warn('Failed to notify passenger of decline:', e.message));
 
     return {
       bookingId: updatedBooking.id,

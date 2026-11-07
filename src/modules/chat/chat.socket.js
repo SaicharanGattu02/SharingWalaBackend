@@ -4,6 +4,7 @@ import { env } from '../../config/env.js';
 import { getIO } from '../../config/socket.js';
 import { ensureConversationRecord, markAsRead } from './chat.service.js';
 import { sendIncomingCallPush, registerUserFcmToken } from '../../config/firebase.js';
+import { createNotification } from '../notification/notification.service.js';
 
 // In-memory active connected socket tracking per user
 const onlineUsers = new Map(); // userId -> Set<socketId>
@@ -239,14 +240,30 @@ export const registerChatSocketHandlers = (io, socket) => {
         if (participant.conversation && participant.conversation.participants) {
           participant.conversation.participants.forEach((p) => {
             if (p.userId !== effectiveUserId) {
+              const msgPreview = messageType === 'LOCATION_SHARE' ? '📍 Shared a location pin' : content;
               io.to(`user:${p.userId}`).emit('message_notification', {
                 conversationId: targetConvId,
                 conversationType: participant.conversation.type,
                 senderName: socketPayload.senderName,
-                preview: messageType === 'LOCATION_SHARE' ? '📍 Shared a location pin' : content,
+                preview: msgPreview,
                 createdAt: message.createdAt,
               });
               io.to(`user:${p.userId}`).emit('new_message', socketPayload);
+
+              // Save in-app notification & send FCM push
+              createNotification({
+                userId: p.userId,
+                type: 'CHAT_MESSAGE',
+                title: socketPayload.senderName,
+                message: msgPreview,
+                data: {
+                  conversationId: targetConvId,
+                  senderId: effectiveUserId,
+                  senderName: socketPayload.senderName,
+                  route: '/chat-conversation',
+                },
+                sendPush: true,
+              }).catch((e) => console.warn('Failed to dispatch message notification:', e.message));
             }
           });
         }
@@ -482,7 +499,7 @@ export const registerChatSocketHandlers = (io, socket) => {
   socket.on('call:missed', async ({ toUserId, callType = 'AUDIO', conversationId }) => {
     if (!toUserId) return;
     const targets = await resolveTargetUsers(toUserId, conversationId);
-    const targetId = targets[0] || toUserId;
+    const targetId = (targets && targets.size > 0 ? Array.from(targets)[0] : null) || toUserId;
     io.to(`user:${targetId}`).emit('call:missed', {
       callerId: userId,
       callerName: socket.user.displayName || socket.user.username,
@@ -493,8 +510,20 @@ export const registerChatSocketHandlers = (io, socket) => {
 
     // Auto-record missed call in direct conversation so both parties see it in chat history
     try {
-      const targetConvId = conversationId || `direct_${[userId, targetId].sort().join('_')}`;
-      await ensureConversationRecord(targetConvId, userId);
+      const convLookup = conversationId || `direct_${[userId, targetId].sort().join('_')}`;
+      const participant = await ensureConversationRecord(convLookup, userId);
+      const targetConvId = participant.targetConvId || convLookup;
+
+      // Debounce: Avoid duplicate missed call messages within 4 seconds
+      const recentMissed = await prisma.chatMessage.findFirst({
+        where: {
+          conversationId: targetConvId,
+          messageType: 'MISSED_CALL',
+          createdAt: { gte: new Date(Date.now() - 4000) },
+        },
+      });
+      if (recentMissed) return;
+
       const isVideo = callType === 'VIDEO';
       const content = isVideo ? 'Missed video call' : 'Missed voice call';
 
@@ -520,19 +549,39 @@ export const registerChatSocketHandlers = (io, socket) => {
       const socketPayload = {
         id: message.id,
         conversationId: targetConvId,
+        aliasConversationId: conversationId !== targetConvId ? conversationId : undefined,
         senderId: message.senderId,
-        senderName: message.sender?.displayName || 'User',
-        senderAvatar: message.sender?.avatarUrl,
+        senderName: message.sender?.displayName || socket.user?.displayName || 'User',
+        senderAvatar: message.sender?.avatarUrl || socket.user?.avatarUrl,
         content: message.content,
         messageType: 'MISSED_CALL',
         createdAt: message.createdAt.toISOString(),
       };
 
+      console.log(`📞 [Socket] Recorded missed call in ${targetConvId} from ${userId} to ${targetId}`);
       io.to(`conv:${targetConvId}`).emit('new_message', socketPayload);
+      if (conversationId && conversationId !== targetConvId) {
+        io.to(`conv:${conversationId}`).emit('new_message', socketPayload);
+      }
       io.to(`user:${userId}`).emit('new_message', socketPayload);
       io.to(`user:${targetId}`).emit('new_message', socketPayload);
+
+      // Dispatch in-app notification & push for missed call
+      createNotification({
+        userId: targetId,
+        type: 'CHAT_MESSAGE',
+        title: socketPayload.senderName,
+        message: `📞 ${content}`,
+        data: {
+          conversationId: targetConvId,
+          senderId: userId,
+          senderName: socketPayload.senderName,
+          route: '/chat-conversation',
+        },
+        sendPush: true,
+      }).catch((e) => console.warn('Failed to dispatch missed call notification:', e.message));
     } catch (err) {
-      // Non-blocking fallback
+      console.error('❌ [Socket] call:missed auto-record error:', err);
     }
   });
 

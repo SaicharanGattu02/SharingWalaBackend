@@ -5,6 +5,7 @@ import { env } from '../../config/env.js';
 import { ApiError } from '../../utils/apiError.js';
 import { getIO } from '../../config/socket.js';
 import * as strangerService from '../stranger/stranger.service.js';
+import { createNotification } from '../notification/notification.service.js';
 
 // ==============================================================================
 // AUDIT LOG HELPER
@@ -852,6 +853,20 @@ export const verifyDriver = async (adminId, driverId, { status, rejectionReason 
         newValues: { verificationStatus: status, rejectionReason },
         ipAddress,
       });
+
+      // Dispatch notification to Driver User
+      if (driver.userId) {
+        createNotification({
+          userId: driver.userId,
+          type: 'VERIFICATION_UPDATE',
+          title: status === 'APPROVED' ? 'Driver Profile Verified! 🛡️' : 'Driver Verification Update',
+          message: status === 'APPROVED'
+            ? 'Congratulations! Your driver documents have been approved by the admin. You can now host carpool & bikepool rides.'
+            : `Your driver verification was not approved: ${rejectionReason || 'Please review and re-submit your documents.'}`,
+          data: { route: '/profile' },
+          sendPush: true,
+        }).catch((e) => console.warn('Failed to notify driver of status update:', e.message));
+      }
 
       return {
         id: updated.id,

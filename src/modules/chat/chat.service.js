@@ -985,7 +985,9 @@ export const sendChatMessage = async (userId, conversationId, data) => {
             conversationId: targetConvId,
             conversationType: participant.conversation.type,
             senderName: message.sender.displayName,
-            preview: message.messageType === 'LOCATION_SHARE' ? '📍 Shared a location' : message.content,
+            preview: message.messageType === 'LOCATION_SHARE'
+              ? '📍 Shared a location'
+              : (message.messageType === 'MISSED_CALL' ? '📞 Missed call' : message.content),
             createdAt: message.createdAt,
           });
           io.to(`user:${p.userId}`).emit('new_message', payload);

@@ -21,7 +21,7 @@ export const getMessagesQuerySchema = {
 export const sendMessageSchema = {
   body: z.object({
     content: z.string().max(2000, 'Message cannot exceed 2000 characters').optional().default(''),
-    messageType: z.enum(['TEXT', 'LOCATION_SHARE', 'IMAGE', 'SYSTEM_ALERT']).optional().default('TEXT'),
+    messageType: z.enum(['TEXT', 'LOCATION_SHARE', 'IMAGE', 'SYSTEM_ALERT', 'MISSED_CALL']).optional().default('TEXT'),
     latitude: z.number().optional(),
     longitude: z.number().optional(),
     mediaUrl: z.string().url().optional().or(z.literal('')),

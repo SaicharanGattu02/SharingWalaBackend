@@ -5,6 +5,7 @@ import { ApiError } from '../../utils/apiError.js';
 import { getIO } from '../../config/socket.js';
 import { sendRideNotificationPush } from '../../config/firebase.js';
 import { toAbsoluteUrl, getServerBaseUrl } from '../../utils/urlHelper.js';
+import { createNotification } from '../notification/notification.service.js';
 
 const defaultMockRides = [
   {
@@ -1107,43 +1108,25 @@ export const requestSeatOnRide = async (passengerUserId, rideId, { seats = 1, pi
     const hostUserId = ride.driver?.userId;
 
     if (hostUserId) {
+      // Dispatch rich in-app notification & push alert to Host
       try {
-        await tx.notification.create({
-          data: {
-            userId: hostUserId,
-            title: 'New Seat Request 🚗',
-            body: `${passengerName} requested ${seats} seat(s) on your trip to ${ride.endLocationName}`,
-            type: 'RIDE_REQUEST',
-            metadata: JSON.stringify({
-              rideId,
-              bookingId: booking.id,
-              passengerId: passengerUserId,
-              passengerName,
-              seatsRequested: seats,
-            }),
-          },
-        });
-      } catch (err) {
-        console.warn('⚠️ Could not insert notification to DB:', err.message);
-      }
-
-      // 1. FCM Push Notification to host's device
-      try {
-        await sendRideNotificationPush({
-          recipientUserId: hostUserId,
+        await createNotification({
+          userId: hostUserId,
+          type: 'BOOKING_REQUEST',
           title: 'New Seat Request 🚗',
-          body: `${passengerName} requested ${seats} seat(s) on your trip to ${ride.endLocationName}`,
+          message: `${passengerName} requested ${seats} seat(s) on your trip to ${ride.endLocationName}`,
           data: {
-            type: 'RIDE_REQUEST',
             rideId,
             bookingId: booking.id,
             passengerId: passengerUserId,
             passengerName,
             seats: String(seats),
+            route: '/my-rides',
           },
+          sendPush: true,
         });
-      } catch (pushErr) {
-        console.warn('⚠️ Push notification dispatch failed:', pushErr.message);
+      } catch (notifErr) {
+        console.warn('⚠️ Notification creation failed:', notifErr.message);
       }
 
       // 2. Real-time WebSocket emission to Host for badge & in-app alert
