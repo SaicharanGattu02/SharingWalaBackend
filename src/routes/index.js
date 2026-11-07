@@ -12,6 +12,7 @@ import communityRoutes from '../modules/communities/community.routes.js';
 import healthRoutes from '../modules/health/health.routes.js';
 import commonRoutes from '../modules/common/common.routes.js';
 import supportRoutes from '../modules/support/support.routes.js';
+import uploadRoutes from '../modules/upload/upload.routes.js';
 import { userSosRouter, adminSosRouter } from '../modules/sos/sos.routes.js';
 
 // 🛡️ Platform Administration Module
@@ -56,6 +57,9 @@ router.use('/admin/sos', adminSosRouter);
 
 // 🏢 Corporate & Commute Communities
 router.use('/communities', communityRoutes);
+
+// 📁 Uploads (Videos, Photos, Reels)
+router.use('/upload', uploadRoutes);
 
 // 📡 System & Database Health
 router.use('/health', healthRoutes);

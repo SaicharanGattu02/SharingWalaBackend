@@ -148,12 +148,12 @@ export const leavePlan = asyncHandler(async (req, res) => {
 
 // --- Reels ---
 export const getReels = asyncHandler(async (req, res) => {
-  const reels = await strangerService.getStrangerReels(req.user?.id);
+  const reels = await strangerService.getStrangerReels(req.user?.id, req);
   res.status(200).json(new ApiResponse(200, reels, 'Stranger reels retrieved'));
 });
 
 export const createReel = asyncHandler(async (req, res) => {
-  const reel = await strangerService.createStrangerReel(req.user.id, req.body);
+  const reel = await strangerService.createStrangerReel(req.user.id, req.body, req);
   res.status(201).json(new ApiResponse(201, reel, 'Reel uploaded successfully'));
 });
 

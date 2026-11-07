@@ -9,6 +9,7 @@ import {
   createStrangerReelSchema,
 } from './stranger.validation.js';
 import * as strangerController from './stranger.controller.js';
+import uploadRoutes from '../upload/upload.routes.js';
 
 const router = Router();
 
@@ -46,6 +47,7 @@ router.post('/plans/:id/opt-in', optionalAuthenticate, strangerController.joinPl
 router.post('/plans/:id/leave', optionalAuthenticate, strangerController.leavePlan);
 
 // --- 4. STRANGER REELS ---
+router.post('/reels/upload', uploadRoutes);
 router.get('/reels', optionalAuthenticate, strangerController.getReels);
 router.post('/reels', authenticate, validate(createStrangerReelSchema), strangerController.createReel);
 router.post('/reels/:id/like', authenticate, strangerController.likeReel);

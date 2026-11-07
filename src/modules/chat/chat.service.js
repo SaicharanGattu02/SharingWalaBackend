@@ -571,7 +571,7 @@ export const getUserConversations = async (userId, typeFilter = null, search = n
             type: 'COMMUNITY_GROUP',
             communityId: m.community.id,
             title: m.community.name,
-            lastMessageAt: new Date(),
+            lastMessageAt: m.community.createdAt || new Date(0),
           },
         });
       }
@@ -728,7 +728,10 @@ export const getUserConversations = async (userId, typeFilter = null, search = n
 
       const lastMsg = conv.messages[0] || null;
       let formattedLastMessage = null;
+      let effectiveTime = null;
+
       if (lastMsg) {
+        effectiveTime = lastMsg.createdAt;
         formattedLastMessage = {
           id: lastMsg.id,
           conversationId: conv.id,
@@ -739,6 +742,8 @@ export const getUserConversations = async (userId, typeFilter = null, search = n
           sender: lastMsg.sender,
           isMe: lastMsg.senderId === userId,
         };
+      } else {
+        effectiveTime = conv.createdAt || new Date(0);
       }
 
       return {
@@ -757,7 +762,7 @@ export const getUserConversations = async (userId, typeFilter = null, search = n
         lastMessage: formattedLastMessage,
         unreadCount,
         isArchived: conv.isArchived,
-        lastMessageAt: conv.lastMessageAt,
+        lastMessageAt: effectiveTime ? new Date(effectiveTime).toISOString() : new Date(0).toISOString(),
       };
     })
   );

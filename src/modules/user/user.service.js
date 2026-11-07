@@ -4,6 +4,7 @@ import { prisma, withDbTimeout } from '../../config/db.js';
 import { ApiError } from '../../utils/apiError.js';
 import { getIO } from '../../config/socket.js';
 import { sendRideNotificationPush } from '../../config/firebase.js';
+import { toAbsoluteUrl, getServerBaseUrl } from '../../utils/urlHelper.js';
 
 const defaultMockRides = [
   {
@@ -158,10 +159,8 @@ const formatUserProfile = (user) => {
       formattedAvatar.includes('com.sharing.wala/cache')
     ) {
       formattedAvatar = 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80';
-    } else if (formattedAvatar.startsWith('/uploads/') || formattedAvatar.startsWith('uploads/')) {
-      const cleanPath = formattedAvatar.startsWith('/') ? formattedAvatar : `/${formattedAvatar}`;
-      const base = process.env.BASE_URL || 'https://api.sharingwala.com';
-      formattedAvatar = `${base.replace(/\/api\/v1\/?$/, '')}${cleanPath}`;
+    } else {
+      formattedAvatar = toAbsoluteUrl(formattedAvatar);
     }
   } else {
     formattedAvatar = 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80';

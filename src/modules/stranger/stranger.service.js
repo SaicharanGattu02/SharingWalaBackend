@@ -5,6 +5,7 @@ import { prisma } from '../../config/db.js';
 import { ApiError } from '../../utils/apiError.js';
 import { getIO } from '../../config/socket.js';
 import { sendRideNotificationPush } from '../../config/firebase.js';
+import { toAbsoluteVideoUrl, toAbsoluteUrl } from '../../utils/urlHelper.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -528,11 +529,17 @@ const loadStore = () => {
       if (Array.isArray(data.strangerMeetups)) strangerMeetups = data.strangerMeetups;
       if (Array.isArray(data.strangerPlans)) strangerPlans = data.strangerPlans;
       if (Array.isArray(data.strangerReels) && data.strangerReels.length > 0) {
-        strangerReels = data.strangerReels.map((r) => ({
+        const sampleTravelVideos = [
+          'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
+          'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4',
+          'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4',
+          'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyBlazes.mp4',
+        ];
+        strangerReels = data.strangerReels.map((r, idx) => ({
           ...r,
-          videoUrl: (r.videoUrl && r.videoUrl.trim().length > 0)
+          videoUrl: (r.videoUrl && r.videoUrl.trim().length > 0 && !r.videoUrl.includes('oceans.mp4'))
             ? r.videoUrl
-            : 'https://vjs.zencdn.net/v/oceans.mp4',
+            : sampleTravelVideos[idx % sampleTravelVideos.length],
           thumbnailUrl: (r.thumbnailUrl && r.thumbnailUrl.trim().length > 0)
             ? r.thumbnailUrl
             : 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=800&q=80',
@@ -2382,8 +2389,8 @@ export const leaveStrangerPlan = async (userId, planId) => {
 };
 
 // --- 4. STRANGER REELS ---
-export const getStrangerReels = async (userId = null) => {
-  return strangerReels.map((r) => {
+export const getStrangerReels = async (userId = null, req = null) => {
+  return strangerReels.map((r, idx) => {
     const linkedTrip = strangerTrips.find((t) => t.id === r.tripId) || strangerTrips[0];
     const isLiked = Array.isArray(r.likedUserIds) && userId
       ? r.likedUserIds.includes(userId)
@@ -2391,8 +2398,16 @@ export const getStrangerReels = async (userId = null) => {
     const isOwner = Boolean(
       userId && (r.userId === userId || r.hostId === userId)
     );
+
+    const absoluteVideoUrl = toAbsoluteVideoUrl(r.videoUrl, r.vibe, r.id || idx, req);
+    const absoluteThumbnail = toAbsoluteUrl(r.thumbnailUrl, req) || 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=800&q=80';
+    const absoluteAvatar = toAbsoluteUrl(r.hostAvatar, req);
+
     return {
       ...r,
+      videoUrl: absoluteVideoUrl,
+      thumbnailUrl: absoluteThumbnail,
+      hostAvatar: absoluteAvatar || r.hostAvatar,
       isLiked,
       isOwner,
       isHost: isOwner,
@@ -2402,24 +2417,25 @@ export const getStrangerReels = async (userId = null) => {
   });
 };
 
-export const createStrangerReel = async (userId, data) => {
+export const createStrangerReel = async (userId, data, req = null) => {
   const user = userId ? await prisma.user.findUnique({ where: { id: userId } }).catch(() => null) : null;
   const linkedTrip = strangerTrips.find((t) => t.id === data.tripId) || strangerTrips[0];
 
+  const newReelId = `reel_${Date.now()}`;
+  const absoluteVideoUrl = toAbsoluteVideoUrl(data.videoUrl, data.vibe, newReelId, req);
+  const absoluteThumbnail = toAbsoluteUrl(data.thumbnailUrl, req) || 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=800&q=80';
+  const absoluteAvatar = toAbsoluteUrl(data.userAvatar || user?.avatarUrl, req) || 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&w=400&q=80';
+
   const newReel = {
-    id: `reel_${Date.now()}`,
+    id: newReelId,
     userId: userId,
     hostId: userId,
     hostName: data.userName || user?.displayName || 'SharingWala Creator',
-    hostAvatar: data.userAvatar || user?.avatarUrl || 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&w=400&q=80',
+    hostAvatar: absoluteAvatar,
     isVerified: user?.isVerified ?? true,
     route: data.route,
-    thumbnailUrl: (data.thumbnailUrl && data.thumbnailUrl.trim().length > 0)
-      ? data.thumbnailUrl.trim()
-      : 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=800&q=80',
-    videoUrl: (data.videoUrl && data.videoUrl.trim().length > 0)
-      ? data.videoUrl.trim()
-      : 'https://vjs.zencdn.net/v/oceans.mp4',
+    thumbnailUrl: absoluteThumbnail,
+    videoUrl: absoluteVideoUrl,
     vibe: data.vibe || 'weekendGetaway',
     caption: data.caption,
     audioTrack: data.audioTrack || 'Original Sound',

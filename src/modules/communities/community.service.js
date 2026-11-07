@@ -25,7 +25,7 @@ export const createCommunity = async (userId, data) => {
         type: 'COMMUNITY_GROUP',
         communityId: community.id,
         title: community.name,
-        lastMessageAt: new Date(),
+        lastMessageAt: community.createdAt || new Date(0),
         participants: {
           create: [{ userId }],
         },
@@ -85,7 +85,7 @@ export const joinCommunity = async (userId, communityId) => {
           type: 'COMMUNITY_GROUP',
           communityId,
           title: community.name,
-          lastMessageAt: new Date(),
+          lastMessageAt: community.createdAt || new Date(0),
         },
       });
     }
