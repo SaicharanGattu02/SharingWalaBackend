@@ -238,14 +238,34 @@ export const createNotification = async ({
 /**
  * Fetch Notifications for Authenticated User / Rider
  */
-export const getUserNotifications = async (userId, { category, role, unreadOnly, page = 1, limit = 40 } = {}) => {
+export const getUserNotifications = async (userId, { category, type, role, unreadOnly, page = 1, limit = 40 } = {}) => {
   const isUnreadOnly = unreadOnly === 'true' || unreadOnly === true;
+  const filterType = (type || category || '').trim();
+
+  // Category to Enum NotificationType mapping
+  const categoryTypeMap = {
+    rides: ['RIDE_REMINDER', 'RIDE_CANCELLED', 'TRIP_CANCELLED'],
+    bookings: ['BOOKING_REQUEST', 'TRIP_JOIN_REQUEST', 'BOOKING_ACCEPTED', 'TRIP_JOIN_ACCEPTED', 'BOOKING_REJECTED', 'TRIP_JOIN_REJECTED'],
+    messages: ['CHAT_MESSAGE'],
+    safety: ['VERIFICATION_UPDATE', 'COMMUNITY_ALERT', 'RATING_REQUEST'],
+  };
+
+  let typeFilter = null;
+  if (filterType && filterType.toLowerCase() !== 'all') {
+    const lower = filterType.toLowerCase();
+    if (categoryTypeMap[lower]) {
+      typeFilter = { in: categoryTypeMap[lower] };
+    } else {
+      typeFilter = filterType.toUpperCase();
+    }
+  }
 
   const dbResult = await withDbTimeout(
     async () => {
       const where = {
         userId,
         ...(isUnreadOnly ? { readAt: null } : {}),
+        ...(typeFilter ? { type: typeFilter } : {}),
       };
 
       const [notifications, totalCount, unreadCount] = await Promise.all([
@@ -264,6 +284,13 @@ export const getUserNotifications = async (userId, { category, role, unreadOnly,
     () => {
       let filtered = inMemoryNotifications.filter((n) => n.userId === userId);
       if (isUnreadOnly) filtered = filtered.filter((n) => !n.readAt);
+      if (typeFilter) {
+        if (typeFilter.in) {
+          filtered = filtered.filter((n) => typeFilter.in.includes(n.type));
+        } else {
+          filtered = filtered.filter((n) => n.type === typeFilter);
+        }
+      }
 
       const unreadCount = inMemoryNotifications.filter((n) => n.userId === userId && !n.readAt).length;
       return {
@@ -276,9 +303,13 @@ export const getUserNotifications = async (userId, { category, role, unreadOnly,
 
   let formatted = dbResult.notifications.map(mapNotificationMetadata);
 
-  // Optional category filter
-  if (category && category.toLowerCase() !== 'all') {
-    formatted = formatted.filter((n) => n.category.toLowerCase() === category.toLowerCase());
+  // Filter verification in memory
+  if (filterType && filterType.toLowerCase() !== 'all') {
+    formatted = formatted.filter(
+      (n) =>
+        n.category.toLowerCase() === filterType.toLowerCase() ||
+        n.type.toLowerCase() === filterType.toLowerCase()
+    );
   }
 
   return {

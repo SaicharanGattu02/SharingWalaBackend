@@ -5,10 +5,11 @@ import * as notificationService from './notification.service.js';
 
 export const getNotifications = asyncHandler(async (req, res) => {
   const userId = req.user.id;
-  const { category, role, unreadOnly, page, limit } = req.query;
+  const { category, type, role, unreadOnly, page, limit } = req.query;
 
   const result = await notificationService.getUserNotifications(userId, {
-    category,
+    category: type || category,
+    type: type || category,
     role,
     unreadOnly,
     page: page ? parseInt(page, 10) : 1,
