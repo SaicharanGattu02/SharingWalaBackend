@@ -15,12 +15,17 @@ export const getNetworkIp = () => {
 
 export const getServerBaseUrl = (req = null) => {
   if (process.env.BASE_URL && process.env.BASE_URL.trim().length > 0) {
-    return process.env.BASE_URL.replace(/\/api\/v1\/?$/, '').replace(/\/+$/, '');
+    const raw = process.env.BASE_URL.replace(/\/api\/v1\/?$/, '').replace(/\/+$/, '');
+    if (raw.includes('sharingwala.com') && raw.startsWith('http://')) {
+      return raw.replace('http://', 'https://');
+    }
+    return raw;
   }
   if (req && typeof req.get === 'function') {
     const host = req.get('host');
     if (host) {
-      const protocol = req.protocol || 'http';
+      const isDomain = !host.includes('localhost') && !host.includes('127.0.0.1') && !host.startsWith('192.168.') && !host.startsWith('10.') && !host.startsWith('172.');
+      const protocol = isDomain || req.get('x-forwarded-proto') === 'https' ? 'https' : (req.protocol || 'http');
       return `${protocol}://${host}`;
     }
   }
@@ -86,6 +91,17 @@ export const toAbsoluteVideoUrl = (videoUrl, vibe = '', seed = '', req = null) =
     if (clean.includes('oceans.mp4')) {
       const hash = String(seed || clean).split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
       return dynamicTravelVideos[hash % dynamicTravelVideos.length];
+    }
+    // Upgrade remote domain from http to https to avoid Android cleartext block & 301 redirects
+    if (
+      clean.startsWith('http://') &&
+      !clean.startsWith('http://localhost') &&
+      !clean.startsWith('http://127.0.0.1') &&
+      !clean.startsWith('http://192.168.') &&
+      !clean.startsWith('http://10.') &&
+      !clean.startsWith('http://172.')
+    ) {
+      return clean.replace('http://', 'https://');
     }
     return clean;
   }

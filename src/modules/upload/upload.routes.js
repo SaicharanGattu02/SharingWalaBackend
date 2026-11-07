@@ -45,7 +45,8 @@ const handleUpload = asyncHandler(async (req, res) => {
   const relativePath = `/uploads/${folder}/${file.filename}`;
 
   const host = req.get('host') || '172.20.10.2:5000';
-  const protocol = req.protocol || 'http';
+  const isDomain = !host.includes('localhost') && !host.includes('127.0.0.1') && !host.startsWith('192.168.') && !host.startsWith('10.') && !host.startsWith('172.');
+  const protocol = isDomain || req.get('x-forwarded-proto') === 'https' ? 'https' : (req.protocol || 'http');
   const fullUrl = `${protocol}://${host}${relativePath}`;
 
   res.status(200).json(

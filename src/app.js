@@ -11,6 +11,9 @@ import { ApiResponse } from './utils/apiResponse.js';
 
 const app = express();
 
+// Trust reverse proxy (Nginx, AWS, Cloudflare) for correct HTTPS detection
+app.set('trust proxy', 1);
+
 // Security Middlewares
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 app.use(
