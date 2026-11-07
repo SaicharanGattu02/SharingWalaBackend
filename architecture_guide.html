@@ -1,0 +1,758 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>SHARE2GO — System Architecture & Folder Structure Guide</title>
+  <style>
+    @page {
+      size: A4;
+      margin: 14mm 14mm 14mm 14mm;
+      @bottom-right {
+        content: counter(page);
+      }
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      color: #1e293b;
+      background-color: #ffffff;
+      line-height: 1.5;
+      font-size: 11pt;
+    }
+
+    .page {
+      page-break-after: always;
+      position: relative;
+    }
+
+    .page:last-child {
+      page-break-after: auto;
+    }
+
+    /* Cover Header */
+    .cover {
+      padding: 30px 0 20px 0;
+      border-bottom: 2px solid #e2e8f0;
+      margin-bottom: 25px;
+    }
+
+    .badge-bar {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 8pt;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .badge-primary { background: #e0f2fe; color: #0369a1; }
+    .badge-green { background: #dcfce7; color: #15803d; }
+    .badge-purple { background: #f3e8ff; color: #7e22ce; }
+    .badge-amber { background: #fef3c7; color: #b45309; }
+
+    h1 {
+      font-size: 24pt;
+      font-weight: 800;
+      color: #0f172a;
+      letter-spacing: -0.5px;
+      margin-bottom: 6px;
+    }
+
+    .subtitle {
+      font-size: 12pt;
+      color: #64748b;
+      margin-bottom: 14px;
+    }
+
+    .meta-box {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 9pt;
+    }
+
+    .meta-item strong {
+      display: block;
+      color: #475569;
+      font-size: 8pt;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }
+
+    .meta-item span {
+      color: #0f172a;
+      font-weight: 600;
+    }
+
+    /* Section Headings */
+    h2 {
+      font-size: 15pt;
+      font-weight: 700;
+      color: #0f172a;
+      border-left: 4px solid #2563eb;
+      padding-left: 10px;
+      margin: 22px 0 12px 0;
+      letter-spacing: -0.3px;
+    }
+
+    h3 {
+      font-size: 12pt;
+      font-weight: 700;
+      color: #1e293b;
+      margin: 16px 0 8px 0;
+    }
+
+    p {
+      margin-bottom: 10px;
+      color: #334155;
+      font-size: 10pt;
+    }
+
+    /* Diagram Styles */
+    .diagram-container {
+      background: #f8fafc;
+      border: 1px solid #cbd5e1;
+      border-radius: 10px;
+      padding: 14px;
+      margin: 14px 0;
+      text-align: center;
+    }
+
+    /* Tree View */
+    .tree {
+      font-family: "Consolas", "Courier New", monospace;
+      font-size: 9pt;
+      background: #0f172a;
+      color: #e2e8f0;
+      padding: 14px 18px;
+      border-radius: 8px;
+      margin: 12px 0;
+      line-height: 1.5;
+      overflow-x: auto;
+    }
+
+    .tree .dir { color: #38bdf8; font-weight: bold; }
+    .tree .file { color: #f1f5f9; }
+    .tree .comment { color: #94a3b8; font-style: italic; }
+    .tree .highlight { color: #4ade80; font-weight: bold; }
+
+    /* Tables */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 12px 0;
+      font-size: 9pt;
+    }
+
+    th, td {
+      padding: 8px 10px;
+      text-align: left;
+      border-bottom: 1px solid #e2e8f0;
+    }
+
+    th {
+      background: #f1f5f9;
+      color: #334155;
+      font-weight: 700;
+      border-top: 1px solid #cbd5e1;
+      border-bottom: 2px solid #cbd5e1;
+      text-transform: uppercase;
+      font-size: 8pt;
+      letter-spacing: 0.5px;
+    }
+
+    tr:nth-child(even) td {
+      background: #f8fafc;
+    }
+
+    code {
+      font-family: "Consolas", monospace;
+      font-size: 8.5pt;
+      background: #e2e8f0;
+      padding: 2px 5px;
+      border-radius: 4px;
+      color: #0f172a;
+    }
+
+    /* Cards */
+    .card-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+      margin: 14px 0;
+    }
+
+    .card {
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 12px 14px;
+      border-left: 4px solid #3b82f6;
+    }
+
+    .card-admin { border-left-color: #8b5cf6; }
+    .card-user { border-left-color: #0ea5e9; }
+    .card-rider { border-left-color: #10b981; }
+    .card-common { border-left-color: #f59e0b; }
+
+    .card-title {
+      font-weight: 700;
+      font-size: 10.5pt;
+      color: #0f172a;
+      margin-bottom: 4px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .card-desc {
+      font-size: 9pt;
+      color: #64748b;
+      margin-bottom: 8px;
+    }
+
+    .endpoint-pill {
+      display: inline-block;
+      background: #f1f5f9;
+      color: #334155;
+      padding: 2px 7px;
+      border-radius: 4px;
+      font-family: monospace;
+      font-size: 8pt;
+      margin: 2px 2px;
+      border: 1px solid #e2e8f0;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ========================================================================= -->
+  <!-- PAGE 1: COVER & EXECUTIVE SUMMARY                                         -->
+  <!-- ========================================================================= -->
+  <div class="page">
+    <div class="cover">
+      <div class="badge-bar">
+        <span class="badge badge-primary">Node.js ES Modules</span>
+        <span class="badge badge-green">Clean Architecture</span>
+        <span class="badge badge-purple">Modular Monolith</span>
+        <span class="badge badge-amber">Prisma 6 + MySQL</span>
+      </div>
+      <h1>SHARE2GO Backend Architecture</h1>
+      <div class="subtitle">Complete Folder Structure, Domain Separation, and Technical Specification Guide</div>
+      
+      <div class="meta-box">
+        <div class="meta-item">
+          <strong>Application</strong>
+          <span>SHARE2GO API</span>
+        </div>
+        <div class="meta-item">
+          <strong>Base URL</strong>
+          <span>/api/v1</span>
+        </div>
+        <div class="meta-item">
+          <strong>Protocol</strong>
+          <span>HTTP/REST + WSS (Socket.io)</span>
+        </div>
+        <div class="meta-item">
+          <strong>Target Platforms</strong>
+          <span>Mobile App + Web Admin</span>
+        </div>
+      </div>
+    </div>
+
+    <h2>1. Executive Summary & Architecture Philosophy</h2>
+    <p>
+      The <strong>SHARE2GO</strong> backend powers both the <strong>SHARE2GO Mobile App</strong> (for passengers and drivers) and the <strong>SHARE2GO Admin Portal</strong> (for platform operators).
+    </p>
+    <p>
+      It is designed as a <strong>Modular Monolith</strong> under <strong>Clean Architecture</strong> principles. This ensures:
+    </p>
+    <div class="card-grid">
+      <div class="card card-admin">
+        <div class="card-title">🛡️ 1. Platform Administration Domain</div>
+        <div class="card-desc">Complete administrative oversight: user management, KYC approvals, ride cancellations, SOS incident center, dynamic pricing, and system audits.</div>
+        <div><span class="endpoint-pill">/api/v1/admin/*</span> <span class="endpoint-pill">/api/v1/admin/sos/*</span></div>
+      </div>
+
+      <div class="card card-user">
+        <div class="card-title">👤 2. User Side (Passenger Persona)</div>
+        <div class="card-desc">Commuter experience: ride search with origin/destination filters, seat booking, booking history, ratings, trusted contacts, and stranger meetups.</div>
+        <div><span class="endpoint-pill">/api/v1/user/*</span> <span class="endpoint-pill">/api/v1/stranger/*</span></div>
+      </div>
+
+      <div class="card card-rider">
+        <div class="card-title">🚗 3. Rider Side (Driver / Host Persona)</div>
+        <div class="card-desc">Vehicle owner experience: driver verification KYC, vehicle fleet, ride offering, passenger booking management (accept/reject), and trip controls.</div>
+        <div><span class="endpoint-pill">/api/v1/rider/*</span></div>
+      </div>
+
+      <div class="card card-common">
+        <div class="card-title">🛠️ 4. Centralized Common Services</div>
+        <div class="card-desc">Shared cross-cutting platform engines: Phone OTP authentication, real-time chat, universal uploads, emergency SOS, and commute communities.</div>
+        <div><span class="endpoint-pill">/api/v1/auth</span> <span class="endpoint-pill">/api/v1/chat</span> <span class="endpoint-pill">/api/v1/upload</span></div>
+      </div>
+    </div>
+
+    <h2>2. Visual System Architecture Diagram</h2>
+    <div class="diagram-container">
+      <svg width="680" height="260" viewBox="0 0 680 260" xmlns="http://www.w3.org/2000/svg" style="max-width:100%; height:auto;">
+        <!-- Clients -->
+        <rect x="20" y="20" width="160" height="50" rx="8" fill="#ede9fe" stroke="#8b5cf6" stroke-width="2"/>
+        <text x="100" y="42" font-family="sans-serif" font-size="11" font-weight="bold" fill="#6d28d9" text-anchor="middle">🛡️ Admin Web Panel</text>
+        <text x="100" y="58" font-family="sans-serif" font-size="9" fill="#7c3aed" text-anchor="middle">(sharingwalaadmin)</text>
+
+        <rect x="20" y="110" width="160" height="50" rx="8" fill="#e0f2fe" stroke="#0284c7" stroke-width="2"/>
+        <text x="100" y="132" font-family="sans-serif" font-size="11" font-weight="bold" fill="#0369a1" text-anchor="middle">👤 App: User Side</text>
+        <text x="100" y="148" font-family="sans-serif" font-size="9" fill="#0284c7" text-anchor="middle">(Passenger / Commuter)</text>
+
+        <rect x="20" y="190" width="160" height="50" rx="8" fill="#dcfce7" stroke="#16a34a" stroke-width="2"/>
+        <text x="100" y="212" font-family="sans-serif" font-size="11" font-weight="bold" fill="#15803d" text-anchor="middle">🚗 App: Rider Side</text>
+        <text x="100" y="228" font-family="sans-serif" font-size="9" fill="#16a34a" text-anchor="middle">(Driver / Ride Host)</text>
+
+        <!-- Gateway -->
+        <rect x="240" y="20" width="190" height="220" rx="10" fill="#f8fafc" stroke="#334155" stroke-width="2" stroke-dasharray="4 4"/>
+        <text x="335" y="40" font-family="sans-serif" font-size="11" font-weight="bold" fill="#0f172a" text-anchor="middle">Central API Gateway</text>
+        <text x="335" y="55" font-family="sans-serif" font-size="9" fill="#64748b" text-anchor="middle">(src/routes/index.js)</text>
+
+        <rect x="255" y="70" width="160" height="35" rx="6" fill="#8b5cf6" />
+        <text x="335" y="92" font-family="sans-serif" font-size="10" font-weight="bold" fill="#ffffff" text-anchor="middle">admin.routes.js</text>
+
+        <rect x="255" y="120" width="160" height="35" rx="6" fill="#0284c7" />
+        <text x="335" y="142" font-family="sans-serif" font-size="10" font-weight="bold" fill="#ffffff" text-anchor="middle">app.routes.js</text>
+
+        <rect x="255" y="170" width="160" height="35" rx="6" fill="#f59e0b" />
+        <text x="335" y="192" font-family="sans-serif" font-size="10" font-weight="bold" fill="#ffffff" text-anchor="middle">common.routes.js</text>
+
+        <!-- Database Layer -->
+        <rect x="490" y="65" width="170" height="60" rx="8" fill="#eff6ff" stroke="#2563eb" stroke-width="2"/>
+        <text x="575" y="90" font-family="sans-serif" font-size="11" font-weight="bold" fill="#1d4ed8" text-anchor="middle">🔷 Prisma Client</text>
+        <text x="575" y="106" font-family="sans-serif" font-size="9" fill="#3b82f6" text-anchor="middle">Singleton (src/config/db.js)</text>
+
+        <rect x="490" y="150" width="170" height="55" rx="8" fill="#fef2f2" stroke="#dc2626" stroke-width="2"/>
+        <text x="575" y="174" font-family="sans-serif" font-size="11" font-weight="bold" fill="#b91c1c" text-anchor="middle">🐬 MySQL Database</text>
+        <text x="575" y="190" font-family="sans-serif" font-size="9" fill="#ef4444" text-anchor="middle">Users, Rides, Bookings, SOS</text>
+
+        <!-- Connecting Lines -->
+        <path d="M180 45 L255 87" stroke="#8b5cf6" stroke-width="2" marker-end="url(#arrow)" fill="none"/>
+        <path d="M180 135 L255 137" stroke="#0284c7" stroke-width="2" fill="none"/>
+        <path d="M180 215 L255 145" stroke="#16a34a" stroke-width="2" fill="none"/>
+
+        <path d="M415 87 L490 90" stroke="#334155" stroke-width="2" fill="none"/>
+        <path d="M415 137 L490 95" stroke="#334155" stroke-width="2" fill="none"/>
+        <path d="M415 187 L490 100" stroke="#334155" stroke-width="2" fill="none"/>
+
+        <path d="M575 125 L575 150" stroke="#2563eb" stroke-width="2" fill="none"/>
+      </svg>
+    </div>
+  </div>
+
+  <!-- ========================================================================= -->
+  <!-- PAGE 2: COMPLETE DIRECTORY & FILE HIERARCHY                              -->
+  <!-- ========================================================================= -->
+  <div class="page">
+    <h2>3. Complete Folder & File Tree</h2>
+    <p>Every file has a dedicated, single responsibility following Clean Architecture:</p>
+
+    <div class="tree">
+<span class="dir">D:\node_projects\SHARE2GO\</span>
+├── <span class="dir">client-api/</span>                     <span class="comment"># 🎯 Reusable JavaScript Client SDK</span>
+│   ├── <span class="dir">modules/</span>
+│   │   ├── <span class="highlight">admin.api.js</span>            <span class="comment"># 🛡️ Admin Portal methods (Stats, KYC, Rides, SOS)</span>
+│   │   ├── <span class="highlight">user.api.js</span>             <span class="comment"># 👤 Passenger methods (Search, Book, History, Ratings)</span>
+│   │   ├── <span class="highlight">rider.api.js</span>            <span class="comment"># 🚗 Driver methods (Offer, Vehicles, Passenger requests)</span>
+│   │   ├── <span class="file">stranger.api.js</span>         <span class="comment"># 🌟 Stranger Mode (Co-travel, Meetups, Reels)</span>
+│   │   ├── <span class="file">auth.api.js</span>             <span class="comment"># 🔐 OTP, JWT, Session methods</span>
+│   │   └── <span class="file">chat.api.js</span>             <span class="comment"># 💬 Socket.io & 1-on-1 chat methods</span>
+│   ├── <span class="file">config.js</span>                   <span class="comment"># Base URLs & Token Storage handlers</span>
+│   ├── <span class="file">httpClient.js</span>               <span class="comment"># Axios instance with auto-auth interceptors</span>
+│   └── <span class="highlight">index.js</span>                    <span class="comment"># Barrel export: api.admin, api.app, api.common</span>
+│
+├── <span class="dir">prisma/</span>
+│   ├── <span class="highlight">schema.prisma</span>               <span class="comment"># Single source of truth for Models & Relations</span>
+│   └── <span class="dir">migrations/</span>                 <span class="comment"># Versioned SQL migration history</span>
+│
+├── <span class="dir">src/</span>
+│   ├── <span class="file">app.js</span>                      <span class="comment"># Express middleware pipeline (cors, helmet, parsers)</span>
+│   ├── <span class="file">server.js</span>                   <span class="comment"># Server bootstrap, Socket.io init, auto-migrate</span>
+│   │
+│   ├── <span class="dir">config/</span>                     <span class="comment"># Singletons & Infrastructure</span>
+│   │   ├── <span class="highlight">db.js</span>                   <span class="comment"># Prisma Client Singleton (prevents pool leaks)</span>
+│   │   ├── <span class="file">env.js</span>                  <span class="comment"># Validated environment variables</span>
+│   │   ├── <span class="file">socket.js</span>               <span class="comment"># Socket.io instance & room handlers</span>
+│   │   └── <span class="file">firebase.js</span>             <span class="comment"># FCM push notifications (calls & chat alerts)</span>
+│   │
+│   ├── <span class="dir">middlewares/</span>                <span class="comment"># Cross-cutting Request Interceptors</span>
+│   │   ├── <span class="file">auth.middleware.js</span>      <span class="comment"># Mobile User/Driver JWT validator</span>
+│   │   ├── <span class="file">adminAuth.middleware.js</span> <span class="comment"># Staff RBAC permission validator</span>
+│   │   ├── <span class="file">validate.middleware.js</span>  <span class="comment"># Zod schema runner for body/params/query</span>
+│   │   └── <span class="file">error.middleware.js</span>     <span class="comment"># Central ApiError catcher & response formatter</span>
+│   │
+│   ├── <span class="dir">routes/</span>                     <span class="comment"># 🌐 Clean Semantic Route Gateways</span>
+│   │   ├── <span class="highlight">index.js</span>                <span class="comment"># Master API Gateway mounted at /api/v1</span>
+│   │   ├── <span class="highlight">admin.routes.js</span>         <span class="comment"># 🛡️ Platform Administration (/api/v1/admin/*)</span>
+│   │   ├── <span class="highlight">app.routes.js</span>           <span class="comment"># 📱 Mobile App (User side & Rider side)</span>
+│   │   └── <span class="highlight">common.routes.js</span>        <span class="comment"># 🛠️ Centralized Reusable Common Services</span>
+│   │
+│   ├── <span class="dir">modules/</span>                    <span class="comment"># 📦 Feature-Based Modules (Clean Architecture)</span>
+│   │   ├── <span class="dir">admin/</span>                  <span class="comment"># Staff auth, KPIs, user management, KYC approvals</span>
+│   │   ├── <span class="dir">user/</span>                   <span class="comment"># Passenger profile, ride search, booking, ratings</span>
+│   │   ├── <span class="dir">rider/</span>                  <span class="comment"># Driver verification, vehicles, ride publish, trip lifecycle</span>
+│   │   ├── <span class="dir">stranger/</span>               <span class="comment"># Social co-travel trips, meetups, video reels</span>
+│   │   ├── <span class="dir">auth/</span>                   <span class="comment"># Phone OTP, access/refresh token rotation</span>
+│   │   ├── <span class="dir">chat/</span>                   <span class="comment"># Real-time messages, WebRTC call signaling</span>
+│   │   ├── <span class="dir">sos/</span>                    <span class="comment"># Emergency SOS trigger & admin incident center</span>
+│   │   ├── <span class="dir">communities/</span>            <span class="comment"># Verified corporate & university commute circles</span>
+│   │   ├── <span class="dir">upload/</span>                 <span class="comment"># Universal media upload (avatars, KYC, reels)</span>
+│   │   ├── <span class="dir">support/</span>                <span class="comment"># Customer support tickets & FAQs</span>
+│   │   ├── <span class="dir">common/</span>                 <span class="comment"># Dynamic home carousel banners & app config</span>
+│   │   └── <span class="dir">health/</span>                 <span class="comment"># Uptime, memory, and MySQL latency check</span>
+│   │
+│   └── <span class="dir">utils/</span>                      <span class="comment"># Shared Architectural Protocols</span>
+│       ├── <span class="file">apiError.js</span>             <span class="comment"># Controlled HTTP error class</span>
+│       ├── <span class="file">apiResponse.js</span>          <span class="comment"># Standardized JSON response envelope</span>
+│       ├── <span class="file">asyncHandler.js</span>         <span class="comment"># Controller try/catch abstraction</span>
+│       └── <span class="file">urlHelper.js</span>            <span class="comment"># Universal absolute media URL resolver</span>
+└── <span class="highlight">ARCHITECTURE.md</span>               <span class="comment"># Markdown documentation specification</span>
+    </div>
+
+    <h2>4. Clean Architecture Inside Each Module</h2>
+    <p>Every feature module in <code>src/modules/&lt;feature&gt;/</code> contains strictly 4 files:</p>
+    <table>
+      <thead>
+        <tr>
+          <th>Layer File</th>
+          <th>Responsibility</th>
+          <th>Rule</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>*.routes.js</code></td>
+          <td>HTTP endpoint definitions, middleware attachment</td>
+          <td>No business logic; delegates directly to controller</td>
+        </tr>
+        <tr>
+          <td><code>*.controller.js</code></td>
+          <td>Extracts params/body, calls service, returns <code>ApiResponse</code></td>
+          <td>Always wrapped inside <code>asyncHandler</code></td>
+        </tr>
+        <tr>
+          <td><code>*.service.js</code></td>
+          <td>Pure business logic, validation checks, database queries</td>
+          <td>Only layer that talks to <code>prisma</code> singleton</td>
+        </tr>
+        <tr>
+          <td><code>*.validation.js</code></td>
+          <td>Zod input schemas for query, params, and body</td>
+          <td>Executed by <code>validate(schema)</code> middleware</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ========================================================================= -->
+  <!-- PAGE 3: DOMAIN SPECIFICATION & ENDPOINTS                                 -->
+  <!-- ========================================================================= -->
+  <div class="page">
+    <h2>5. Detailed Domain & Route Specification</h2>
+
+    <h3>🛡️ Domain 1: Platform Administration (<code>src/routes/admin.routes.js</code>)</h3>
+    <p>Exclusively mounted for the Web Admin Portal (<code>sharingwalaadmin</code>):</p>
+    <table>
+      <thead>
+        <tr>
+          <th>Endpoint</th>
+          <th>HTTP Method</th>
+          <th>Purpose &amp; Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>/api/v1/admin/auth/login</code></td>
+          <td><code>POST</code></td>
+          <td>Staff login with email/password, issues Admin JWT</td>
+        </tr>
+        <tr>
+          <td><code>/api/v1/admin/dashboard/stats</code></td>
+          <td><code>GET</code></td>
+          <td>Platform-wide KPI numbers: active users, rides, revenue</td>
+        </tr>
+        <tr>
+          <td><code>/api/v1/admin/users</code></td>
+          <td><code>GET / PATCH</code></td>
+          <td>Paginated commuter directory, deep search, account suspension</td>
+        </tr>
+        <tr>
+          <td><code>/api/v1/admin/drivers/:id/verify</code></td>
+          <td><code>PATCH</code></td>
+          <td>Approve or reject driver KYC and Driving License documents</td>
+        </tr>
+        <tr>
+          <td><code>/api/v1/admin/vehicles/:id/verify</code></td>
+          <td><code>PATCH</code></td>
+          <td>Approve or reject vehicle RC and Insurance papers</td>
+        </tr>
+        <tr>
+          <td><code>/api/v1/admin/rides/:id/cancel</code></td>
+          <td><code>POST</code></td>
+          <td>Emergency administrative cancellation of active or scheduled ride</td>
+        </tr>
+        <tr>
+          <td><code>/api/v1/admin/sos/incidents</code></td>
+          <td><code>GET / PATCH</code></td>
+          <td>Real-time emergency incident triage and resolution desk</td>
+        </tr>
+        <tr>
+          <td><code>/api/v1/admin/pricing-rules</code></td>
+          <td><code>GET / POST</code></td>
+          <td>Configure per-km rate caps, platform commissions, and fare guardrails</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>📱 Domain 2: Mobile App — User Side (Passenger Persona)</h3>
+    <p>Passenger &amp; Commuter screens inside the mobile Flutter app (<code>share2go</code>):</p>
+    <table>
+      <thead>
+        <tr>
+          <th>Endpoint</th>
+          <th>HTTP Method</th>
+          <th>Flutter Screen &amp; Purpose</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>/api/v1/user/rides/search</code></td>
+          <td><code>GET</code></td>
+          <td><code>SearchRidesScreen</code>: Filter by origin, destination, date, mode</td>
+        </tr>
+        <tr>
+          <td><code>/api/v1/user/rides/:id/request-seat</code></td>
+          <td><code>POST</code></td>
+          <td><code>RideDetailsScreen</code>: Book seat, specify pickup note</td>
+        </tr>
+        <tr>
+          <td><code>/api/v1/user/my-rides</code></td>
+          <td><code>GET</code></td>
+          <td><code>MyRidesScreen</code>: Passenger booking history and active trip tracking</td>
+        </tr>
+        <tr>
+          <td><code>/api/v1/user/rides/:id/feedback</code></td>
+          <td><code>POST</code></td>
+          <td>Post-ride review: 1-5 star rating and comment for driver</td>
+        </tr>
+        <tr>
+          <td><code>/api/v1/user/trusted-contacts</code></td>
+          <td><code>GET / POST</code></td>
+          <td>Safety preferences: Add/delete emergency trusted contacts</td>
+        </tr>
+        <tr>
+          <td><code>/api/v1/stranger/trips</code></td>
+          <td><code>GET / POST</code></td>
+          <td><code>StrangerModeScreen</code>: Discover and join social co-travel trips</td>
+        </tr>
+        <tr>
+          <td><code>/api/v1/stranger/reels</code></td>
+          <td><code>GET</code></td>
+          <td><code>StrangerReelsScreen</code>: Stream travel video reels</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>📱 Domain 3: Mobile App — Rider Side (Driver / Host Persona)</h3>
+    <p>Driver &amp; Ride Host screens inside the mobile Flutter app (<code>share2go</code>):</p>
+    <table>
+      <thead>
+        <tr>
+          <th>Endpoint</th>
+          <th>HTTP Method</th>
+          <th>Flutter Screen &amp; Purpose</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>/api/v1/rider/status</code></td>
+          <td><code>GET</code></td>
+          <td>Check driver application state (PENDING, APPROVED, REJECTED)</td>
+        </tr>
+        <tr>
+          <td><code>/api/v1/rider/apply</code></td>
+          <td><code>POST</code></td>
+          <td><code>VerificationScreen</code>: Submit DL number, photos, and vehicle info</td>
+        </tr>
+        <tr>
+          <td><code>/api/v1/rider/vehicles</code></td>
+          <td><code>GET / POST</code></td>
+          <td>Vehicle management: Add cars/bikes, upload RC and insurance</td>
+        </tr>
+        <tr>
+          <td><code>/api/v1/rider/rides/offer</code></td>
+          <td><code>POST</code></td>
+          <td><code>OfferRideScreen</code>: Publish a new shared carpool or bikepool</td>
+        </tr>
+        <tr>
+          <td><code>/api/v1/rider/my-offered-rides</code></td>
+          <td><code>GET</code></td>
+          <td><code>MyRidesScreen (Driver mode)</code>: View offered rides and passenger manifests</td>
+        </tr>
+        <tr>
+          <td><code>/api/v1/rider/requests/:id/respond</code></td>
+          <td><code>POST</code></td>
+          <td>Accept or decline passenger booking requests with push alerts</td>
+        </tr>
+        <tr>
+          <td><code>/api/v1/rider/rides/:id/start</code></td>
+          <td><code>POST</code></td>
+          <td>Start trip journey (notifies passengers and starts tracking)</td>
+        </tr>
+        <tr>
+          <td><code>/api/v1/rider/rides/:id/complete</code></td>
+          <td><code>POST</code></td>
+          <td>Complete journey (finalizes fares and unlocks passenger reviews)</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ========================================================================= -->
+  <!-- PAGE 4: COMMON SERVICES & CLIENT SDK                                     -->
+  <!-- ========================================================================= -->
+  <div class="page">
+    <h3>🛠️ Domain 4: Centralized Common &amp; Reusable Services</h3>
+    <p>Universal infrastructure utilized across all user personas and the admin panel:</p>
+    <table>
+      <thead>
+        <tr>
+          <th>Service Module</th>
+          <th>Base Route</th>
+          <th>Capabilities Provided</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Auth</strong></td>
+          <td><code>/api/v1/auth</code></td>
+          <td>Phone OTP verification, JWT access &amp; refresh token rotation, session invalidation</td>
+        </tr>
+        <tr>
+          <td><strong>Chat</strong></td>
+          <td><code>/api/v1/chat</code></td>
+          <td>Direct 1-on-1 conversations, unread badges, WebSockets, WebRTC call signaling</td>
+        </tr>
+        <tr>
+          <td><strong>Upload</strong></td>
+          <td><code>/api/v1/upload</code></td>
+          <td>High-speed Multer uploads: profile avatars, vehicle documents, video reels</td>
+        </tr>
+        <tr>
+          <td><strong>SOS</strong></td>
+          <td><code>/api/v1/sos</code></td>
+          <td>Panic button trigger, broadcast live coordinates to trusted contacts &amp; admin</td>
+        </tr>
+        <tr>
+          <td><strong>Communities</strong></td>
+          <td><code>/api/v1/communities</code></td>
+          <td>Corporate tech park and university commute circles</td>
+        </tr>
+        <tr>
+          <td><strong>Support</strong></td>
+          <td><code>/api/v1/support</code></td>
+          <td>Customer care inquiry ticket submission and FAQ knowledgebase</td>
+        </tr>
+        <tr>
+          <td><strong>Common</strong></td>
+          <td><code>/api/v1/common</code></td>
+          <td>Dynamic carousel banners, city lists, and remote app configuration</td>
+        </tr>
+        <tr>
+          <td><strong>Health</strong></td>
+          <td><code>/api/v1/health</code></td>
+          <td>Server uptime, memory utilization, and MySQL database ping latency</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>6. Reusable JavaScript Client SDK (<code>client-api/</code>)</h2>
+    <p>
+      Located at <code>client-api/</code> in the project root, this standalone SDK provides ready-to-use methods for any web or node application:
+    </p>
+
+    <div class="tree">
+<span class="comment">// Example Usage of the Centralized Client SDK:</span>
+<span class="dir">import</span> api <span class="dir">from</span> <span class="file">'./client-api/index.js'</span>;
+
+<span class="comment">// 1. Platform Administration</span>
+<span class="dir">const</span> stats = <span class="highlight">await api.admin.getDashboardStats()</span>;
+<span class="dir">const</span> drivers = <span class="highlight">await api.admin.getDrivers({ status: 'PENDING' })</span>;
+
+<span class="comment">// 2. App - User Side (Passenger)</span>
+<span class="dir">const</span> rides = <span class="highlight">await api.app.user.searchRides({ origin: 'Hitech City', destination: 'Gachibowli' })</span>;
+<span class="dir">const</span> booking = <span class="highlight">await api.app.user.requestSeat(rideId, { seats: 1 })</span>;
+
+<span class="comment">// 3. App - Rider Side (Driver)</span>
+<span class="dir">const</span> offered = <span class="highlight">await api.app.rider.offerRide(rideData)</span>;
+<span class="dir">const</span> response = <span class="highlight">await api.app.rider.respondBooking(bookingId, { action: 'ACCEPT' })</span>;
+
+<span class="comment">// 4. Centralized Common</span>
+<span class="dir">const</span> messages = <span class="highlight">await api.common.chat.getMessages(conversationId)</span>;
+    </div>
+
+    <h2>7. Summary: 5 Golden Rules for Developers</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Rule</th>
+          <th>Requirement</th>
+          <th>Why It Matters</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>1. Database Singleton</strong></td>
+          <td>Always import <code>prisma</code> from <code>src/config/db.js</code></td>
+          <td>Prevents MySQL connection pool exhaustion in dev hot-reloads.</td>
+        </tr>
+        <tr>
+          <td><strong>2. Error Handling</strong></td>
+          <td>Throw <code>new ApiError(statusCode, message)</code></td>
+          <td>Ensures clean JSON error responses without crashing the server.</td>
+        </tr>
+        <tr>
+          <td><strong>3. Response Standard</strong></td>
+          <td>Return <code>new ApiResponse(statusCode, data, message)</code></td>
+          <td>Provides a predictable contract: <code>{ success, statusCode, message, data }</code>.</td>
+        </tr>
+        <tr>
+          <td><strong>4. Async Safety</strong></td>
+          <td>Wrap all controllers in <code>asyncHandler(...)</code></td>
+          <td>Eliminates boilerplate <code>try/catch</code> blocks across the codebase.</td>
+        </tr>
+        <tr>
+          <td><strong>5. Validation</strong></td>
+          <td>Define Zod schemas in <code>*.validation.js</code></td>
+          <td>Guarantees strictly typed input validation before hitting services.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+</body>
+</html>
+

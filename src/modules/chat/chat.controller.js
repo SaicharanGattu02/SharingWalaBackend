@@ -40,7 +40,18 @@ export const markAsRead = asyncHandler(async (req, res) => {
 export const getUserOnlineStatus = asyncHandler(async (req, res) => {
   const targetUserId = req.params.userId;
   const isOnline = isUserOnline(targetUserId);
-  const lastSeen = getUserLastSeen(targetUserId);
+  let lastSeen = getUserLastSeen(targetUserId);
+  if (!isOnline && !lastSeen) {
+    try {
+      const u = await prisma.user.findUnique({
+        where: { id: targetUserId },
+        select: { updatedAt: true, lastLoginAt: true },
+      });
+      if (u) {
+        lastSeen = (u.updatedAt || u.lastLoginAt)?.toISOString() || null;
+      }
+    } catch (_) {}
+  }
   res.status(200).json(
     new ApiResponse(200, { userId: targetUserId, isOnline, lastSeen }, 'User online status retrieved')
   );

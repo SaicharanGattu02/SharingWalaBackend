@@ -57,10 +57,21 @@ export const registerChatSocketHandlers = (io, socket) => {
   socket.join(`user:${userId}`);
 
   // Query real-time status of another user
-  socket.on('get_user_status', ({ targetUserId }, callback) => {
+  socket.on('get_user_status', async ({ targetUserId }, callback) => {
     if (!targetUserId) return;
     const isOnline = isUserOnline(targetUserId);
-    const lastSeen = getUserLastSeen(targetUserId);
+    let lastSeen = getUserLastSeen(targetUserId);
+    if (!isOnline && !lastSeen) {
+      try {
+        const u = await prisma.user.findUnique({
+          where: { id: targetUserId },
+          select: { updatedAt: true, lastLoginAt: true },
+        });
+        if (u) {
+          lastSeen = (u.updatedAt || u.lastLoginAt)?.toISOString() || null;
+        }
+      } catch (_) {}
+    }
     const result = { userId: targetUserId, isOnline, lastSeen };
     if (typeof callback === 'function') {
       callback(result);

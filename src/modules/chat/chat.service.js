@@ -393,9 +393,9 @@ function resolveConversationMetadata(conv, currentUserId) {
       title = conv.title && conv.title !== 'Group Chat' && conv.title !== 'Road Trip Group Chat' ? conv.title : 'Direct Message';
     }
 
-    let subtitle = 'Direct 1-on-1 Conversation';
+    let subtitle = '';
     if (conv.ride) {
-      subtitle = `1-on-1 Trip • ${conv.ride.startLocationName || 'Origin'} ➔ ${conv.ride.endLocationName || 'Destination'}`;
+      subtitle = `${conv.ride.startLocationName || 'Origin'} ➔ ${conv.ride.endLocationName || 'Destination'}`;
     }
 
     return {
