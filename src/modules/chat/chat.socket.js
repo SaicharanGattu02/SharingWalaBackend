@@ -250,20 +250,35 @@ export const registerChatSocketHandlers = (io, socket) => {
               });
               io.to(`user:${p.userId}`).emit('new_message', socketPayload);
 
-              // Save in-app notification & send FCM push
-              createNotification({
-                userId: p.userId,
-                type: 'CHAT_MESSAGE',
-                title: socketPayload.senderName,
-                message: msgPreview,
-                data: {
-                  conversationId: targetConvId,
-                  senderId: effectiveUserId,
-                  senderName: socketPayload.senderName,
-                  route: '/chat-conversation',
-                },
-                sendPush: true,
-              }).catch((e) => console.warn('Failed to dispatch message notification:', e.message));
+              // Check if recipient is actively inside this conversation room right now
+              const recipientSockets = onlineUsers.get(p.userId);
+              let isRecipientInsideConversation = false;
+              if (recipientSockets && recipientSockets.size > 0) {
+                for (const sId of recipientSockets) {
+                  const s = io.sockets.sockets.get(sId);
+                  if (s && (s.rooms.has(`conv:${targetConvId}`) || s.rooms.has(`conv:${conversationId}`))) {
+                    isRecipientInsideConversation = true;
+                    break;
+                  }
+                }
+              }
+
+              // Only dispatch in-app notification & FCM push when user is NOT actively viewing the chat
+              if (!isRecipientInsideConversation) {
+                createNotification({
+                  userId: p.userId,
+                  type: 'CHAT_MESSAGE',
+                  title: socketPayload.senderName,
+                  message: msgPreview,
+                  data: {
+                    conversationId: targetConvId,
+                    senderId: effectiveUserId,
+                    senderName: socketPayload.senderName,
+                    route: '/chat-conversation',
+                  },
+                  sendPush: true,
+                }).catch((e) => console.warn('Failed to dispatch message notification:', e.message));
+              }
             }
           });
         }
