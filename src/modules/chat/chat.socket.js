@@ -2,7 +2,7 @@ import jwt from 'jsonwebtoken';
 import { prisma } from '../../config/db.js';
 import { env } from '../../config/env.js';
 import { getIO } from '../../config/socket.js';
-import { ensureConversationRecord, markAsRead } from './chat.service.js';
+import { ensureConversationRecord, markAsRead, resolvePeerUserId } from './chat.service.js';
 import { sendIncomingCallPush, registerUserFcmToken } from '../../config/firebase.js';
 import { createNotification } from '../notification/notification.service.js';
 
@@ -391,36 +391,12 @@ export const registerChatSocketHandlers = (io, socket) => {
       } catch (_) {}
 
       if (potentialConvId.startsWith('trip_')) {
-        const parts = potentialConvId.split('_');
-        const rideId = parts[1];
-        if (rideId) {
-          try {
-            const ride = await prisma.ride.findUnique({
-              where: { id: rideId },
-              include: {
-                driver: { select: { userId: true } },
-                bookings: { select: { passengerId: true, status: true } },
-              },
-            });
-            if (ride) {
-              const hostUserId = ride.driver?.userId;
-              if (userId === hostUserId) {
-                const lastPart = parts.length >= 3 ? parts[2] : null;
-                if (lastPart && lastPart !== 'host') {
-                  resolved.add(lastPart);
-                } else {
-                  ride.bookings.forEach((b) => {
-                    if (b.passengerId && b.passengerId !== userId) {
-                      resolved.add(b.passengerId);
-                    }
-                  });
-                }
-              } else {
-                if (hostUserId) resolved.add(hostUserId);
-              }
-            }
-          } catch (_) {}
-        }
+        try {
+          const peer = await resolvePeerUserId(potentialConvId, userId);
+          if (peer && peer !== userId) {
+            resolved.add(peer);
+          }
+        } catch (_) {}
       }
 
       if (potentialConvId.startsWith('direct_')) {

@@ -60,7 +60,7 @@ try {
   console.error('❌ [Firebase Admin] Initialization failed:', e.message);
 }
 
-export const registerUserFcmToken = (userId, fcmToken) => {
+export const registerUserFcmToken = async (userId, fcmToken) => {
   if (!userId || !fcmToken) return;
   if (!userFcmTokens.has(userId)) {
     userFcmTokens.set(userId, new Set());
@@ -68,6 +68,25 @@ export const registerUserFcmToken = (userId, fcmToken) => {
   userFcmTokens.get(userId).add(fcmToken);
   saveTokens();
   console.log(`📱 [FCM] Registered token for user ${userId}`);
+
+  // Persist to userDevice in database
+  try {
+    await prisma.userDevice.upsert({
+      where: { deviceToken: fcmToken },
+      update: {
+        userId,
+        lastActiveAt: new Date(),
+      },
+      create: {
+        userId,
+        deviceToken: fcmToken,
+        deviceType: 'ANDROID',
+        lastActiveAt: new Date(),
+      },
+    });
+  } catch (err) {
+    console.warn('⚠️ [FCM] userDevice upsert warning:', err.message);
+  }
 };
 
 export const getUserFcmTokens = (userId) => {
@@ -109,9 +128,9 @@ export const sendIncomingCallPush = async ({
     try {
       const devices = await prisma.userDevice.findMany({
         where: { userId: targetUserId },
-        select: { fcmToken: true },
+        select: { deviceToken: true },
       });
-      tokens = devices.map((d) => d.fcmToken).filter(Boolean);
+      tokens = devices.map((d) => d.deviceToken).filter(Boolean);
       tokens.forEach((t) => registerUserFcmToken(targetUserId, t));
     } catch (_) {}
   }
@@ -211,9 +230,9 @@ export const sendRideNotificationPush = async ({
     try {
       const devices = await prisma.userDevice.findMany({
         where: { userId: targetUserId },
-        select: { fcmToken: true },
+        select: { deviceToken: true },
       });
-      tokens = devices.map((d) => d.fcmToken).filter(Boolean);
+      tokens = devices.map((d) => d.deviceToken).filter(Boolean);
       tokens.forEach((t) => registerUserFcmToken(targetUserId, t));
     } catch (_) {}
   }

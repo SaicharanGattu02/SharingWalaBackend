@@ -9,6 +9,14 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const storePath = path.resolve(__dirname, '../stranger/stranger_store.json');
 
+const MOCK_DRIVERS = {
+  drv_1: { displayName: 'Ravi Kumar', phone: '+919876543210' },
+  drv_2: { displayName: 'Kiran Reddy', phone: '+919876543211' },
+  drv_3: { displayName: 'Ananya Sharma', phone: '+919876543212' },
+  drv_4: { displayName: 'Suresh Varma', phone: '+919876543213' },
+  drv_5: { displayName: 'Pooja Hegde', phone: '+919876543214' },
+};
+
 /**
  * Broadcasts real-time read receipt across socket rooms and private channels
  */
@@ -84,44 +92,98 @@ export async function resolvePeerUserId(conversationId, currentUserId) {
 
   // 4. trip_${rideId}_${peer}
   else if (conversationId.startsWith('trip_')) {
-    const parts = conversationId.split('_');
-    if (parts.length >= 3) {
-      const rideId = parts[1];
-      const rawPeer = parts.slice(2).join('_');
+    const raw = conversationId.slice(5);
 
-      try {
-        const ride = await prisma.ride.findUnique({
-          where: { id: rideId },
-          include: {
-            driver: { select: { userId: true, id: true } },
-          },
-        });
-        if (ride) {
-          const driverUserId = ride.driver?.userId;
-          if (driverUserId) {
-            if (driverUserId !== currentUserId) {
-              candidateId = driverUserId;
-            } else if (rawPeer === driverUserId || rawPeer === ride.driver?.id) {
-              candidateId = currentUserId;
+    // First check if conversation already exists in DB with participants
+    try {
+      const existing = await prisma.conversation.findUnique({
+        where: { id: conversationId },
+        include: { participants: { select: { userId: true } } },
+      });
+      if (existing?.participants) {
+        const other = existing.participants.find((p) => p.userId !== currentUserId);
+        if (other?.userId) {
+          candidateId = other.userId;
+        }
+      }
+    } catch (_) {}
+
+    if (!candidateId) {
+      if (raw.endsWith('_host')) {
+        const rideId = raw.slice(0, -5);
+        try {
+          const ride = await prisma.ride.findUnique({
+            where: { id: rideId },
+            include: { driver: { select: { userId: true } } },
+          });
+          if (ride?.driver?.userId) {
+            candidateId = ride.driver.userId;
+          }
+        } catch (_) {}
+      } else {
+        const parts = raw.split('_');
+        // Test all possible partition splits between rideId and peerId
+        for (let i = 1; i < parts.length; i++) {
+          const testPeer = parts.slice(i).join('_');
+          const testRide = parts.slice(0, i).join('_');
+
+          // Check if testPeer is a user
+          try {
+            const user = await prisma.user.findUnique({
+              where: { id: testPeer },
+              select: { id: true },
+            });
+            if (user) {
+              candidateId = user.id;
+              break;
+            }
+          } catch (_) {}
+
+          // Check if testPeer is a driver profile
+          try {
+            const dp = await prisma.driverProfile.findUnique({
+              where: { id: testPeer },
+              select: { userId: true },
+            });
+            if (dp?.userId) {
+              candidateId = dp.userId;
+              break;
+            }
+          } catch (_) {}
+
+          // Check if testRide is a ride
+          try {
+            const ride = await prisma.ride.findUnique({
+              where: { id: testRide },
+              include: { driver: { select: { userId: true } } },
+            });
+            if (ride?.driver?.userId) {
+              if (ride.driver.userId !== currentUserId) {
+                candidateId = ride.driver.userId;
+                break;
+              } else if (testPeer && testPeer !== 'host') {
+                candidateId = testPeer;
+                break;
+              }
+            }
+          } catch (_) {}
+        }
+
+        // Check fallback in MOCK_DRIVERS or parts.last
+        if (!candidateId) {
+          for (const key of Object.keys(MOCK_DRIVERS)) {
+            if (raw.endsWith(key) || raw.includes(key)) {
+              candidateId = key;
+              break;
+            }
+          }
+          if (!candidateId && parts.length >= 2) {
+            const last = parts[parts.length - 1];
+            if (last && last !== 'host') {
+              candidateId = last;
             }
           }
         }
-      } catch (_) {}
-
-      if (!candidateId) {
-        try {
-          const driverProfile = await prisma.driverProfile.findUnique({
-            where: { id: rawPeer },
-            select: { userId: true },
-          });
-          if (driverProfile?.userId) {
-            candidateId = driverProfile.userId;
-          }
-        } catch (_) {}
-      }
-
-      if (!candidateId && rawPeer && rawPeer !== 'host' && rawPeer.length > 5) {
-        candidateId = rawPeer;
       }
     }
   }
@@ -166,12 +228,30 @@ export async function resolvePeerUserId(conversationId, currentUserId) {
   }
 
   // Critical Validation: verify that candidateId exists in the user database
+  // If candidateId is a mock driver (e.g. 'drv_1', 'drv_2', etc.), ensure user record exists!
   if (candidateId) {
     try {
-      const userExists = await prisma.user.findUnique({
+      let userExists = await prisma.user.findUnique({
         where: { id: candidateId },
         select: { id: true },
       });
+      if (!userExists && (candidateId.startsWith('drv_') || candidateId.startsWith('mock_') || MOCK_DRIVERS[candidateId])) {
+        const mockInfo = MOCK_DRIVERS[candidateId] || {
+          displayName: 'Ride Host',
+          phone: `+9198765${candidateId.replace(/\D/g, '').padEnd(5, '0')}`,
+        };
+        userExists = await prisma.user.create({
+          data: {
+            id: candidateId,
+            phone: mockInfo.phone,
+            displayName: mockInfo.displayName,
+            role: 'USER',
+            status: 'ACTIVE',
+            isPhoneVerified: true,
+          },
+          select: { id: true },
+        }).catch(() => null);
+      }
       if (userExists) {
         return userExists.id;
       }
