@@ -1,7 +1,7 @@
 import { ApiError } from '../utils/apiError.js';
 import { env } from './env.js';
 
-// Recognized test phone numbers for App Store / Google Play review & developer testing
+// Recognized test phone numbers for App Store / Google Play review & developer sandbox
 const TEST_PHONE_NUMBERS = new Set([
   '919999999999',
   '919876543210',
@@ -16,6 +16,19 @@ const TEST_PHONE_NUMBERS = new Set([
 ]);
 
 const TEST_BYPASS_CODES = new Set(['123456', '1234', '0000', '111111']);
+
+// Active OTP session storage mapping formattedMobile -> { reqId, timestamp }
+const otpSessions = new Map();
+
+// Clear sessions older than 15 minutes
+setInterval(() => {
+  const now = Date.now();
+  for (const [phone, session] of otpSessions.entries()) {
+    if (now - session.timestamp > 15 * 60 * 1000) {
+      otpSessions.delete(phone);
+    }
+  }
+}, 5 * 60 * 1000).unref();
 
 export const formatPhoneForMsg91 = (phone) => {
   if (!phone) return '';
@@ -42,7 +55,7 @@ export const isTestNumber = (phone) => {
 };
 
 /**
- * Send OTP via MSG91 SendOTP API
+ * Send OTP via MSG91 OTP Widget API
  */
 export const sendMsg91Otp = async ({ phone }) => {
   const formattedMobile = formatPhoneForMsg91(phone);
@@ -54,7 +67,7 @@ export const sendMsg91Otp = async ({ phone }) => {
 
   // Developer / Reviewer test bypass
   if (isTestNumber(formattedMobile)) {
-    console.log(`[MSG91] Bypassing OTP send for test number: ${normalized}`);
+    console.log(`[MSG91] 🧪 Bypassing OTP send for test number: ${normalized}`);
     return {
       success: true,
       isBypass: true,
@@ -66,43 +79,42 @@ export const sendMsg91Otp = async ({ phone }) => {
     };
   }
 
-  const authKey = env.msg91?.authKey || process.env.MSG91_AUTH_KEY || '588874AkxiMDsCLyw6af34b3eP1';
-  const templateId = env.msg91?.widgetId || process.env.MSG91_WIDGET_ID || '366b6a704454313533343732';
-  const otpLength = env.msg91?.otpLength || 6;
+  const widgetId = env.msg91?.widgetId || process.env.MSG91_WIDGET_ID || '366b6a704454313533343732';
+  const tokenAuth = env.msg91?.authToken || process.env.MSG91_AUTH_TOKEN || '588874T5lR9OAcwJ6af35dbeP1';
 
-  console.log(`[MSG91 ${new Date().toISOString()}] 📤 Sending OTP to ${normalized} (formatted: ${formattedMobile}) using Template/Widget ID: ${templateId}`);
-
-  const url = `https://control.msg91.com/api/v5/otp?template_id=${encodeURIComponent(templateId)}&mobile=${encodeURIComponent(formattedMobile)}&authkey=${encodeURIComponent(authKey)}&otp_length=${otpLength}`;
+  console.log(`[MSG91 ${new Date().toISOString()}] 📤 Sending OTP to ${normalized} (identifier: ${formattedMobile}) using Widget ID: ${widgetId}`);
 
   try {
-    const res = await fetch(url, {
+    const res = await fetch('https://api.msg91.com/api/v5/widget/sendOtp', {
       method: 'POST',
       headers: {
-        'authkey': authKey,
         'Content-Type': 'application/json',
       },
+      body: JSON.stringify({
+        widgetId,
+        tokenAuth,
+        identifier: formattedMobile,
+      }),
     });
 
     const data = await res.json().catch(() => ({}));
     console.log(`[MSG91 ${new Date().toISOString()}] 📥 MSG91 Send Response (HTTP ${res.status}):`, JSON.stringify(data));
 
-    if (data.type === 'error') {
+    if (data.type === 'error' || data.hasError) {
       console.error('[MSG91] sendOtp error response:', data);
-      if (data.code === '418' || String(data.message || '').toLowerCase().includes('whitelisted')) {
-        throw new ApiError(
-          500,
-          'SMS gateway configuration error: IP is not whitelisted in MSG91. Please disable API Security or add your server IP in MSG91 panel under Authkey.',
-          [],
-          '',
-          'MSG91_IP_NOT_WHITELISTED'
-        );
-      }
       throw new ApiError(400, data.message || 'Failed to send OTP via SMS', [], '', 'MSG91_SEND_ERROR');
+    }
+
+    // Capture reqId from data.message
+    const reqId = String(data.message || '').trim();
+    if (reqId) {
+      otpSessions.set(formattedMobile, { reqId, timestamp: Date.now() });
+      console.log(`[MSG91] Stored session reqId for ${formattedMobile}: ${reqId}`);
     }
 
     return {
       success: true,
-      requestId: data.request_id || data.message,
+      requestId: reqId,
       phone: normalized,
       expiresIn: 300,
       resendAvailableIn: 30,
@@ -116,9 +128,9 @@ export const sendMsg91Otp = async ({ phone }) => {
 };
 
 /**
- * Verify OTP via MSG91 SendOTP API
+ * Verify OTP via MSG91 OTP Widget API
  */
-export const verifyMsg91Otp = async ({ phone, otp }) => {
+export const verifyMsg91Otp = async ({ phone, otp, reqId: directReqId }) => {
   const formattedMobile = formatPhoneForMsg91(phone);
   const trimmedOtp = String(otp || '').trim();
 
@@ -128,44 +140,49 @@ export const verifyMsg91Otp = async ({ phone, otp }) => {
 
   // Developer / Reviewer test bypass
   if (isTestNumber(formattedMobile) && TEST_BYPASS_CODES.has(trimmedOtp)) {
-    console.log(`[MSG91] Bypassing OTP verification for test number: ${formattedMobile}`);
+    console.log(`[MSG91] 🧪 Bypassing OTP verification for test number: ${formattedMobile}`);
     return { verified: true, isBypass: true };
   }
 
+  const widgetId = env.msg91?.widgetId || process.env.MSG91_WIDGET_ID || '366b6a704454313533343732';
   const authKey = env.msg91?.authKey || process.env.MSG91_AUTH_KEY || '588874AkxiMDsCLyw6af34b3eP1';
-  console.log(`[MSG91 ${new Date().toISOString()}] 🔍 Verifying OTP for ${formattedMobile}`);
 
-  const url = `https://control.msg91.com/api/v5/otp/verify?otp=${encodeURIComponent(trimmedOtp)}&mobile=${encodeURIComponent(formattedMobile)}`;
+  // Retrieve active session reqId
+  const session = otpSessions.get(formattedMobile);
+  const activeReqId = directReqId || session?.reqId;
+
+  console.log(`[MSG91 ${new Date().toISOString()}] 🔍 Verifying OTP for ${formattedMobile} (reqId: ${activeReqId || 'none'})`);
+
+  if (!activeReqId) {
+    console.warn(`[MSG91] No active reqId found for ${formattedMobile}. Fallback verify.`);
+  }
 
   try {
-    const res = await fetch(url, {
-      method: 'GET',
+    const res = await fetch('https://api.msg91.com/api/v5/widget/verifyOtp', {
+      method: 'POST',
       headers: {
+        'Content-Type': 'application/json',
         'authkey': authKey,
-        'Accept': 'application/json',
       },
+      body: JSON.stringify({
+        widgetId,
+        reqId: activeReqId || '',
+        otp: trimmedOtp,
+      }),
     });
 
     const data = await res.json().catch(() => ({}));
     console.log(`[MSG91 ${new Date().toISOString()}] 📥 MSG91 Verify Response (HTTP ${res.status}):`, JSON.stringify(data));
 
-    if (data.type === 'success' || data.message === 'OTP verified success') {
-      return { verified: true };
+    if (data.type === 'success' || String(data.message || '').toLowerCase().includes('success') || data.token) {
+      // Verified successfully! Clean up session
+      otpSessions.delete(formattedMobile);
+      return { verified: true, token: data.token };
     }
 
     console.error('[MSG91] verifyOtp error response:', data);
 
-    if (data.code === '418' || String(data.message || '').toLowerCase().includes('whitelisted')) {
-      throw new ApiError(
-        500,
-        'SMS gateway configuration error: IP is not whitelisted in MSG91. Please disable API Security or add your server IP in MSG91 panel under Authkey.',
-        [],
-        '',
-        'MSG91_IP_NOT_WHITELISTED'
-      );
-    }
-
-    if (data.message === 'OTP not match' || data.message === 'OTP expired' || data.type === 'error') {
+    if (data.message === 'invalid otp' || data.code === 705 || data.message === 'OTP not match' || data.message === 'OTP expired' || data.type === 'error') {
       throw new ApiError(400, data.message || 'Invalid or expired OTP. Please try again.', [], '', 'INVALID_OTP');
     }
 
@@ -178,9 +195,9 @@ export const verifyMsg91Otp = async ({ phone, otp }) => {
 };
 
 /**
- * Resend OTP via MSG91 SendOTP API
+ * Resend OTP via MSG91 OTP Widget Retry API
  */
-export const resendMsg91Otp = async ({ phone, retryChannel = 'text' }) => {
+export const resendMsg91Otp = async ({ phone, retryChannel = 11 }) => {
   const formattedMobile = formatPhoneForMsg91(phone);
   const normalized = normalizePhone(phone);
 
@@ -192,40 +209,43 @@ export const resendMsg91Otp = async ({ phone, retryChannel = 'text' }) => {
     };
   }
 
+  const widgetId = env.msg91?.widgetId || process.env.MSG91_WIDGET_ID || '366b6a704454313533343732';
   const authKey = env.msg91?.authKey || process.env.MSG91_AUTH_KEY || '588874AkxiMDsCLyw6af34b3eP1';
-  const url = `https://control.msg91.com/api/v5/otp/retry?authkey=${encodeURIComponent(authKey)}&mobile=${encodeURIComponent(formattedMobile)}&retrytype=${encodeURIComponent(retryChannel)}`;
+
+  const session = otpSessions.get(formattedMobile);
+  if (!session?.reqId) {
+    // If no existing session, call sendMsg91Otp directly
+    return await sendMsg91Otp({ phone });
+  }
 
   try {
-    const res = await fetch(url, {
-      method: 'GET',
+    const res = await fetch('https://api.msg91.com/api/v5/widget/retryOtp', {
+      method: 'POST',
       headers: {
+        'Content-Type': 'application/json',
         'authkey': authKey,
-        'Accept': 'application/json',
       },
+      body: JSON.stringify({
+        widgetId,
+        reqId: session.reqId,
+        retryChannel: Number(retryChannel) || 11,
+      }),
     });
 
     const data = await res.json().catch(() => ({}));
+    console.log(`[MSG91 ${new Date().toISOString()}] 📥 MSG91 Retry Response (HTTP ${res.status}):`, JSON.stringify(data));
 
-    if (data.type === 'error') {
-      if (data.code === '418' || String(data.message || '').toLowerCase().includes('whitelisted')) {
-        throw new ApiError(
-          500,
-          'SMS gateway configuration error: IP is not whitelisted in MSG91. Please disable API Security or add your server IP in MSG91 panel under Authkey.',
-          [],
-          '',
-          'MSG91_IP_NOT_WHITELISTED'
-        );
-      }
-      throw new ApiError(400, data.message || 'Failed to resend OTP');
+    if (data.type === 'error' || data.hasError) {
+      // If retry fails, fallback to fresh send
+      return await sendMsg91Otp({ phone });
     }
 
     return {
       success: true,
-      message: data.message || `OTP resent successfully to ${normalized}`,
+      message: `OTP resent successfully to ${normalized}`,
     };
   } catch (error) {
     if (error instanceof ApiError) throw error;
     throw new ApiError(500, `Failed to resend OTP: ${error.message}`);
   }
 };
-
