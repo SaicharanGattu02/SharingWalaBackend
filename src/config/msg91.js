@@ -67,8 +67,10 @@ export const sendMsg91Otp = async ({ phone }) => {
   }
 
   const authKey = env.msg91?.authKey || process.env.MSG91_AUTH_KEY || '588874AkxiMDsCLyw6af34b3eP1';
-  const templateId = env.msg91?.widgetId || process.env.MSG91_WIDGET_ID || '366b6a704451313533343732';
+  const templateId = env.msg91?.widgetId || process.env.MSG91_WIDGET_ID || '366b6a704454313533343732';
   const otpLength = env.msg91?.otpLength || 6;
+
+  console.log(`[MSG91 ${new Date().toISOString()}] 📤 Sending OTP to ${normalized} (formatted: ${formattedMobile}) using Template/Widget ID: ${templateId}`);
 
   const url = `https://control.msg91.com/api/v5/otp?template_id=${encodeURIComponent(templateId)}&mobile=${encodeURIComponent(formattedMobile)}&authkey=${encodeURIComponent(authKey)}&otp_length=${otpLength}`;
 
@@ -82,6 +84,7 @@ export const sendMsg91Otp = async ({ phone }) => {
     });
 
     const data = await res.json().catch(() => ({}));
+    console.log(`[MSG91 ${new Date().toISOString()}] 📥 MSG91 Send Response (HTTP ${res.status}):`, JSON.stringify(data));
 
     if (data.type === 'error') {
       console.error('[MSG91] sendOtp error response:', data);
@@ -130,6 +133,8 @@ export const verifyMsg91Otp = async ({ phone, otp }) => {
   }
 
   const authKey = env.msg91?.authKey || process.env.MSG91_AUTH_KEY || '588874AkxiMDsCLyw6af34b3eP1';
+  console.log(`[MSG91 ${new Date().toISOString()}] 🔍 Verifying OTP for ${formattedMobile}`);
+
   const url = `https://control.msg91.com/api/v5/otp/verify?otp=${encodeURIComponent(trimmedOtp)}&mobile=${encodeURIComponent(formattedMobile)}`;
 
   try {
@@ -142,6 +147,7 @@ export const verifyMsg91Otp = async ({ phone, otp }) => {
     });
 
     const data = await res.json().catch(() => ({}));
+    console.log(`[MSG91 ${new Date().toISOString()}] 📥 MSG91 Verify Response (HTTP ${res.status}):`, JSON.stringify(data));
 
     if (data.type === 'success' || data.message === 'OTP verified success') {
       return { verified: true };
