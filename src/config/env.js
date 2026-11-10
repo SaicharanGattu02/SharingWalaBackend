@@ -12,5 +12,10 @@ export const env = {
     refreshSecret: process.env.JWT_REFRESH_SECRET || (process.env.JWT_SECRET ? `${process.env.JWT_SECRET}_refresh` : 'fallback_refresh_secret_key'),
     refreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '30d',
   },
+  msg91: {
+    authKey: process.env.MSG91_AUTH_KEY || '588874AkxiMDsCLyw6af34b3eP1',
+    widgetId: process.env.MSG91_WIDGET_ID || process.env.MSG91_TEMPLATE_ID || '366b6a704451313533343732',
+    otpLength: parseInt(process.env.MSG91_OTP_LENGTH || '6', 10),
+  },
   corsOrigin: process.env.CORS_ORIGIN || '*',
 };

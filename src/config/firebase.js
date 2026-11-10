@@ -75,12 +75,14 @@ export const registerUserFcmToken = async (userId, fcmToken) => {
       where: { deviceToken: fcmToken },
       update: {
         userId,
+        appVersion: 'FCM_TOKEN',
         lastActiveAt: new Date(),
       },
       create: {
         userId,
         deviceToken: fcmToken,
         deviceType: 'ANDROID',
+        appVersion: 'FCM_TOKEN',
         lastActiveAt: new Date(),
       },
     });

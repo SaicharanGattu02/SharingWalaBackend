@@ -6,20 +6,23 @@ import { ApiError } from '../../utils/apiError.js';
 import { getIO } from '../../config/socket.js';
 import { disconnectUserSockets } from '../chat/chat.socket.js';
 import { registerUserFcmToken } from '../../config/firebase.js';
+import { sendMsg91Otp, verifyMsg91Otp, resendMsg91Otp, normalizePhone } from '../../config/msg91.js';
 
 /**
  * Single Device Login Policy:
  * Registers the current device for the user and terminates any previous active device session.
  */
-export const registerUserDeviceSession = async (userId, deviceId, deviceType = 'ANDROID', appVersion = '1.0.0') => {
+export const registerUserDeviceSession = async (userId, deviceId, deviceType = 'ANDROID', appVersion = 'DEVICE_SESSION') => {
   if (!userId || !deviceId) return null;
 
   try {
-    // 1. Single Device Policy: Terminate any previous active devices for this user
+    const cleanDeviceId = String(deviceId).trim();
+    // 1. Single Device Policy: Terminate any previous active hardware device sessions for this user (NEVER delete FCM tokens!)
     const previousDevices = await prisma.userDevice.findMany({
       where: {
         userId,
-        deviceToken: { not: deviceId },
+        deviceToken: { not: cleanDeviceId },
+        appVersion: 'DEVICE_SESSION',
       },
     });
 
@@ -27,7 +30,8 @@ export const registerUserDeviceSession = async (userId, deviceId, deviceType = '
       await prisma.userDevice.deleteMany({
         where: {
           userId,
-          deviceToken: { not: deviceId },
+          deviceToken: { not: cleanDeviceId },
+          appVersion: 'DEVICE_SESSION',
         },
       });
 
@@ -37,7 +41,7 @@ export const registerUserDeviceSession = async (userId, deviceId, deviceType = '
         io.to(`user:${userId}`).emit('session:terminated', {
           reason: 'LOGGED_IN_ON_ANOTHER_DEVICE',
           message: 'You have been logged in on another device. Please log in again.',
-          newDeviceId: deviceId,
+          newDeviceId: cleanDeviceId,
         });
       } catch (_) {}
     }
@@ -48,18 +52,18 @@ export const registerUserDeviceSession = async (userId, deviceId, deviceType = '
       : 'ANDROID';
 
     return await prisma.userDevice.upsert({
-      where: { deviceToken: deviceId },
+      where: { deviceToken: cleanDeviceId },
       update: {
         userId,
         deviceType: normalizedType,
-        appVersion: appVersion || '1.0.0',
+        appVersion: 'DEVICE_SESSION',
         lastActiveAt: new Date(),
       },
       create: {
         userId,
         deviceType: normalizedType,
-        deviceToken: deviceId,
-        appVersion: appVersion || '1.0.0',
+        deviceToken: cleanDeviceId,
+        appVersion: 'DEVICE_SESSION',
         lastActiveAt: new Date(),
       },
     });
@@ -333,33 +337,19 @@ export const loginUser = async ({ identifier, password, deviceId, deviceType, fc
 };
 
 export const sendPhoneOtp = async ({ phone }) => {
-  const digitsOnly = phone.replace(/\D/g, '');
-  const normalizedPhone = digitsOnly.length === 10 ? `+91${digitsOnly}` : (phone.startsWith('+') ? phone : `+${digitsOnly}`);
+  return await sendMsg91Otp({ phone });
+};
 
-  // In development mode, master OTP is 123456
-  const otp = '123456';
-  const expiresInSeconds = 300; // 5 minutes
-
-  return {
-    phone: normalizedPhone,
-    otp, // Convenient in dev mode so frontend shows/tests it easily
-    expiresIn: expiresInSeconds,
-    resendAvailableIn: 30,
-    message: `OTP sent successfully to ${normalizedPhone}`,
-  };
+export const resendPhoneOtp = async ({ phone, retryChannel = 'text' }) => {
+  return await resendMsg91Otp({ phone, retryChannel });
 };
 
 export const loginOrRegisterWithPhone = async ({ phone, otp, deviceId, deviceType, fcmToken, forceLogin = false }) => {
-  const digitsOnly = phone.replace(/\D/g, '');
-  const normalizedPhone = digitsOnly.length === 10 ? `+91${digitsOnly}` : (phone.startsWith('+') ? phone : `+${digitsOnly}`);
+  const digitsOnly = String(phone || '').replace(/\D/g, '');
+  const normalizedPhone = normalizePhone(phone);
 
-  // 1. Verify OTP: Master bypass code is "123456" (or "1234")
-  const trimmedOtp = String(otp || '').trim();
-  const validBypassCodes = ['123456', '1234', '0000', '111111'];
-
-  if (trimmedOtp && !validBypassCodes.includes(trimmedOtp)) {
-    throw new ApiError(400, 'Invalid OTP code. Please enter 123456 to verify.');
-  }
+  // 1. Verify OTP with MSG91 (or test bypass)
+  await verifyMsg91Otp({ phone: normalizedPhone, otp });
 
   let isNewUser = false;
 
@@ -494,7 +484,7 @@ export const loginOrRegisterWithPhone = async ({ phone, otp, deviceId, deviceTyp
   };
 };
 
-export const refreshAuthToken = async ({ refreshToken, deviceId, deviceType }) => {
+export const refreshAuthToken = async ({ refreshToken, deviceId, deviceType, fcmToken = null }) => {
   if (!refreshToken) {
     throw new ApiError(400, 'Refresh token is required');
   }

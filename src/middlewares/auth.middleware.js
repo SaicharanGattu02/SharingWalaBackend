@@ -72,18 +72,30 @@ export const authenticate = asyncHandler(async (req, res, next) => {
 
   // Single Device Login Restriction Check
   const reqDeviceId = req.headers['x-device-id'] || req.headers['device-id'];
-  if (reqDeviceId) {
+  if (reqDeviceId && typeof reqDeviceId === 'string' && reqDeviceId.trim().length > 0) {
+    const cleanDeviceId = reqDeviceId.trim();
     const activeDevice = await withDbTimeout(
       async () => {
+        // Query active hardware device session (exclude FCM push tokens!)
         return await prisma.userDevice.findFirst({
-          where: { userId: user.id },
+          where: {
+            userId: user.id,
+            appVersion: 'DEVICE_SESSION',
+          },
           orderBy: { lastActiveAt: 'desc' },
         });
       },
       null
     );
 
-    if (activeDevice && activeDevice.deviceToken !== reqDeviceId) {
+    // Only reject if an actual hardware device session exists and is different from current device
+    if (
+      activeDevice &&
+      activeDevice.deviceToken &&
+      activeDevice.deviceToken !== cleanDeviceId &&
+      activeDevice.deviceToken.length < 80 &&
+      !activeDevice.deviceToken.includes(':')
+    ) {
       throw new ApiError(
         401,
         'Session expired: You have logged in on another device',
