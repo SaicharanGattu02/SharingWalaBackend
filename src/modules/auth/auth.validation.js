@@ -48,6 +48,9 @@ export const phoneOtpLoginSchema = {
     fcm_token: z.string().optional(),
     push_token: z.string().optional(),
     device_token: z.string().optional(),
+    reqId: z.string().optional(),
+    requestId: z.string().optional(),
+    request_id: z.string().optional(),
   }),
 };
 
@@ -66,6 +69,9 @@ export const verifyOtpSchema = {
     fcm_token: z.string().optional(),
     push_token: z.string().optional(),
     device_token: z.string().optional(),
+    reqId: z.string().optional(),
+    requestId: z.string().optional(),
+    request_id: z.string().optional(),
   }),
 };
 

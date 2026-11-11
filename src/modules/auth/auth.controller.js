@@ -12,9 +12,10 @@ export const register = asyncHandler(async (req, res) => {
 export const login = asyncHandler(async (req, res) => {
   const deviceId = req.headers['x-device-id'] || req.headers['device-id'] || req.body.deviceId || req.body.device_id;
   const deviceType = req.headers['x-device-type'] || req.headers['device-type'] || req.body.deviceType || req.body.device_type;
+  const deviceName = req.headers['x-device-name'] || req.headers['device-name'] || req.body.deviceName || req.body.device_name;
   const fcmToken = req.body.fcm_token || req.body.fcmToken || req.body.push_token || req.body.device_token;
   const forceLogin = req.body.forceLogin === true || req.body.forceLogin === 'true';
-  const result = await authService.loginUser({ ...req.body, deviceId, deviceType, fcmToken, forceLogin });
+  const result = await authService.loginUser({ ...req.body, deviceId, deviceType, deviceName, fcmToken, forceLogin });
   res.status(200).json(new ApiResponse(200, result, 'Logged in successfully'));
 });
 
@@ -31,18 +32,22 @@ export const resendOtp = asyncHandler(async (req, res) => {
 export const phoneLogin = asyncHandler(async (req, res) => {
   const deviceId = req.headers['x-device-id'] || req.headers['device-id'] || req.body.deviceId || req.body.device_id;
   const deviceType = req.headers['x-device-type'] || req.headers['device-type'] || req.body.deviceType || req.body.device_type;
+  const deviceName = req.headers['x-device-name'] || req.headers['device-name'] || req.body.deviceName || req.body.device_name;
+  const reqId = req.body.reqId || req.body.requestId || req.body.request_id;
   const fcmToken = req.body.fcm_token || req.body.fcmToken || req.body.push_token || req.body.device_token;
   const forceLogin = req.body.forceLogin === true || req.body.forceLogin === 'true';
-  const result = await authService.loginOrRegisterWithPhone({ ...req.body, deviceId, deviceType, fcmToken, forceLogin });
+  const result = await authService.loginOrRegisterWithPhone({ ...req.body, deviceId, deviceType, deviceName, reqId, fcmToken, forceLogin });
   res.status(200).json(new ApiResponse(200, result, result.message));
 });
 
 export const verifyOtp = asyncHandler(async (req, res) => {
   const deviceId = req.headers['x-device-id'] || req.headers['device-id'] || req.body.deviceId || req.body.device_id;
   const deviceType = req.headers['x-device-type'] || req.headers['device-type'] || req.body.deviceType || req.body.device_type;
+  const deviceName = req.headers['x-device-name'] || req.headers['device-name'] || req.body.deviceName || req.body.device_name;
+  const reqId = req.body.reqId || req.body.requestId || req.body.request_id;
   const fcmToken = req.body.fcm_token || req.body.fcmToken || req.body.push_token || req.body.device_token;
   const forceLogin = req.body.forceLogin === true || req.body.forceLogin === 'true';
-  const result = await authService.loginOrRegisterWithPhone({ ...req.body, deviceId, deviceType, fcmToken, forceLogin });
+  const result = await authService.loginOrRegisterWithPhone({ ...req.body, deviceId, deviceType, deviceName, reqId, fcmToken, forceLogin });
   res.status(200).json(new ApiResponse(200, result, 'OTP verified successfully. Logged in.'));
 });
 

@@ -1,32 +1,71 @@
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { ApiError } from '../utils/apiError.js';
 import { env } from './env.js';
 
-// Recognized test phone numbers for App Store / Google Play review & developer sandbox
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const OTP_SESSIONS_FILE = path.join(__dirname, 'otp_sessions.json');
+
+// Recognized test phone number for App Store / Google Play review & developer sandbox (only all 9s)
 const TEST_PHONE_NUMBERS = new Set([
   '919999999999',
-  '919876543210',
-  '918888888888',
-  '917777777777',
-  '911111111111',
-  '910000000000',
   '9999999999',
-  '9876543210',
-  '8888888888',
-  '7777777777',
 ]);
 
 const TEST_BYPASS_CODES = new Set(['123456', '1234', '0000', '111111']);
 
 // Active OTP session storage mapping formattedMobile -> { reqId, timestamp }
-const otpSessions = new Map();
+// Backed by persistent file storage so sessions survive server reloads & multi-workers
+const loadOtpSessions = () => {
+  try {
+    if (fs.existsSync(OTP_SESSIONS_FILE)) {
+      const content = fs.readFileSync(OTP_SESSIONS_FILE, 'utf-8');
+      if (content && content.trim()) {
+        const parsed = JSON.parse(content);
+        const map = new Map();
+        const now = Date.now();
+        for (const [k, v] of Object.entries(parsed)) {
+          if (v && v.reqId && (now - (v.timestamp || 0) < 15 * 60 * 1000)) {
+            map.set(k, v);
+          }
+        }
+        return map;
+      }
+    }
+  } catch (err) {
+    console.warn('[MSG91] Failed to read otp_sessions.json:', err.message);
+  }
+  return new Map();
+};
+
+const persistOtpSessions = (map) => {
+  try {
+    const obj = {};
+    for (const [k, v] of map.entries()) {
+      obj[k] = v;
+    }
+    fs.writeFileSync(OTP_SESSIONS_FILE, JSON.stringify(obj, null, 2), 'utf-8');
+  } catch (err) {
+    console.warn('[MSG91] Failed to write otp_sessions.json:', err.message);
+  }
+};
+
+const otpSessions = loadOtpSessions();
 
 // Clear sessions older than 15 minutes
 setInterval(() => {
   const now = Date.now();
+  let changed = false;
   for (const [phone, session] of otpSessions.entries()) {
     if (now - session.timestamp > 15 * 60 * 1000) {
       otpSessions.delete(phone);
+      changed = true;
     }
+  }
+  if (changed) {
+    persistOtpSessions(otpSessions);
   }
 }, 5 * 60 * 1000).unref();
 
@@ -109,6 +148,7 @@ export const sendMsg91Otp = async ({ phone }) => {
     const reqId = String(data.message || '').trim();
     if (reqId) {
       otpSessions.set(formattedMobile, { reqId, timestamp: Date.now() });
+      persistOtpSessions(otpSessions);
       console.log(`[MSG91] Stored session reqId for ${formattedMobile}: ${reqId}`);
     }
 
@@ -147,14 +187,15 @@ export const verifyMsg91Otp = async ({ phone, otp, reqId: directReqId }) => {
   const widgetId = env.msg91?.widgetId || process.env.MSG91_WIDGET_ID || '366b6a704454313533343732';
   const authKey = env.msg91?.authKey || process.env.MSG91_AUTH_KEY || '588874AkxiMDsCLyw6af34b3eP1';
 
-  // Retrieve active session reqId
-  const session = otpSessions.get(formattedMobile);
+  // Retrieve active session reqId (check both memory and disk file)
+  const currentMap = loadOtpSessions();
+  const session = otpSessions.get(formattedMobile) || currentMap.get(formattedMobile);
   const activeReqId = directReqId || session?.reqId;
 
   console.log(`[MSG91 ${new Date().toISOString()}] 🔍 Verifying OTP for ${formattedMobile} (reqId: ${activeReqId || 'none'})`);
 
   if (!activeReqId) {
-    console.warn(`[MSG91] No active reqId found for ${formattedMobile}. Fallback verify.`);
+    throw new ApiError(400, 'OTP session expired or not found. Please tap "Resend OTP" to get a new code.', [], '', 'INVALID_OTP');
   }
 
   try {
@@ -166,7 +207,7 @@ export const verifyMsg91Otp = async ({ phone, otp, reqId: directReqId }) => {
       },
       body: JSON.stringify({
         widgetId,
-        reqId: activeReqId || '',
+        reqId: activeReqId,
         otp: trimmedOtp,
       }),
     });
@@ -177,6 +218,7 @@ export const verifyMsg91Otp = async ({ phone, otp, reqId: directReqId }) => {
     if (data.type === 'success' || String(data.message || '').toLowerCase().includes('success') || data.token) {
       // Verified successfully! Clean up session
       otpSessions.delete(formattedMobile);
+      persistOtpSessions(otpSessions);
       return { verified: true, token: data.token };
     }
 

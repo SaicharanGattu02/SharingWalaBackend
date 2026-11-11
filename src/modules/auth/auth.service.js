@@ -12,17 +12,28 @@ import { sendMsg91Otp, verifyMsg91Otp, resendMsg91Otp, normalizePhone } from '..
  * Single Device Login Policy:
  * Registers the current device for the user and terminates any previous active device session.
  */
-export const registerUserDeviceSession = async (userId, deviceId, deviceType = 'ANDROID', appVersion = 'DEVICE_SESSION') => {
+export const registerUserDeviceSession = async (userId, deviceId, deviceType = 'ANDROID', deviceName = 'Mobile Device') => {
   if (!userId || !deviceId) return null;
 
   try {
     const cleanDeviceId = String(deviceId).trim();
+    // Ignore FCM push tokens masquerading as hardware device sessions
+    if (cleanDeviceId.length > 80 || cleanDeviceId.includes(':')) {
+      return null;
+    }
+
+    const cleanDeviceName = (deviceName && String(deviceName).trim() && String(deviceName).trim() !== 'DEVICE_SESSION')
+      ? String(deviceName).trim()
+      : (String(deviceType).toUpperCase().includes('IOS') ? 'Apple iPhone' : 'Android Device');
+
     // 1. Single Device Policy: Terminate any previous active hardware device sessions for this user (NEVER delete FCM tokens!)
     const previousDevices = await prisma.userDevice.findMany({
       where: {
         userId,
         deviceToken: { not: cleanDeviceId },
-        appVersion: 'DEVICE_SESSION',
+        NOT: {
+          deviceToken: { contains: ':' },
+        },
       },
     });
 
@@ -31,7 +42,9 @@ export const registerUserDeviceSession = async (userId, deviceId, deviceType = '
         where: {
           userId,
           deviceToken: { not: cleanDeviceId },
-          appVersion: 'DEVICE_SESSION',
+          NOT: {
+            deviceToken: { contains: ':' },
+          },
         },
       });
 
@@ -46,7 +59,7 @@ export const registerUserDeviceSession = async (userId, deviceId, deviceType = '
       } catch (_) {}
     }
 
-    // 2. Register / Upsert current active device
+    // 2. Register / Upsert current active device with real device name
     const normalizedType = ['ANDROID', 'IOS', 'WEB'].includes(String(deviceType).toUpperCase())
       ? String(deviceType).toUpperCase()
       : 'ANDROID';
@@ -56,14 +69,14 @@ export const registerUserDeviceSession = async (userId, deviceId, deviceType = '
       update: {
         userId,
         deviceType: normalizedType,
-        appVersion: 'DEVICE_SESSION',
+        appVersion: cleanDeviceName,
         lastActiveAt: new Date(),
       },
       create: {
         userId,
         deviceType: normalizedType,
         deviceToken: cleanDeviceId,
-        appVersion: 'DEVICE_SESSION',
+        appVersion: cleanDeviceName,
         lastActiveAt: new Date(),
       },
     });
@@ -218,7 +231,7 @@ export const registerUser = async ({ username, displayName, phone, email, passwo
   );
 };
 
-export const loginUser = async ({ identifier, password, deviceId, deviceType, fcmToken, forceLogin = false }) => {
+export const loginUser = async ({ identifier, password, deviceId, deviceType, deviceName, fcmToken, forceLogin = false }) => {
   const trimmedIdentifier = identifier.trim();
 
   return await withDbTimeout(
@@ -258,24 +271,37 @@ export const loginUser = async ({ identifier, password, deviceId, deviceType, fc
 
       // Check for an active session on another device
       if (deviceId) {
+        const cleanDeviceId = String(deviceId).trim();
         const existingDevice = await prisma.userDevice.findFirst({
           where: {
             userId: user.id,
-            deviceToken: { not: deviceId },
+            deviceToken: { not: cleanDeviceId },
+            NOT: {
+              deviceToken: { contains: ':' },
+            },
           },
           orderBy: { lastActiveAt: 'desc' },
         });
 
         if (existingDevice && !forceLogin) {
+          const resolvedDeviceName = (existingDevice.appVersion &&
+            existingDevice.appVersion !== 'DEVICE_SESSION' &&
+            existingDevice.appVersion !== 'FCM_TOKEN' &&
+            existingDevice.appVersion !== '1.0.0')
+              ? existingDevice.appVersion
+              : (existingDevice.deviceType === 'IOS' ? 'Apple iPhone' : 'Android Device');
+
           throw new ApiError(
             409,
-            'You are currently logged into another device. Would you like to remove that device and log in here?',
+            `You are currently logged into another device (${resolvedDeviceName}). Would you like to remove that device and log in here?`,
             [],
             '',
             'ACTIVE_SESSION_EXISTS',
             {
               hasActiveSession: true,
-              deviceType: existingDevice.deviceType || 'Mobile Device',
+              deviceName: resolvedDeviceName,
+              deviceType: resolvedDeviceName,
+              activeDeviceType: resolvedDeviceName,
               deviceId: existingDevice.deviceToken,
               lastActiveAt: existingDevice.lastActiveAt,
               appVersion: existingDevice.appVersion || '1.0.0',
@@ -291,7 +317,7 @@ export const loginUser = async ({ identifier, password, deviceId, deviceType, fc
       });
 
       if (deviceId) {
-        await registerUserDeviceSession(user.id, deviceId, deviceType);
+        await registerUserDeviceSession(user.id, deviceId, deviceType, deviceName);
       }
 
       if (fcmToken && user?.id) {
@@ -344,12 +370,12 @@ export const resendPhoneOtp = async ({ phone, retryChannel = 'text' }) => {
   return await resendMsg91Otp({ phone, retryChannel });
 };
 
-export const loginOrRegisterWithPhone = async ({ phone, otp, deviceId, deviceType, fcmToken, forceLogin = false }) => {
+export const loginOrRegisterWithPhone = async ({ phone, otp, deviceId, deviceType, deviceName, fcmToken, forceLogin = false, reqId }) => {
   const digitsOnly = String(phone || '').replace(/\D/g, '');
   const normalizedPhone = normalizePhone(phone);
 
   // 1. Verify OTP with MSG91 (or test bypass)
-  await verifyMsg91Otp({ phone: normalizedPhone, otp });
+  await verifyMsg91Otp({ phone: normalizedPhone, otp, reqId });
 
   let isNewUser = false;
 
@@ -377,24 +403,37 @@ export const loginOrRegisterWithPhone = async ({ phone, otp, deviceId, deviceTyp
 
       // Check for an active session on another device for existing users
       if (existingUser && deviceId) {
+        const cleanDeviceId = String(deviceId).trim();
         const existingDevice = await prisma.userDevice.findFirst({
           where: {
             userId: existingUser.id,
-            deviceToken: { not: deviceId },
+            deviceToken: { not: cleanDeviceId },
+            NOT: {
+              deviceToken: { contains: ':' },
+            },
           },
           orderBy: { lastActiveAt: 'desc' },
         });
 
         if (existingDevice && !forceLogin) {
+          const resolvedDeviceName = (existingDevice.appVersion &&
+            existingDevice.appVersion !== 'DEVICE_SESSION' &&
+            existingDevice.appVersion !== 'FCM_TOKEN' &&
+            existingDevice.appVersion !== '1.0.0')
+              ? existingDevice.appVersion
+              : (existingDevice.deviceType === 'IOS' ? 'Apple iPhone' : 'Android Device');
+
           throw new ApiError(
             409,
-            'You are currently logged into another device. Would you like to remove that device and log in here?',
+            `You are currently logged into another device (${resolvedDeviceName}). Would you like to remove that device and log in here?`,
             [],
             '',
             'ACTIVE_SESSION_EXISTS',
             {
               hasActiveSession: true,
-              deviceType: existingDevice.deviceType || 'Mobile Device',
+              deviceName: resolvedDeviceName,
+              deviceType: resolvedDeviceName,
+              activeDeviceType: resolvedDeviceName,
               deviceId: existingDevice.deviceToken,
               lastActiveAt: existingDevice.lastActiveAt,
               appVersion: existingDevice.appVersion || '1.0.0',
@@ -436,7 +475,7 @@ export const loginOrRegisterWithPhone = async ({ phone, otp, deviceId, deviceTyp
       }
 
       if (deviceId && existingUser?.id) {
-        await registerUserDeviceSession(existingUser.id, deviceId, deviceType);
+        await registerUserDeviceSession(existingUser.id, deviceId, deviceType, deviceName);
       }
 
       return existingUser;
