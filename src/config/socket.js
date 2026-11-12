@@ -8,8 +8,9 @@ let ioInstance = null;
 export const initSocket = (httpServer) => {
   ioInstance = new Server(httpServer, {
     cors: {
-      origin: env.corsOrigin,
+      origin: (origin, callback) => callback(null, true),
       credentials: true,
+      methods: ['GET', 'POST'],
     },
     pingTimeout: 30000,
     pingInterval: 10000,

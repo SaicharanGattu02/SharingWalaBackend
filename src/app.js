@@ -15,11 +15,35 @@ const app = express();
 app.set('trust proxy', 1);
 
 // Security Middlewares
-app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
+app.use(
+  helmet({
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+    crossOriginOpenerPolicy: false,
+  })
+);
+
+// Dynamic CORS configuration:
+// When credentials: true is set, browsers forbid Access-Control-Allow-Origin: '*'
+// Reflecting the requesting origin satisfies the W3C/Fetch CORS specification for local web dashboards & apps.
 app.use(
   cors({
-    origin: env.corsOrigin,
+    origin: (origin, callback) => {
+      // Allow requests with no origin (like mobile apps, curl, Postman) or any origin in dev
+      callback(null, true);
+    },
     credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'X-Requested-With',
+      'Accept',
+      'Origin',
+      'X-Custom-Header',
+      'Access-Control-Request-Method',
+      'Access-Control-Request-Headers',
+    ],
+    exposedHeaders: ['Content-Range', 'X-Content-Range'],
   })
 );
 
