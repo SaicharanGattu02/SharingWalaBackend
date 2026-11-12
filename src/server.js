@@ -6,6 +6,7 @@ import { connectDB, prisma } from './config/db.js';
 import { autoMigrateDatabase } from './config/autoMigrate.js';
 import { initSocket } from './config/socket.js';
 import { registerChatSocketHandlers } from './modules/chat/chat.socket.js';
+import { registerTripSocketHandlers } from './modules/rider/trip.socket.js';
 
 const getNetworkIp = () => {
   const interfaces = os.networkInterfaces();
@@ -32,9 +33,10 @@ const startServer = async () => {
   // Initialize Socket.io with JWT authentication
   const io = initSocket(httpServer);
 
-  // Register real-time chat event handlers
+  // Register real-time chat & live trip event handlers
   io.on('connection', (socket) => {
     registerChatSocketHandlers(io, socket);
+    registerTripSocketHandlers(io, socket);
   });
 
   const networkIp = getNetworkIp();
