@@ -848,6 +848,101 @@ export const getOfferedRidePassengers = async (userId, rideId) => {
   }
 
   if (!ride) {
+    const recurringRide = await prisma.recurringRide.findUnique({
+      where: { id: rideId },
+      include: {
+        vehicle: true,
+        driver: { include: { user: true } },
+        ridesGenerated: {
+          include: {
+            vehicle: true,
+            pricing: true,
+            stops: { orderBy: { sequence: 'asc' } },
+            bookings: {
+              include: {
+                passenger: {
+                  select: { id: true, displayName: true, phone: true, avatarUrl: true },
+                },
+                pickupStop: true,
+                dropoffStop: true,
+              },
+              orderBy: { createdAt: 'desc' },
+            },
+          },
+          orderBy: { departureAt: 'desc' },
+        },
+      },
+    });
+
+    if (recurringRide) {
+      const allBookings = [];
+      const seenBookingIds = new Set();
+      for (const genRide of (recurringRide.ridesGenerated || [])) {
+        for (const b of (genRide.bookings || [])) {
+          if (!seenBookingIds.has(b.id)) {
+            seenBookingIds.add(b.id);
+            allBookings.push({ ...b, ride: genRide });
+          }
+        }
+      }
+
+      const allMapped = allBookings.map((b) => {
+        let passengerStatus = 'Pending';
+        if (b.status === 'ONBOARD') passengerStatus = 'Onboard';
+        else if (b.status === 'COMPLETED') passengerStatus = 'Trip Completed';
+        else if (b.status === 'CONFIRMED' || b.status === 'ACCEPTED') passengerStatus = 'Confirmed';
+        else if (b.status === 'REJECTED') passengerStatus = 'Rejected';
+        else if (b.status === 'CANCELLED') passengerStatus = 'Cancelled';
+
+        return {
+          id: b.passenger?.id || b.passengerId,
+          bookingId: b.id,
+          name: b.passenger?.displayName || 'Passenger',
+          phone: b.passenger?.phone || '',
+          avatarUrl: b.passenger?.avatarUrl || '',
+          seats: b.seatsRequested,
+          fare: Number(b.totalAmount || 0),
+          status: passengerStatus,
+          statusLabel: passengerStatus,
+          rawStatus: b.status.toLowerCase(),
+          isConfirmed: ['CONFIRMED', 'ACCEPTED', 'ONBOARD', 'COMPLETED'].includes(b.status),
+          pickupLocation: b.pickupStop?.locationName || recurringRide.startLocationName,
+          dropoffLocation: b.dropoffStop?.locationName || recurringRide.endLocationName,
+          rating: 4.8,
+        };
+      });
+
+      const confirmedPassengers = allMapped.filter((p) => p.isConfirmed);
+
+      return {
+        rideId: recurringRide.id,
+        isRecurring: true,
+        origin: recurringRide.startLocationName,
+        destination: recurringRide.endLocationName,
+        departureTime: recurringRide.departureTime,
+        departureDate: recurringRide.startDate ? new Date(recurringRide.startDate).toLocaleDateString() : '',
+        totalSeats: recurringRide.totalSeats,
+        bookedCount: confirmedPassengers.length,
+        availableSeats: Math.max(0, recurringRide.totalSeats - confirmedPassengers.length),
+        fare: 0,
+        totalFare: confirmedPassengers.reduce((sum, p) => sum + p.fare, 0),
+        currency: '₹',
+        vehicleName: recurringRide.vehicle ? `${recurringRide.vehicle.make} ${recurringRide.vehicle.model}`.trim() : 'Vehicle',
+        vehicleNumber: recurringRide.vehicle?.registrationNumber || '',
+        vehicleColor: recurringRide.vehicle?.color || '',
+        mode: recurringRide.vehicle?.vehicleType === 'BIKE' ? 'bikepool' : 'carpool',
+        status: recurringRide.isActive ? 'active' : 'paused',
+        summary: `${confirmedPassengers.length}/${recurringRide.totalSeats} Seats`,
+        passengers: confirmedPassengers,
+        confirmedPassengers,
+        passengerRequests: allMapped.filter((p) => p.rawStatus === 'pending'),
+        requests: allMapped.filter((p) => p.rawStatus === 'pending'),
+        allPassengers: allMapped.filter((p) => !['rejected', 'cancelled'].includes(p.rawStatus)),
+      };
+    }
+  }
+
+  if (!ride) {
     try {
       const { getStrangerTripPassengers } = await import('../stranger/stranger.service.js');
       const strangerPassengers = getStrangerTripPassengers(userId, rideId);
