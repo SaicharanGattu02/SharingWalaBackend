@@ -817,8 +817,101 @@ export const searchUserRides = async (query = {}, currentUserId = null) => {
     return !isNaN(depTime) && depTime >= nowMs;
   });
 
-  if (futureRides.length > 0) {
-    return futureRides.map((r) => enrichRideWithUserBooking(formatRideForFlutter(r), r.bookings, currentUserId));
+  // Query active recurring routes from database so they are always visible in search results
+  let dbRecurringRides = [];
+  try {
+    const recurringWhere = {
+      isActive: true,
+    };
+    if (mode && mode !== 'all') {
+      recurringWhere.vehicle = { vehicleType: mode === 'bikepool' ? 'BIKE' : 'CAR' };
+    }
+    if (isVerifiedOnly) {
+      recurringWhere.driver = { verificationStatus: 'APPROVED' };
+    }
+    if (origin && origin.trim()) {
+      const origClean = cleanLoc(origin);
+      if (origClean) {
+        recurringWhere.startLocationName = { contains: origClean };
+      }
+    }
+    if (destination && destination.trim()) {
+      const destClean = cleanLoc(destination);
+      if (destClean) {
+        recurringWhere.endLocationName = { contains: destClean };
+      }
+    }
+
+    const recRides = await prisma.recurringRide.findMany({
+      where: recurringWhere,
+      include: {
+        driver: { include: { user: true } },
+        vehicle: true,
+      },
+      take: 20,
+    });
+
+    dbRecurringRides = recRides.map((rec) => {
+      const driver = rec.driver;
+      const user = driver?.user;
+      const vehicle = rec.vehicle;
+      const recMode = vehicle?.vehicleType === 'BIKE' ? 'bikepool' : 'carpool';
+      let days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
+      try {
+        if (rec.daysOfWeek) {
+          days = typeof rec.daysOfWeek === 'string' ? JSON.parse(rec.daysOfWeek) : rec.daysOfWeek;
+        }
+      } catch {}
+
+      const price = recMode === 'bikepool' ? 25.0 : 45.0;
+
+      return {
+        id: rec.id,
+        driverId: driver?.userId || user?.id || rec.driverId,
+        driverName: user?.displayName || 'Driver',
+        driverAvatar: user?.avatarUrl || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=400&q=80',
+        rating: driver ? Number(driver.averageRating) : 4.9,
+        totalRides: driver?.totalRidesOffered || 15,
+        isVerified: driver?.verificationStatus === 'APPROVED',
+        routeMatchPercentage: 94,
+        origin: rec.startLocationName,
+        destination: rec.endLocationName,
+        departureTime: rec.departureTime || '08:30 AM',
+        date: `Recurring (${Array.isArray(days) ? days.join(', ') : 'Daily'})`,
+        mode: recMode,
+        rideType: 'recurring',
+        availableSeats: rec.totalSeats,
+        totalSeats: rec.totalSeats,
+        vehicleName: vehicle ? `${vehicle.make} ${vehicle.model}`.trim() : (recMode === 'bikepool' ? 'Motorcycle' : 'Sedan Car'),
+        vehicleNumber: vehicle?.registrationNumber || 'TS 09 EQ 1234',
+        vehicleColor: vehicle?.color || 'Black',
+        communityName: null,
+        pickupFlexibility: 'Flexible 5 mins stop',
+        notes: `Daily recurring commute (${Array.isArray(days) ? days.join(', ') : 'Daily'}). Split fuel cost.`,
+        status: 'available',
+        meetingPoint: `${rec.startLocationName} Main Gate`,
+        isWomenOnly: false,
+        pricePerSeat: price,
+        price,
+        isFree: false,
+        pricingType: 'COST_SHARING',
+        requestStatus: 'none',
+        bookingStatus: 'none',
+        isRequestSent: false,
+        userBooking: null,
+      };
+    });
+  } catch (err) {
+    console.error('Error fetching recurring rides for search:', err);
+  }
+
+  const combinedRides = [
+    ...futureRides.map((r) => enrichRideWithUserBooking(formatRideForFlutter(r), r.bookings, currentUserId)),
+    ...dbRecurringRides,
+  ];
+
+  if (combinedRides.length > 0) {
+    return combinedRides;
   }
 
   // Final fallback initial commuter rides from Flutter MockDataService for instant preview

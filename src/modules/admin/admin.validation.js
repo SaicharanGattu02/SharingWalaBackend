@@ -11,6 +11,19 @@ export const adminLoginSchema = {
   }),
 };
 
+export const adminVerifyOtpSchema = {
+  body: z.object({
+    tempToken: z.string().min(10, 'Temporary session token is required'),
+    otp: z.string().min(4, 'Verification code is required'),
+  }),
+};
+
+export const adminResendOtpSchema = {
+  body: z.object({
+    tempToken: z.string().min(10, 'Temporary session token is required'),
+  }),
+};
+
 export const adminRefreshTokenSchema = {
   body: z.object({
     refreshToken: z.string().min(10, 'Refresh token is required'),

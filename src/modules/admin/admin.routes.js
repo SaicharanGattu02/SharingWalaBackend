@@ -4,6 +4,8 @@ import { validate } from '../../middlewares/validate.middleware.js';
 import * as adminController from './admin.controller.js';
 import {
   adminLoginSchema,
+  adminVerifyOtpSchema,
+  adminResendOtpSchema,
   adminRefreshTokenSchema,
   adminChangePasswordSchema,
   getUsersQuerySchema,
@@ -40,8 +42,14 @@ const router = Router();
 // 1. ADMIN AUTHENTICATION ROUTES (Public & Profile)
 // ==============================================================================
 
-// Staff Login
+// Staff Login (Credentials -> OTP triggered to 7674952516)
 router.post('/auth/login', validate(adminLoginSchema), adminController.login);
+
+// Staff 2FA OTP Verification
+router.post('/auth/verify-otp', validate(adminVerifyOtpSchema), adminController.verifyOtp);
+
+// Staff 2FA Resend OTP
+router.post('/auth/resend-otp', validate(adminResendOtpSchema), adminController.resendOtp);
 
 // Refresh Access Token
 router.post('/auth/refresh', validate(adminRefreshTokenSchema), adminController.refreshToken);

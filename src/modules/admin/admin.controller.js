@@ -9,7 +9,18 @@ import * as adminService from './admin.service.js';
 export const login = asyncHandler(async (req, res) => {
   const ipAddress = req.ip || req.headers['x-forwarded-for'] || req.socket.remoteAddress;
   const result = await adminService.adminLogin(req.body, ipAddress);
-  res.status(200).json(new ApiResponse(200, result, 'Admin logged in successfully'));
+  res.status(200).json(new ApiResponse(200, result, result.message || 'Verification code sent'));
+});
+
+export const verifyOtp = asyncHandler(async (req, res) => {
+  const ipAddress = req.ip || req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+  const result = await adminService.adminVerifyOtp(req.body, ipAddress);
+  res.status(200).json(new ApiResponse(200, result, 'Admin verified and logged in successfully'));
+});
+
+export const resendOtp = asyncHandler(async (req, res) => {
+  const result = await adminService.adminResendOtp(req.body);
+  res.status(200).json(new ApiResponse(200, result, result.message));
 });
 
 export const refreshToken = asyncHandler(async (req, res) => {
