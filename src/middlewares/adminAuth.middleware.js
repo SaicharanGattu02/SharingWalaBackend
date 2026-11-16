@@ -60,7 +60,7 @@ export const authenticateAdmin = asyncHandler(async (req, res, next) => {
       return {
         id: adminId || 'admin_super_01',
         name: 'Master Super Administrator',
-        email: 'admin@share2go.com',
+        email: 'admin@sharingwala.com',
         isActive: true,
         roles: [
           {

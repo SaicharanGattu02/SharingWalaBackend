@@ -8,14 +8,18 @@ export const adminLoginSchema = {
   body: z.object({
     email: z.string().email('Please provide a valid administrative email'),
     password: z.string().min(6, 'Password must be at least 6 characters long'),
-  }),
+    fcmToken: z.string().optional(),
+    fcm_token: z.string().optional(),
+  }).passthrough(),
 };
 
 export const adminVerifyOtpSchema = {
   body: z.object({
     tempToken: z.string().min(10, 'Temporary session token is required'),
     otp: z.string().min(4, 'Verification code is required'),
-  }),
+    fcmToken: z.string().optional(),
+    fcm_token: z.string().optional(),
+  }).passthrough(),
 };
 
 export const adminResendOtpSchema = {

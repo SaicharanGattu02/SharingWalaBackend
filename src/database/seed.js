@@ -75,11 +75,11 @@ async function main() {
   // 2.1 Seed Super Administrator Account
   const defaultAdminPassword = await bcrypt.hash('Admin@123', 10);
   const adminUser = await prisma.adminUser.upsert({
-    where: { email: 'admin@share2go.com' },
+    where: { email: 'admin@sharingwala.com' },
     update: {},
     create: {
       name: 'Master Super Administrator',
-      email: 'admin@share2go.com',
+      email: 'admin@sharingwala.com',
       passwordHash: defaultAdminPassword,
       isActive: true,
     },
