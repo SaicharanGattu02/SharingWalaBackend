@@ -562,26 +562,54 @@ export const offerRide = async (userId, data) => {
   );
 
   if (isRecurring) {
-    const recurring = await prisma.recurringRide.create({
-      data: {
+    const existingRecurring = await prisma.recurringRide.findFirst({
+      where: {
         driverId: driver.id,
-        vehicleId,
         startLocationName: data.origin,
-        startLat: data.originLat || 17.448293,
-        startLng: data.originLng || 78.391487,
         endLocationName: data.destination,
-        endLat: data.destLat || 17.437462,
-        endLng: data.destLng || 78.365448,
         departureTime: data.departureTime || '08:30 AM',
-        returnTime: data.returnTime || '06:00 PM',
-        startDate: new Date(),
-        endDate: new Date(Date.now() + 90 * 86400000),
-        daysOfWeek: JSON.stringify(data.activeDays || ['Mon', 'Tue', 'Wed', 'Thu', 'Fri']),
-        totalSeats,
         isActive: true,
       },
     });
-    recurringRideId = recurring.id;
+
+    if (existingRecurring) {
+      const recurring = await prisma.recurringRide.update({
+        where: { id: existingRecurring.id },
+        data: {
+          vehicleId,
+          startLat: data.originLat || existingRecurring.startLat,
+          startLng: data.originLng || existingRecurring.startLng,
+          endLat: data.destLat || existingRecurring.endLat,
+          endLng: data.destLng || existingRecurring.endLng,
+          returnTime: data.returnTime || existingRecurring.returnTime,
+          daysOfWeek: JSON.stringify(data.activeDays || ['Mon', 'Tue', 'Wed', 'Thu', 'Fri']),
+          totalSeats,
+          isActive: true,
+        },
+      });
+      recurringRideId = recurring.id;
+    } else {
+      const recurring = await prisma.recurringRide.create({
+        data: {
+          driverId: driver.id,
+          vehicleId,
+          startLocationName: data.origin,
+          startLat: data.originLat || 17.448293,
+          startLng: data.originLng || 78.391487,
+          endLocationName: data.destination,
+          endLat: data.destLat || 17.437462,
+          endLng: data.destLng || 78.365448,
+          departureTime: data.departureTime || '08:30 AM',
+          returnTime: data.returnTime || '06:00 PM',
+          startDate: new Date(),
+          endDate: new Date(Date.now() + 90 * 86400000),
+          daysOfWeek: JSON.stringify(data.activeDays || ['Mon', 'Tue', 'Wed', 'Thu', 'Fri']),
+          totalSeats,
+          isActive: true,
+        },
+      });
+      recurringRideId = recurring.id;
+    }
   }
 
   let baseFare;

@@ -910,8 +910,32 @@ export const searchUserRides = async (query = {}, currentUserId = null) => {
     ...dbRecurringRides,
   ];
 
-  if (combinedRides.length > 0) {
-    return combinedRides;
+  // Deduplicate rides: Ensure no commuter sees duplicate ride offers
+  const seenRideIds = new Set();
+  const seenRouteFingerprints = new Set();
+  const uniqueRides = [];
+
+  for (const r of combinedRides) {
+    if (!r || !r.id) continue;
+    if (seenRideIds.has(r.id)) continue;
+
+    const originNorm = (r.origin || '').trim().toLowerCase().replace(/[\s,]+/g, ' ');
+    const destNorm = (r.destination || '').trim().toLowerCase().replace(/[\s,]+/g, ' ');
+    const timeNorm = (r.departureTime || '').trim().toLowerCase();
+    const modeNorm = (r.mode || '').trim().toLowerCase();
+    const fingerprint = `${r.driverId}_${originNorm}_${destNorm}_${timeNorm}_${modeNorm}`;
+
+    if (seenRouteFingerprints.has(fingerprint)) {
+      continue;
+    }
+
+    seenRideIds.add(r.id);
+    seenRouteFingerprints.add(fingerprint);
+    uniqueRides.push(r);
+  }
+
+  if (uniqueRides.length > 0) {
+    return uniqueRides;
   }
 
   // Final fallback initial commuter rides from Flutter MockDataService for instant preview

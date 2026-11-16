@@ -25,11 +25,8 @@ export const validate = (schema) => (req, res, next) => {
   } catch (error) {
     if (error.name === 'ZodError') {
       const issues = error.issues || error.errors || [];
-      const formattedErrors = issues.map((e) => ({
-        field: e.path.join('.'),
-        message: e.message,
-      }));
-      return next(new ApiError(400, 'Validation Error', formattedErrors));
+      const primaryMessage = issues[0]?.message || 'Validation Error';
+      return next(new ApiError(400, primaryMessage));
     }
     next(error);
   }

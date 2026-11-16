@@ -6,11 +6,9 @@ export const errorHandler = (err, req, res, next) => {
 
   // Handle Zod Validation Errors
   if (err.name === 'ZodError') {
-    const errorMessages = err.errors.map((e) => ({
-      field: e.path.join('.'),
-      message: e.message,
-    }));
-    error = new ApiError(400, 'Validation failed', errorMessages);
+    const issues = err.issues || err.errors || [];
+    const primaryMessage = issues[0]?.message || 'Validation failed';
+    error = new ApiError(400, primaryMessage);
   }
 
   // Handle Prisma Known Request Errors
@@ -53,7 +51,6 @@ export const errorHandler = (err, req, res, next) => {
     message: error.message,
     ...(error.code && { code: error.code }),
     ...(error.data && { data: error.data }),
-    ...(error.errors?.length > 0 && { errors: error.errors }),
     ...(env.nodeEnv === 'development' && { stack: error.stack }),
   };
 

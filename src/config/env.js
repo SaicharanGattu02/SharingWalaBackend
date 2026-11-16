@@ -8,6 +8,7 @@ export const env = {
   databaseUrl: process.env.DATABASE_URL || '',
   jwt: {
     secret: process.env.JWT_SECRET || 'fallback_secret_key_change_in_production',
+    accessSecret: process.env.JWT_ACCESS_SECRET || process.env.JWT_SECRET || 'fallback_secret_key_change_in_production',
     expiresIn: process.env.JWT_EXPIRES_IN || '1d',
     refreshSecret: process.env.JWT_REFRESH_SECRET || (process.env.JWT_SECRET ? `${process.env.JWT_SECRET}_refresh` : 'fallback_refresh_secret_key'),
     refreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '30d',

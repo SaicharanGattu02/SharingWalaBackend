@@ -161,7 +161,7 @@ export const adminLogin = async ({ email, password }, ipAddress = '127.0.0.1') =
       // 2FA: Generate temporary token and trigger OTP to 7674952516
       const tempToken = jwt.sign(
         { adminId: admin.id, email: admin.email, action: 'ADMIN_OTP_2FA' },
-        env.jwt.accessSecret,
+        (env.jwt.accessSecret || env.jwt.secret || 'fallback_secret_key_change_in_production'),
         { expiresIn: '10m' }
       );
 
@@ -183,7 +183,7 @@ export const adminLogin = async ({ email, password }, ipAddress = '127.0.0.1') =
       // Instant Dev Mode Mock Admin 2FA
       const tempToken = jwt.sign(
         { adminId: 'admin_super_01', email: normalizedEmail, action: 'ADMIN_OTP_2FA' },
-        env.jwt.accessSecret,
+        (env.jwt.accessSecret || env.jwt.secret || 'fallback_secret_key_change_in_production'),
         { expiresIn: '10m' }
       );
       return {
@@ -200,7 +200,7 @@ export const adminLogin = async ({ email, password }, ipAddress = '127.0.0.1') =
 export const adminVerifyOtp = async ({ tempToken, otp }, ipAddress = '127.0.0.1') => {
   let decoded;
   try {
-    decoded = jwt.verify(tempToken, env.jwt.accessSecret);
+    decoded = jwt.verify(tempToken, (env.jwt.accessSecret || env.jwt.secret || 'fallback_secret_key_change_in_production'));
   } catch (err) {
     throw new ApiError(401, 'Verification session expired. Please sign in again.');
   }
@@ -279,7 +279,7 @@ export const adminVerifyOtp = async ({ tempToken, otp }, ipAddress = '127.0.0.1'
 export const adminResendOtp = async ({ tempToken }) => {
   let decoded;
   try {
-    decoded = jwt.verify(tempToken, env.jwt.accessSecret);
+    decoded = jwt.verify(tempToken, (env.jwt.accessSecret || env.jwt.secret || 'fallback_secret_key_change_in_production'));
   } catch (err) {
     throw new ApiError(401, 'Verification session expired. Please sign in again.');
   }
