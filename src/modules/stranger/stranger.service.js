@@ -1005,6 +1005,46 @@ export const completeStrangerTrip = (userId, tripId) => {
   if (!trip) return null;
   trip.status = 'COMPLETED';
   saveStore();
+
+  try {
+    const io = getIO();
+    if (io) {
+      io.to(`trip:${trip.id}`).emit('trip:status', { tripId: trip.id, status: 'COMPLETED' });
+      io.to(`trip:${trip.id}`).emit('trip_completed', { tripId: trip.id });
+      io.to(`trip:${trip.id}`).emit('trip:status_change', { tripId: trip.id, status: 'COMPLETED' });
+    }
+  } catch (_) {}
+
+  // Dispatch completion push and notification to all passengers
+  if (trip.passengers && trip.passengers.length > 0) {
+    for (const p of trip.passengers) {
+      const pId = p.passengerId || p.userId || p.id;
+      if (pId && !pId.startsWith('mock_')) {
+        createNotification({
+          userId: pId,
+          type: 'RATING_REQUEST',
+          title: 'Trip Completed! 🎉',
+          message: `Your trip to ${trip.destination || trip.endLocationName || 'destination'} is complete. Please rate your captain!`,
+          data: {
+            tripId: trip.id,
+            rideId: trip.id,
+            bookingId: p.bookingId || p.id,
+            route: '/active-ride',
+          },
+          sendPush: true,
+        }).catch((e) => console.warn('Failed to dispatch stranger trip complete notification:', e.message));
+
+        try {
+          const io = getIO();
+          if (io) {
+            io.to(`user:${pId}`).emit('trip:completed', { tripId: trip.id, status: 'COMPLETED' });
+            io.to(`user:${pId}`).emit('trip:status', { tripId: trip.id, status: 'COMPLETED' });
+          }
+        } catch (_) {}
+      }
+    }
+  }
+
   return {
     id: trip.id,
     rideId: trip.id,
@@ -1467,6 +1507,41 @@ export const respondToStrangerTripRequest = async (hostUserId, tripId, requestId
         data: { availableSeats: trip.availableSeats },
       });
     } catch (e) {}
+
+    // Dispatch real-time socket and push notification to passenger
+    const targetPassengerId = req.passengerId || req.userId || req.id;
+    if (targetPassengerId && !targetPassengerId.startsWith('mock_')) {
+      createNotification({
+        userId: targetPassengerId,
+        type: 'BOOKING_ACCEPTED',
+        title: 'Ride Request Accepted! 🚗',
+        message: `${trip.hostName || 'Host'} accepted your ride to ${trip.destination || trip.endLocationName || 'destination'}. Get ready!`,
+        data: {
+          tripId: trip.id,
+          rideId: trip.id,
+          bookingId: req.bookingId || req.id,
+          route: '/active-ride',
+        },
+        sendPush: true,
+      }).catch((e) => console.warn('Failed to dispatch stranger accept notification:', e.message));
+
+      try {
+        const io = getIO();
+        if (io) {
+          io.to(`user:${targetPassengerId}`).emit('ride:accepted', {
+            rideId: trip.id,
+            tripId: trip.id,
+            bookingId: req.bookingId || req.id,
+            status: 'ACCEPTED',
+          });
+          io.to(`user:${targetPassengerId}`).emit('trip:accepted', {
+            tripId: trip.id,
+            bookingId: req.bookingId || req.id,
+            status: 'ACCEPTED',
+          });
+        }
+      } catch (_) {}
+    }
 
     return {
       success: true,

@@ -19,6 +19,30 @@ export const getUserLastSeen = (userId) => {
   return userLastSeen.get(userId) || null;
 };
 
+export const notifyCallRinging = async ({ callerId, receiverId, conversationId }) => {
+  if (!callerId) return;
+  let targetId = callerId;
+  try {
+    const dp = await prisma.driverProfile.findUnique({
+      where: { id: callerId },
+      select: { userId: true },
+    });
+    if (dp?.userId) targetId = dp.userId;
+  } catch (_) {}
+
+  console.log(`📞 [Socket/API] Dispatching call:ringing from receiver ${receiverId} to caller ${targetId}`);
+  try {
+    const io = getIO();
+    io.to(`user:${targetId}`).emit('call:ringing', {
+      receiverId,
+      conversationId,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (err) {
+    console.warn('⚠️ [Call] Failed to emit call:ringing:', err.message);
+  }
+};
+
 export const disconnectUserSockets = (userId) => {
   try {
     const io = getIO();
@@ -237,51 +261,57 @@ export const registerChatSocketHandlers = (io, socket) => {
         }
 
         // Real-time notification badge alert to participants outside the room
+        const recipientUserIds = new Set();
         if (participant.conversation && participant.conversation.participants) {
           participant.conversation.participants.forEach((p) => {
-            if (p.userId !== effectiveUserId) {
-              const msgPreview = messageType === 'LOCATION_SHARE' ? '📍 Shared a location pin' : content;
-              io.to(`user:${p.userId}`).emit('message_notification', {
-                conversationId: targetConvId,
-                conversationType: participant.conversation.type,
-                senderName: socketPayload.senderName,
-                preview: msgPreview,
-                createdAt: message.createdAt,
-              });
-              io.to(`user:${p.userId}`).emit('new_message', socketPayload);
-
-              // Check if recipient is actively inside this conversation room right now
-              const recipientSockets = onlineUsers.get(p.userId);
-              let isRecipientInsideConversation = false;
-              if (recipientSockets && recipientSockets.size > 0) {
-                for (const sId of recipientSockets) {
-                  const s = io.sockets.sockets.get(sId);
-                  if (s && (s.rooms.has(`conv:${targetConvId}`) || s.rooms.has(`conv:${conversationId}`))) {
-                    isRecipientInsideConversation = true;
-                    break;
-                  }
-                }
-              }
-
-              // Only dispatch in-app notification & FCM push when user is NOT actively viewing the chat
-              if (!isRecipientInsideConversation) {
-                createNotification({
-                  userId: p.userId,
-                  type: 'CHAT_MESSAGE',
-                  title: socketPayload.senderName,
-                  message: msgPreview,
-                  data: {
-                    conversationId: targetConvId,
-                    senderId: effectiveUserId,
-                    senderName: socketPayload.senderName,
-                    route: '/chat-conversation',
-                  },
-                  sendPush: true,
-                }).catch((e) => console.warn('Failed to dispatch message notification:', e.message));
-              }
-            }
+            if (p.userId !== effectiveUserId) recipientUserIds.add(p.userId);
           });
         }
+        if (participant.peerUserId && participant.peerUserId !== effectiveUserId) {
+          recipientUserIds.add(participant.peerUserId);
+        }
+
+        recipientUserIds.forEach((recipientUserId) => {
+          const msgPreview = messageType === 'LOCATION_SHARE' ? '📍 Shared a location pin' : content;
+          io.to(`user:${recipientUserId}`).emit('message_notification', {
+            conversationId: targetConvId,
+            conversationType: participant.conversation?.type || 'DIRECT',
+            senderName: socketPayload.senderName,
+            preview: msgPreview,
+            createdAt: message.createdAt,
+          });
+          io.to(`user:${recipientUserId}`).emit('new_message', socketPayload);
+
+          // Check if recipient is actively inside this conversation room right now
+          const recipientSockets = onlineUsers.get(recipientUserId);
+          let isRecipientInsideConversation = false;
+          if (recipientSockets && recipientSockets.size > 0) {
+            for (const sId of recipientSockets) {
+              const s = io.sockets.sockets.get(sId);
+              if (s && (s.rooms.has(`conv:${targetConvId}`) || s.rooms.has(`conv:${conversationId}`))) {
+                isRecipientInsideConversation = true;
+                break;
+              }
+            }
+          }
+
+          // Only dispatch in-app notification & FCM push when user is NOT actively viewing the chat
+          if (!isRecipientInsideConversation) {
+            createNotification({
+              userId: recipientUserId,
+              type: 'CHAT_MESSAGE',
+              title: socketPayload.senderName,
+              message: msgPreview,
+              data: {
+                conversationId: targetConvId,
+                senderId: effectiveUserId,
+                senderName: socketPayload.senderName,
+                route: '/chat-conversation',
+              },
+              sendPush: true,
+            }).catch((e) => console.warn('Failed to dispatch message notification:', e.message));
+          }
+        });
       } catch (error) {
         socket.emit('chat_error', { message: error.message });
       }
@@ -463,6 +493,11 @@ export const registerChatSocketHandlers = (io, socket) => {
     if (fcmToken && userId) {
       registerUserFcmToken(userId, fcmToken);
     }
+  });
+
+  socket.on('call:ringing', async ({ callerId, conversationId }) => {
+    if (!callerId) return;
+    await notifyCallRinging({ callerId, receiverId: userId, conversationId });
   });
 
   socket.on('call:accept', async ({ callerId }) => {

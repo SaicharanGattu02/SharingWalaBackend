@@ -30,7 +30,14 @@ export const sendMessage = asyncHandler(async (req, res) => {
   res.status(201).json(new ApiResponse(201, message, 'Message sent successfully'));
 });
 
-import { isUserOnline, getUserLastSeen } from './chat.socket.js';
+import { isUserOnline, getUserLastSeen, notifyCallRinging } from './chat.socket.js';
+
+export const reportCallRinging = asyncHandler(async (req, res) => {
+  const { callerId, conversationId } = req.body;
+  const receiverId = req.user?.id || req.body.receiverId;
+  await notifyCallRinging({ callerId, receiverId, conversationId });
+  res.status(200).json(new ApiResponse(200, { success: true }, 'Call ringing dispatched'));
+});
 
 export const markAsRead = asyncHandler(async (req, res) => {
   const result = await chatService.markAsRead(req.user.id, req.params.id);

@@ -1247,18 +1247,37 @@ export const respondToPassengerRequest = async (userId, bookingId, actionOrStatu
       });
 
       // Dispatch notification to passenger
-      createNotification({
-        userId: booking.passenger.id,
-        type: 'BOOKING_ACCEPTED',
-        title: 'Seat Request Accepted! 🎉',
-        message: `Your seat request for ${booking.ride?.endLocationName || 'the commute'} was confirmed by the host.`,
-        data: {
-          rideId: booking.rideId,
-          bookingId: updatedBooking.id,
-          route: '/active-ride',
-        },
-        sendPush: true,
-      }).catch((e) => console.warn('Failed to notify passenger of acceptance:', e.message));
+      const passengerTargetId = booking.passengerId || booking.passenger?.id;
+      if (passengerTargetId) {
+        createNotification({
+          userId: passengerTargetId,
+          type: 'BOOKING_ACCEPTED',
+          title: 'Seat Request Accepted! 🎉',
+          message: `Your seat request for ${booking.ride?.endLocationName || 'the commute'} was confirmed by the host.`,
+          data: {
+            rideId: booking.rideId,
+            bookingId: updatedBooking.id,
+            route: '/active-ride',
+          },
+          sendPush: true,
+        }).catch((e) => console.warn('Failed to notify passenger of acceptance:', e.message));
+
+        try {
+          const io = getIO();
+          if (io) {
+            io.to(`user:${passengerTargetId}`).emit('ride:accepted', {
+              rideId: booking.rideId,
+              bookingId: updatedBooking.id,
+              status: 'ACCEPTED',
+            });
+            io.to(`user:${passengerTargetId}`).emit('trip:accepted', {
+              tripId: booking.rideId,
+              bookingId: updatedBooking.id,
+              status: 'ACCEPTED',
+            });
+          }
+        } catch (_) {}
+      }
 
       return {
         bookingId: updatedBooking.id,
@@ -1626,6 +1645,16 @@ export const completeTrip = async (userId, rideId, options = {}) => {
     return r;
   });
 
+  // Emit real-time trip completion socket events to room & passengers
+  try {
+    const io = getIO();
+    if (io) {
+      io.to(`trip:${completedRide.id}`).emit('trip:status', { tripId: completedRide.id, status: 'COMPLETED' });
+      io.to(`trip:${completedRide.id}`).emit('trip_completed', { tripId: completedRide.id });
+      io.to(`trip:${completedRide.id}`).emit('trip:status_change', { tripId: completedRide.id, status: 'COMPLETED' });
+    }
+  } catch (_) {}
+
   // Notify all passengers that trip is completed and prompt rating
   if (completedRide.bookings && completedRide.bookings.length > 0) {
     for (const b of completedRide.bookings) {
@@ -1642,6 +1671,14 @@ export const completeTrip = async (userId, rideId, options = {}) => {
           },
           sendPush: true,
         }).catch((e) => console.warn('Failed to notify passenger of trip completion:', e.message));
+
+        try {
+          const io = getIO();
+          if (io) {
+            io.to(`user:${b.passengerId}`).emit('trip:completed', { tripId: completedRide.id, status: 'COMPLETED' });
+            io.to(`user:${b.passengerId}`).emit('trip:status', { tripId: completedRide.id, status: 'COMPLETED' });
+          }
+        } catch (_) {}
       }
     }
   }

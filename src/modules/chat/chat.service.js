@@ -4,6 +4,7 @@ import { fileURLToPath } from 'url';
 import { prisma } from '../../config/db.js';
 import { ApiError } from '../../utils/apiError.js';
 import { getIO } from '../../config/socket.js';
+import { createNotification } from '../notification/notification.service.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -1058,22 +1059,45 @@ export const sendChatMessage = async (userId, conversationId, data) => {
       io.to(`conv:${conversationId}`).emit('new_message', payload);
     }
 
+    const recipientIds = new Set();
     if (participant.conversation && participant.conversation.participants) {
       participant.conversation.participants.forEach((p) => {
-        if (p.userId !== userId) {
-          io.to(`user:${p.userId}`).emit('message_notification', {
-            conversationId: targetConvId,
-            conversationType: participant.conversation.type,
-            senderName: message.sender.displayName,
-            preview: message.messageType === 'LOCATION_SHARE'
-              ? '📍 Shared a location'
-              : (message.messageType === 'MISSED_CALL' ? '📞 Missed call' : message.content),
-            createdAt: message.createdAt,
-          });
-          io.to(`user:${p.userId}`).emit('new_message', payload);
-        }
+        if (p.userId !== userId) recipientIds.add(p.userId);
       });
     }
+    if (participant.peerUserId && participant.peerUserId !== userId) {
+      recipientIds.add(participant.peerUserId);
+    }
+
+    const msgPreview = message.messageType === 'LOCATION_SHARE'
+      ? '📍 Shared a location'
+      : (message.messageType === 'MISSED_CALL' ? '📞 Missed call' : message.content);
+
+    recipientIds.forEach((recipientId) => {
+      io.to(`user:${recipientId}`).emit('message_notification', {
+        conversationId: targetConvId,
+        conversationType: participant.conversation?.type || 'DIRECT',
+        senderName: message.sender.displayName,
+        preview: msgPreview,
+        createdAt: message.createdAt,
+      });
+      io.to(`user:${recipientId}`).emit('new_message', payload);
+
+      // WhatsApp-style FCM Push Notification
+      createNotification({
+        userId: recipientId,
+        type: 'CHAT_MESSAGE',
+        title: message.sender.displayName,
+        message: msgPreview,
+        data: {
+          conversationId: targetConvId,
+          senderId: userId,
+          senderName: message.sender.displayName,
+          route: '/chat-conversation',
+        },
+        sendPush: true,
+      }).catch((e) => console.warn('Failed to dispatch REST chat push notification:', e.message));
+    });
   } catch (err) {
     // Socket broadcast is best-effort for REST endpoint
   }

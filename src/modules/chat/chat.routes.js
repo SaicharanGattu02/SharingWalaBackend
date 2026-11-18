@@ -17,6 +17,7 @@ router.post('/direct', validate(createDirectChatSchema), chatController.getOrCre
 router.get('/conversations/:id/messages', validate(getMessagesQuerySchema), chatController.getMessages);
 router.post('/conversations/:id/messages', validate(sendMessageSchema), chatController.sendMessage);
 router.post('/conversations/:id/read', chatController.markAsRead);
+router.post('/call-ringing', chatController.reportCallRinging);
 router.get('/users/:userId/status', chatController.getUserOnlineStatus);
 
 export default router;
