@@ -1486,7 +1486,7 @@ export const startTrip = async (userId, rideId, options = {}) => {
     ? currentRide.endLocationName.split(',')[0].trim()
     : currentRide.endLocationName;
 
-  return {
+  const responsePayload = {
     id: currentRide.id,
     rideId: currentRide.id,
     tripId: currentRide.id,
@@ -1522,6 +1522,26 @@ export const startTrip = async (userId, rideId, options = {}) => {
     })),
     message: 'Trip started successfully! Drive safely.',
   };
+
+  // Dispatch push & in-app notifications to all confirmed passengers
+  for (const p of confirmedPassengers) {
+    if (p.passengerId) {
+      createNotification({
+        userId: p.passengerId,
+        type: 'RIDE_REMINDER',
+        title: 'Trip Started! 🚗',
+        message: `Your captain has started the trip to ${currentRide.endLocationName}. Be ready at your pickup point!`,
+        data: {
+          rideId: currentRide.id,
+          bookingId: p.bookingId,
+          route: '/active-ride',
+        },
+        sendPush: true,
+      }).catch((e) => console.warn('Failed to notify passenger of trip start:', e.message));
+    }
+  }
+
+  return responsePayload;
 };
 
 /**
@@ -1605,6 +1625,26 @@ export const completeTrip = async (userId, rideId, options = {}) => {
 
     return r;
   });
+
+  // Notify all passengers that trip is completed and prompt rating
+  if (completedRide.bookings && completedRide.bookings.length > 0) {
+    for (const b of completedRide.bookings) {
+      if (b.passengerId) {
+        createNotification({
+          userId: b.passengerId,
+          type: 'RATING_REQUEST',
+          title: 'Trip Completed! 🎉',
+          message: `Your trip to ${completedRide.endLocationName} is complete. Please rate your captain!`,
+          data: {
+            rideId: completedRide.id,
+            bookingId: b.id,
+            route: '/active-ride',
+          },
+          sendPush: true,
+        }).catch((e) => console.warn('Failed to notify passenger of trip completion:', e.message));
+      }
+    }
+  }
 
   return {
     id: completedRide.id,
@@ -1850,6 +1890,34 @@ export const deleteOfferedRide = async (userId, rideId, { permanent = false, rea
   if (ride.driverId !== driver.id) {
     throw new ApiError(403, 'Unauthorized: Ride belongs to another driver');
   }
+
+  // Notify affected passengers of ride cancellation
+  try {
+    const affectedBookings = await prisma.booking.findMany({
+      where: {
+        rideId,
+        status: { in: ['PENDING', 'ACCEPTED'] },
+      },
+      select: { passengerId: true, id: true },
+    });
+
+    for (const b of affectedBookings) {
+      if (b.passengerId) {
+        createNotification({
+          userId: b.passengerId,
+          type: 'RIDE_CANCELLED',
+          title: 'Ride Cancelled ⚠️',
+          message: `The ride to ${ride.endLocationName || 'your destination'} was cancelled by the host.`,
+          data: {
+            rideId,
+            bookingId: b.id,
+            route: '/my-rides',
+          },
+          sendPush: true,
+        }).catch((e) => console.warn('Failed to notify passenger of cancellation:', e.message));
+      }
+    }
+  } catch (_) {}
 
   if (permanent) {
     await prisma.$transaction(async (tx) => {

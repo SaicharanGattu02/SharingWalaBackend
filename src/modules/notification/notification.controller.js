@@ -69,3 +69,19 @@ export const deleteNotification = asyncHandler(async (req, res) => {
   );
 });
 
+export const registerDeviceToken = asyncHandler(async (req, res) => {
+  const userId = req.user.id;
+  const token = req.body.deviceToken || req.body.fcmToken || req.body.fcm_token || req.body.token || req.body.device_token;
+  const deviceType = req.body.deviceType || 'ANDROID';
+
+  if (!token) {
+    throw new ApiError(400, 'deviceToken or fcmToken is required');
+  }
+
+  await notificationService.saveDeviceToken(userId, token, deviceType);
+
+  return res.status(200).json(
+    new ApiResponse(200, { registered: true }, 'Device token registered successfully')
+  );
+});
+

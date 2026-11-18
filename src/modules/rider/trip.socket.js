@@ -1,5 +1,6 @@
 import { prisma } from '../../config/db.js';
 import { getIO } from '../../config/socket.js';
+import { createNotification } from '../notification/notification.service.js';
 
 // In-memory active live trip telemetry cache
 // tripId -> { lastLocation: { latitude, longitude, bearing, speed, accuracy, updatedAt }, isDeviated, currentStopIndex, status }
@@ -184,11 +185,47 @@ export const registerTripSocketHandlers = (io, socket) => {
         if (status === 'DROPPED_OFF') dbStatus = 'COMPLETED';
         if (status === 'NO_SHOW') dbStatus = 'CANCELLED';
 
+        let targetPassengerId = data?.passengerId;
         if (dbStatus) {
-          await prisma.booking.update({
+          const updatedBooking = await prisma.booking.update({
             where: { id: bookingId },
             data: { status: dbStatus },
+            select: { passengerId: true },
           });
+          if (!targetPassengerId && updatedBooking?.passengerId) {
+            targetPassengerId = updatedBooking.passengerId;
+          }
+        }
+
+        // Send push & in-app notification to the passenger
+        if (targetPassengerId) {
+          if (status === 'PICKED_UP') {
+            createNotification({
+              userId: targetPassengerId,
+              type: 'BOOKING_ACCEPTED',
+              title: 'Onboard! 🚗',
+              message: 'You have been picked up. Enjoy your ride!',
+              data: {
+                rideId: tripId,
+                bookingId,
+                route: '/active-ride',
+              },
+              sendPush: true,
+            }).catch((e) => console.warn('Failed to notify passenger of onboard:', e.message));
+          } else if (status === 'DROPPED_OFF') {
+            createNotification({
+              userId: targetPassengerId,
+              type: 'RATING_REQUEST',
+              title: "You've Arrived! 🏁",
+              message: 'You have reached your destination. Please rate your captain!',
+              data: {
+                rideId: tripId,
+                bookingId,
+                route: '/active-ride',
+              },
+              sendPush: true,
+            }).catch((e) => console.warn('Failed to notify passenger of drop-off:', e.message));
+          }
         }
       } catch (dbErr) {
         console.warn('[TripSocket] DB update error for booking passenger status:', dbErr.message);

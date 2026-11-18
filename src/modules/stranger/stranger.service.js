@@ -1391,6 +1391,22 @@ export const joinStrangerTrip = async (userId, tripId, body = {}) => {
     } catch (_) {}
   }
 
+  // Real-time Push & In-App Notification alert to joining passenger
+  createNotification({
+    userId,
+    type: 'TRIP_JOIN_REQUEST',
+    title: 'Trip Request Sent 🎒',
+    message: `Your request for ${seatsRequested} seat(s) to ${trip.destination} has been sent to the host.`,
+    data: {
+      tripId: trip.id,
+      rideId: trip.id,
+      bookingId: requestId,
+      seats: String(seatsRequested),
+      route: '/my-rides',
+    },
+    sendPush: true,
+  }).catch((e) => console.warn('Failed to dispatch passenger join notification:', e.message));
+
   return {
     success: true,
     message: 'Opt-in request sent successfully! The host will review your request.',

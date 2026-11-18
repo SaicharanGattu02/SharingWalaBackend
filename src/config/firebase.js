@@ -257,8 +257,9 @@ export const sendRideNotificationPush = async ({
   for (const [k, v] of Object.entries(payloadData)) {
     stringifiedData[k] = String(v ?? '');
   }
+  stringifiedData.click_action = 'FLUTTER_NOTIFICATION_CLICK';
 
-  await Promise.allSettled(
+  const results = await Promise.allSettled(
     tokens.map((token) =>
       getMessaging(firebaseApp).send({
         token,
@@ -272,11 +273,43 @@ export const sendRideNotificationPush = async ({
           notification: {
             channelId: 'high_importance_channel',
             sound: 'default',
+            priority: 'high',
+            defaultSound: true,
+            defaultVibrateTimings: true,
+            clickAction: 'FLUTTER_NOTIFICATION_CLICK',
+          },
+        },
+        apns: {
+          headers: {
+            'apns-priority': '10',
+          },
+          payload: {
+            aps: {
+              sound: 'default',
+              badge: 1,
+            },
           },
         },
       })
     )
   );
 
-  return true;
+  let successCount = 0;
+  results.forEach((res, index) => {
+    if (res.status === 'fulfilled') {
+      successCount++;
+    } else {
+      console.warn(`⚠️ [FCM] Failed to deliver ride notification to token: ${res.reason?.message}`);
+      if (res.reason?.code === 'messaging/registration-token-not-registered') {
+        const set = userFcmTokens.get(targetUserId);
+        if (set) {
+          set.delete(tokens[index]);
+          saveTokens();
+        }
+      }
+    }
+  });
+
+  console.log(`📲 [FCM] Delivered push notification to ${successCount}/${tokens.length} devices for user ${targetUserId}`);
+  return successCount > 0;
 };

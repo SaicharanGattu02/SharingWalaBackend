@@ -1,6 +1,6 @@
 import { prisma, withDbTimeout } from '../../config/db.js';
 import { getIO } from '../../config/socket.js';
-import { sendRideNotificationPush } from '../../config/firebase.js';
+import { sendRideNotificationPush, registerUserFcmToken } from '../../config/firebase.js';
 
 // In-memory fallback notification store for resilient local development
 const inMemoryNotifications = [];
@@ -233,6 +233,34 @@ export const createNotification = async ({
   }
 
   return formatted;
+};
+
+/**
+ * Register FCM device push token
+ */
+export const saveDeviceToken = async (userId, deviceToken, deviceType = 'ANDROID') => {
+  if (!userId || !deviceToken) return;
+  await registerUserFcmToken(userId, deviceToken);
+  try {
+    await prisma.userDevice.upsert({
+      where: { deviceToken },
+      update: {
+        userId,
+        deviceType,
+        appVersion: 'FCM_TOKEN',
+        lastActiveAt: new Date(),
+      },
+      create: {
+        userId,
+        deviceToken,
+        deviceType,
+        appVersion: 'FCM_TOKEN',
+        lastActiveAt: new Date(),
+      },
+    });
+  } catch (err) {
+    console.warn('[NotificationService] userDevice upsert warning:', err.message);
+  }
 };
 
 /**

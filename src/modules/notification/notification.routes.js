@@ -7,6 +7,8 @@ const router = Router();
 // All notification endpoints require authentication
 router.use(authenticate);
 
+router.post('/device-token', notificationController.registerDeviceToken);
+router.post('/fcm-token', notificationController.registerDeviceToken);
 router.get('/', notificationController.getNotifications);
 router.get('/unread-count', notificationController.getUnreadCount);
 router.patch('/read-all', notificationController.markAllAsRead);

@@ -1222,10 +1222,20 @@ export const requestSeatOnRide = async (passengerUserId, rideId, { seats = 1, pi
       select: { id: true, displayName: true, avatarUrl: true, phone: true },
     });
     const passengerName = passenger?.displayName || 'A commuter';
-    const hostUserId = ride.driver?.userId;
+    let hostUserId = ride.driver?.userId;
+    if (!hostUserId && ride.driverId) {
+      try {
+        const dp = await tx.driverProfile.findUnique({
+          where: { id: ride.driverId },
+          select: { userId: true },
+        });
+        hostUserId = dp?.userId;
+      } catch (_) {}
+    }
+    if (!hostUserId) hostUserId = ride.driverId;
 
     if (hostUserId) {
-      // Dispatch rich in-app notification & push alert to Host
+      // 1. Dispatch rich in-app notification & push alert to Host
       try {
         await createNotification({
           userId: hostUserId,
@@ -1243,7 +1253,7 @@ export const requestSeatOnRide = async (passengerUserId, rideId, { seats = 1, pi
           sendPush: true,
         });
       } catch (notifErr) {
-        console.warn('⚠️ Notification creation failed:', notifErr.message);
+        console.warn('⚠️ Host notification creation failed:', notifErr.message);
       }
 
       // 2. Real-time WebSocket emission to Host for badge & in-app alert
@@ -1271,6 +1281,28 @@ export const requestSeatOnRide = async (passengerUserId, rideId, { seats = 1, pi
       } catch (ioErr) {
         console.warn('⚠️ Socket emission failed:', ioErr.message);
       }
+    }
+
+    // 3. Dispatch rich in-app notification & push alert to Passenger
+    try {
+      const isAutoAccepted = booking.status === 'ACCEPTED';
+      await createNotification({
+        userId: passengerUserId,
+        type: isAutoAccepted ? 'BOOKING_ACCEPTED' : 'BOOKING_REQUEST',
+        title: isAutoAccepted ? 'Booking Confirmed! 🎉' : 'Seat Request Sent 🚗',
+        message: isAutoAccepted
+          ? `Your seat on the trip to ${ride.endLocationName} is confirmed!`
+          : `Your request for ${seats} seat(s) on the trip to ${ride.endLocationName} has been sent to the host.`,
+        data: {
+          rideId,
+          bookingId: booking.id,
+          seats: String(seats),
+          route: isAutoAccepted ? '/active-ride' : '/my-rides',
+        },
+        sendPush: true,
+      });
+    } catch (notifErr) {
+      console.warn('⚠️ Passenger notification failed:', notifErr.message);
     }
 
     return {
