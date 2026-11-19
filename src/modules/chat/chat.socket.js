@@ -43,6 +43,151 @@ export const notifyCallRinging = async ({ callerId, receiverId, conversationId }
   }
 };
 
+export const resolveTargetUsers = async (inputIdentifier, convId, currentUserId) => {
+  const resolved = new Set();
+  let candidate = (inputIdentifier || '').trim();
+  if (candidate.startsWith('passenger_')) candidate = candidate.replace('passenger_', '');
+  if (candidate.startsWith('driver_')) candidate = candidate.replace('driver_', '');
+
+  if (candidate && candidate !== 'host' && candidate !== currentUserId) {
+    try {
+      const user = await prisma.user.findUnique({
+        where: { id: candidate },
+        select: { id: true },
+      });
+      if (user) resolved.add(user.id);
+    } catch (_) {}
+
+    if (resolved.size === 0) {
+      try {
+        const dp = await prisma.driverProfile.findUnique({
+          where: { id: candidate },
+          select: { userId: true },
+        });
+        if (dp?.userId) resolved.add(dp.userId);
+      } catch (_) {}
+    }
+
+    if (resolved.size === 0) {
+      try {
+        const booking = await prisma.booking.findUnique({
+          where: { id: candidate },
+          select: { passengerId: true, ride: { select: { driver: { select: { userId: true } } } } },
+        });
+        if (booking) {
+          if (booking.passengerId && booking.passengerId !== currentUserId) {
+            resolved.add(booking.passengerId);
+          } else if (booking.ride?.driver?.userId && booking.ride.driver.userId !== currentUserId) {
+            resolved.add(booking.ride.driver.userId);
+          }
+        }
+      } catch (_) {}
+    }
+  }
+
+  const potentialConvId =
+    convId ||
+    (candidate.startsWith('direct_') ||
+    candidate.startsWith('conv_') ||
+    candidate.startsWith('trip_')
+      ? candidate
+      : null);
+  if (potentialConvId) {
+    try {
+      const conv = await prisma.conversation.findUnique({
+        where: { id: potentialConvId },
+        include: { participants: { select: { userId: true } } },
+      });
+      if (conv?.participants) {
+        conv.participants.forEach((p) => {
+          if (p.userId && p.userId !== currentUserId) resolved.add(p.userId);
+        });
+      }
+    } catch (_) {}
+
+    if (potentialConvId.startsWith('trip_')) {
+      try {
+        const peer = await resolvePeerUserId(potentialConvId, currentUserId);
+        if (peer && peer !== currentUserId) {
+          resolved.add(peer);
+        }
+      } catch (_) {}
+    }
+
+    if (potentialConvId.startsWith('direct_')) {
+      const raw = potentialConvId.replace('direct_', '');
+      if (raw.includes(currentUserId)) {
+        const peer = raw.replace(currentUserId, '').replace(/^_+|_+$/g, '');
+        if (peer) resolved.add(peer);
+      }
+    }
+  }
+
+  if (resolved.size === 0 && candidate && candidate !== 'host' && candidate !== currentUserId) {
+    resolved.add(candidate);
+  }
+
+  if (currentUserId) {
+    resolved.delete(currentUserId);
+  }
+  return Array.from(resolved);
+};
+
+export const initiateCallSession = async ({
+  callerId,
+  callerUser,
+  toUserId,
+  conversationId,
+  callType = 'AUDIO',
+}) => {
+  const targets = await resolveTargetUsers(toUserId, conversationId, callerId);
+  if (targets.length === 0 && toUserId) {
+    targets.push(toUserId.trim());
+  }
+
+  const payload = {
+    callerId,
+    callerName: callerUser?.displayName || callerUser?.username || 'Caller',
+    callerAvatar: callerUser?.avatarUrl,
+    callType,
+    conversationId: conversationId || (toUserId && toUserId.startsWith('trip_') ? toUserId : null),
+    timestamp: new Date().toISOString(),
+  };
+
+  console.log(`📞 [Call] initiateCallSession from ${callerId} (${payload.callerName}) ➔ to users:`, targets);
+
+  let io;
+  try {
+    io = getIO();
+  } catch (_) {}
+
+  targets.forEach((targetId) => {
+    // 1. Live WebSocket delivery for Foreground / Locked / Active Background states
+    if (io) {
+      io.to(`user:${targetId}`).emit('call:incoming', payload);
+    }
+
+    // 2. High-Priority Data-Only FCM Push for Killed / Swiped Away states
+    sendIncomingCallPush({
+      recipientUserId: targetId,
+      callerId: payload.callerId,
+      callerName: payload.callerName,
+      callerAvatar: payload.callerAvatar,
+      callType: payload.callType,
+      conversationId: payload.conversationId,
+    }).catch((err) => console.error('FCM call push error:', err));
+  });
+
+  if (conversationId && io) {
+    io.to(`conv:${conversationId}`).emit('call:incoming_in_room', {
+      ...payload,
+      toUserIds: targets,
+    });
+  }
+
+  return { success: true, targets, payload };
+};
+
 export const disconnectUserSockets = (userId) => {
   try {
     const io = getIO();
@@ -351,130 +496,16 @@ export const registerChatSocketHandlers = (io, socket) => {
     });
   });
 
-  // Helper to resolve any peer ID (User.id, DriverProfile.id, passenger_<id>, trip_<rideId>, etc.)
-  async function resolveTargetUsers(inputIdentifier, convId) {
-    const resolved = new Set();
-    let candidate = (inputIdentifier || '').trim();
-    if (candidate.startsWith('passenger_')) candidate = candidate.replace('passenger_', '');
-    if (candidate.startsWith('driver_')) candidate = candidate.replace('driver_', '');
-
-    if (candidate && candidate !== 'host' && candidate !== userId) {
-      try {
-        const user = await prisma.user.findUnique({
-          where: { id: candidate },
-          select: { id: true },
-        });
-        if (user) resolved.add(user.id);
-      } catch (_) {}
-
-      if (resolved.size === 0) {
-        try {
-          const dp = await prisma.driverProfile.findUnique({
-            where: { id: candidate },
-            select: { userId: true },
-          });
-          if (dp?.userId) resolved.add(dp.userId);
-        } catch (_) {}
-      }
-
-      if (resolved.size === 0) {
-        try {
-          const booking = await prisma.booking.findUnique({
-            where: { id: candidate },
-            select: { passengerId: true, ride: { select: { driver: { select: { userId: true } } } } },
-          });
-          if (booking) {
-            if (booking.passengerId && booking.passengerId !== userId) {
-              resolved.add(booking.passengerId);
-            } else if (booking.ride?.driver?.userId && booking.ride.driver.userId !== userId) {
-              resolved.add(booking.ride.driver.userId);
-            }
-          }
-        } catch (_) {}
-      }
-    }
-
-    const potentialConvId = convId || (candidate.startsWith('direct_') || candidate.startsWith('conv_') || candidate.startsWith('trip_') ? candidate : null);
-    if (potentialConvId) {
-      try {
-        const conv = await prisma.conversation.findUnique({
-          where: { id: potentialConvId },
-          include: { participants: { select: { userId: true } } },
-        });
-        if (conv?.participants) {
-          conv.participants.forEach((p) => {
-            if (p.userId && p.userId !== userId) resolved.add(p.userId);
-          });
-        }
-      } catch (_) {}
-
-      if (potentialConvId.startsWith('trip_')) {
-        try {
-          const peer = await resolvePeerUserId(potentialConvId, userId);
-          if (peer && peer !== userId) {
-            resolved.add(peer);
-          }
-        } catch (_) {}
-      }
-
-      if (potentialConvId.startsWith('direct_')) {
-        const raw = potentialConvId.replace('direct_', '');
-        if (raw.includes(userId)) {
-          const peer = raw.replace(userId, '').replace(/^_+|_+$/g, '');
-          if (peer) resolved.add(peer);
-        }
-      }
-    }
-
-    if (resolved.size === 0 && candidate && candidate !== 'host' && candidate !== userId) {
-      resolved.add(candidate);
-    }
-
-    resolved.delete(userId);
-    return Array.from(resolved);
-  }
-
   // 7. VoIP 1-to-1 Calling Events (User ID to User ID & Conversation Room)
   socket.on('call:initiate', async ({ toUserId, callType = 'AUDIO', conversationId }) => {
     if (!toUserId && !conversationId) return;
-
-    const targets = await resolveTargetUsers(toUserId, conversationId);
-    if (targets.length === 0 && toUserId) {
-      targets.push(toUserId.trim());
-    }
-
-    const payload = {
+    await initiateCallSession({
       callerId: userId,
-      callerName: socket.user.displayName || socket.user.username || 'Caller',
-      callerAvatar: socket.user.avatarUrl,
+      callerUser: socket.user,
+      toUserId,
+      conversationId,
       callType,
-      conversationId: conversationId || (toUserId && toUserId.startsWith('trip_') ? toUserId : null),
-      timestamp: new Date().toISOString(),
-    };
-
-    console.log(`📞 [Socket] call:initiate from ${userId} (${payload.callerName}) ➔ to users:`, targets);
-
-    targets.forEach((targetId) => {
-      // 1. Live WebSocket delivery for Foreground / Locked / Active Background states
-      io.to(`user:${targetId}`).emit('call:incoming', payload);
-
-      // 2. High-Priority Data-Only FCM Push for Killed / Swiped Away states
-      sendIncomingCallPush({
-        recipientUserId: targetId,
-        callerId: payload.callerId,
-        callerName: payload.callerName,
-        callerAvatar: payload.callerAvatar,
-        callType: payload.callType,
-        conversationId: payload.conversationId,
-      }).catch((err) => console.error('FCM push error:', err));
     });
-
-    if (conversationId) {
-      io.to(`conv:${conversationId}`).emit('call:incoming_in_room', {
-        ...payload,
-        toUserIds: targets,
-      });
-    }
   });
 
   socket.on('register_fcm_token', ({ fcmToken }) => {
@@ -490,7 +521,7 @@ export const registerChatSocketHandlers = (io, socket) => {
 
   socket.on('call:accept', async ({ callerId }) => {
     if (!callerId) return;
-    const targets = await resolveTargetUsers(callerId);
+    const targets = await resolveTargetUsers(callerId, null, userId);
     const targetId = targets[0] || callerId;
     console.log(`📞 [Socket] call:accept from ${userId} to caller ${targetId}`);
     io.to(`user:${targetId}`).emit('call:accepted', {
@@ -501,7 +532,7 @@ export const registerChatSocketHandlers = (io, socket) => {
 
   socket.on('call:reject', async ({ callerId, reason = 'DECLINED' }) => {
     if (!callerId) return;
-    const targets = await resolveTargetUsers(callerId);
+    const targets = await resolveTargetUsers(callerId, null, userId);
     const targetId = targets[0] || callerId;
     console.log(`📞 [Socket] call:reject from ${userId} to caller ${targetId} (reason: ${reason})`);
     io.to(`user:${targetId}`).emit('call:rejected', {
@@ -512,8 +543,8 @@ export const registerChatSocketHandlers = (io, socket) => {
 
   socket.on('call:missed', async ({ toUserId, callType = 'AUDIO', conversationId }) => {
     if (!toUserId) return;
-    const targets = await resolveTargetUsers(toUserId, conversationId);
-    const targetId = (targets && targets.size > 0 ? Array.from(targets)[0] : null) || toUserId;
+    const targets = await resolveTargetUsers(toUserId, conversationId, userId);
+    const targetId = (targets && targets.length > 0 ? targets[0] : null) || toUserId;
     io.to(`user:${targetId}`).emit('call:missed', {
       callerId: userId,
       callerName: socket.user.displayName || socket.user.username,
@@ -601,7 +632,7 @@ export const registerChatSocketHandlers = (io, socket) => {
 
   socket.on('call:signal', async ({ toUserId, signalData }) => {
     if (!toUserId || !signalData) return;
-    const targets = await resolveTargetUsers(toUserId);
+    const targets = await resolveTargetUsers(toUserId, null, userId);
     const targetId = targets[0] || toUserId;
     io.to(`user:${targetId}`).emit('call:signal', {
       fromUserId: userId,
@@ -611,7 +642,7 @@ export const registerChatSocketHandlers = (io, socket) => {
 
   socket.on('call:end', async ({ toUserId, reason = 'HUNG_UP' }) => {
     if (!toUserId) return;
-    const targets = await resolveTargetUsers(toUserId);
+    const targets = await resolveTargetUsers(toUserId, null, userId);
     const targetId = targets[0] || toUserId;
     io.to(`user:${targetId}`).emit('call:ended', {
       byUserId: userId,

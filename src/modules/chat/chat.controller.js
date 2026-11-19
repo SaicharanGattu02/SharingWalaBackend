@@ -1,3 +1,4 @@
+import jwt from 'jsonwebtoken';
 import { asyncHandler } from '../../utils/asyncHandler.js';
 import { ApiResponse } from '../../utils/apiResponse.js';
 import * as chatService from './chat.service.js';
@@ -30,13 +31,34 @@ export const sendMessage = asyncHandler(async (req, res) => {
   res.status(201).json(new ApiResponse(201, message, 'Message sent successfully'));
 });
 
-import { isUserOnline, getUserLastSeen, notifyCallRinging } from './chat.socket.js';
+import { isUserOnline, getUserLastSeen, notifyCallRinging, initiateCallSession } from './chat.socket.js';
 
 export const reportCallRinging = asyncHandler(async (req, res) => {
-  const { callerId, conversationId } = req.body;
-  const receiverId = req.user?.id || req.body.receiverId;
+  const { callerId, conversationId, receiverId: bodyReceiverId } = req.body;
+  let receiverId = req.user?.id || bodyReceiverId;
+
+  if (!receiverId && req.headers.authorization?.startsWith('Bearer ')) {
+    try {
+      const token = req.headers.authorization.split(' ')[1];
+      const decoded = jwt.decode(token);
+      if (decoded?.userId) receiverId = decoded.userId;
+    } catch (_) {}
+  }
+
   await notifyCallRinging({ callerId, receiverId, conversationId });
   res.status(200).json(new ApiResponse(200, { success: true }, 'Call ringing dispatched'));
+});
+
+export const initiateCall = asyncHandler(async (req, res) => {
+  const { toUserId, conversationId, callType } = req.body;
+  const result = await initiateCallSession({
+    callerId: req.user.id,
+    callerUser: req.user,
+    toUserId,
+    conversationId,
+    callType,
+  });
+  res.status(200).json(new ApiResponse(200, result, 'Call initiated'));
 });
 
 export const markAsRead = asyncHandler(async (req, res) => {

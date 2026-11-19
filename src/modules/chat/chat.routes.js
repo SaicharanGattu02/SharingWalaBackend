@@ -10,14 +10,17 @@ import * as chatController from './chat.controller.js';
 
 const router = Router();
 
-router.use(authenticate); // All chat routes require valid JWT
+// Call-ringing signal from foreground or killed-state background handler (resilient, no auth block)
+router.post('/call-ringing', chatController.reportCallRinging);
 
+router.use(authenticate); // All subsequent chat routes require valid JWT
+
+router.post('/call/initiate', chatController.initiateCall);
 router.get('/conversations', chatController.getMyConversations);
 router.post('/direct', validate(createDirectChatSchema), chatController.getOrCreateDirectChat);
 router.get('/conversations/:id/messages', validate(getMessagesQuerySchema), chatController.getMessages);
 router.post('/conversations/:id/messages', validate(sendMessageSchema), chatController.sendMessage);
 router.post('/conversations/:id/read', chatController.markAsRead);
-router.post('/call-ringing', chatController.reportCallRinging);
 router.get('/users/:userId/status', chatController.getUserOnlineStatus);
 
 export default router;

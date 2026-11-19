@@ -125,6 +125,27 @@ export const sendIncomingCallPush = async ({
     }
   } catch (_) {}
 
+  // Defensive: If recipient is a conversation ID, resolve to the peer user ID
+  if (targetUserId && (targetUserId.startsWith('direct_') || targetUserId.startsWith('trip_') || targetUserId.startsWith('cm'))) {
+    try {
+      if (targetUserId.startsWith('direct_')) {
+        const raw = targetUserId.replace('direct_', '');
+        const parts = raw.split('_').filter(Boolean);
+        const other = parts.find((p) => p !== callerId);
+        if (other) targetUserId = other;
+      } else {
+        const conv = await prisma.conversation.findUnique({
+          where: { id: targetUserId },
+          include: { participants: { select: { userId: true } } },
+        });
+        if (conv?.participants) {
+          const other = conv.participants.find((p) => p.userId !== callerId);
+          if (other?.userId) targetUserId = other.userId;
+        }
+      }
+    } catch (_) {}
+  }
+
   let tokens = getUserFcmTokens(targetUserId);
   if (!tokens || tokens.length === 0) {
     try {
@@ -167,7 +188,7 @@ export const sendIncomingCallPush = async ({
         data: payloadData,
         android: {
           priority: 'high',
-          ttl: 60, // 60 seconds
+          ttl: 60 * 1000, // 60 seconds (ttl in Firebase Admin SDK is in milliseconds)
         },
         apns: {
           headers: {
@@ -259,26 +280,17 @@ export const sendRideNotificationPush = async ({
   }
   stringifiedData.click_action = 'FLUTTER_NOTIFICATION_CLICK';
 
+  const isChatMessage = data.type === 'CHAT_MESSAGE' || Boolean(data.conversationId);
+  const targetChannelId = isChatMessage ? 'chat_messages_channel_v1' : 'high_importance_channel_v4';
+
   const results = await Promise.allSettled(
-    tokens.map((token) =>
-      getMessaging(firebaseApp).send({
+    tokens.map((token) => {
+      const message = {
         token,
-        notification: {
-          title: String(title),
-          body: String(body),
-        },
         data: stringifiedData,
         android: {
           priority: 'high',
-          notification: {
-            channelId: 'high_importance_channel_v4',
-            sound: 'default',
-            priority: 'max',
-            defaultSound: true,
-            defaultVibrateTimings: true,
-            clickAction: 'FLUTTER_NOTIFICATION_CLICK',
-            visibility: 'public',
-          },
+          ttl: 24 * 60 * 60 * 1000, // 24 hours (ttl in Firebase Admin SDK is in milliseconds)
         },
         apns: {
           headers: {
@@ -286,13 +298,38 @@ export const sendRideNotificationPush = async ({
           },
           payload: {
             aps: {
+              alert: {
+                title: String(title),
+                body: String(body),
+              },
               sound: 'default',
               badge: 1,
             },
           },
         },
-      })
-    )
+      };
+
+      // For non-chat notifications (rides/bookings), include native notification block so OS tray
+      // can display even if process is suspended. For chat messages, high-priority data payload
+      // wakes _firebaseMessagingBackgroundHandler to display WhatsApp-style inline interactive reply box.
+      if (!isChatMessage) {
+        message.notification = {
+          title: String(title),
+          body: String(body),
+        };
+        message.android.notification = {
+          channelId: targetChannelId,
+          sound: 'default',
+          priority: 'max',
+          defaultSound: true,
+          defaultVibrateTimings: true,
+          clickAction: 'FLUTTER_NOTIFICATION_CLICK',
+          visibility: 'public',
+        };
+      }
+
+      return getMessaging(firebaseApp).send(message);
+    })
   );
 
   let successCount = 0;
