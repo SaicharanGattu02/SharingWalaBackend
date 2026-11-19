@@ -271,12 +271,13 @@ export const sendRideNotificationPush = async ({
         android: {
           priority: 'high',
           notification: {
-            channelId: 'high_importance_channel',
+            channelId: 'high_importance_channel_v4',
             sound: 'default',
-            priority: 'high',
+            priority: 'max',
             defaultSound: true,
             defaultVibrateTimings: true,
             clickAction: 'FLUTTER_NOTIFICATION_CLICK',
+            visibility: 'public',
           },
         },
         apns: {

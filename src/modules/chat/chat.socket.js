@@ -272,6 +272,8 @@ export const registerChatSocketHandlers = (io, socket) => {
         }
 
         recipientUserIds.forEach((recipientUserId) => {
+          if (!recipientUserId || recipientUserId === effectiveUserId) return;
+
           const msgPreview = messageType === 'LOCATION_SHARE' ? '📍 Shared a location pin' : content;
           io.to(`user:${recipientUserId}`).emit('message_notification', {
             conversationId: targetConvId,
@@ -282,35 +284,21 @@ export const registerChatSocketHandlers = (io, socket) => {
           });
           io.to(`user:${recipientUserId}`).emit('new_message', socketPayload);
 
-          // Check if recipient is actively inside this conversation room right now
-          const recipientSockets = onlineUsers.get(recipientUserId);
-          let isRecipientInsideConversation = false;
-          if (recipientSockets && recipientSockets.size > 0) {
-            for (const sId of recipientSockets) {
-              const s = io.sockets.sockets.get(sId);
-              if (s && (s.rooms.has(`conv:${targetConvId}`) || s.rooms.has(`conv:${conversationId}`))) {
-                isRecipientInsideConversation = true;
-                break;
-              }
-            }
-          }
-
-          // Only dispatch in-app notification & FCM push when user is NOT actively viewing the chat
-          if (!isRecipientInsideConversation) {
-            createNotification({
-              userId: recipientUserId,
-              type: 'CHAT_MESSAGE',
-              title: socketPayload.senderName,
-              message: msgPreview,
-              data: {
-                conversationId: targetConvId,
-                senderId: effectiveUserId,
-                senderName: socketPayload.senderName,
-                route: '/chat-conversation',
-              },
-              sendPush: true,
-            }).catch((e) => console.warn('Failed to dispatch message notification:', e.message));
-          }
+          // WhatsApp-style instant push notification
+          // Flutter client handles in-app active conversation suppression automatically
+          createNotification({
+            userId: recipientUserId,
+            type: 'CHAT_MESSAGE',
+            title: socketPayload.senderName,
+            message: msgPreview,
+            data: {
+              conversationId: targetConvId,
+              senderId: effectiveUserId,
+              senderName: socketPayload.senderName,
+              route: '/chat-conversation',
+            },
+            sendPush: true,
+          }).catch((e) => console.warn('Failed to dispatch message notification:', e.message));
         });
       } catch (error) {
         socket.emit('chat_error', { message: error.message });
