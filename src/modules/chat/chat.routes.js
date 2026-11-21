@@ -12,6 +12,7 @@ const router = Router();
 
 // Call-ringing signal from foreground or killed-state background handler (resilient, no auth block)
 router.post('/call-ringing', chatController.reportCallRinging);
+router.post('/call-rejected', chatController.reportCallRejected);
 
 router.use(authenticate); // All subsequent chat routes require valid JWT
 

@@ -49,6 +49,28 @@ export const reportCallRinging = asyncHandler(async (req, res) => {
   res.status(200).json(new ApiResponse(200, { success: true }, 'Call ringing dispatched'));
 });
 
+export const reportCallRejected = asyncHandler(async (req, res) => {
+  const { callerId, reason = 'DECLINED' } = req.body;
+  let receiverId = req.user?.id || req.body.receiverId;
+  if (!receiverId && req.headers.authorization?.startsWith('Bearer ')) {
+    try {
+      const token = req.headers.authorization.split(' ')[1];
+      const decoded = jwt.decode(token);
+      if (decoded?.userId) receiverId = decoded.userId;
+    } catch (_) {}
+  }
+  if (callerId) {
+    try {
+      const io = getIO();
+      io.to(`user:${callerId}`).emit('call:rejected', {
+        receiverId,
+        reason,
+      });
+    } catch (_) {}
+  }
+  res.status(200).json(new ApiResponse(200, { success: true }, 'Call rejection dispatched'));
+});
+
 export const initiateCall = asyncHandler(async (req, res) => {
   const { toUserId, conversationId, callType } = req.body;
   const result = await initiateCallSession({

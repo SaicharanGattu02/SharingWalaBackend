@@ -147,9 +147,9 @@ const formatUserProfile = (user) => {
 
   const isDriver =
     (user.isDriverMode === true || user.is_driver_mode === 1) ||
-    (user.activeRole && user.activeRole.toUpperCase() === 'HOST') ||
-    (user.rolePreference && (user.rolePreference === 'offerRide' || user.rolePreference.toUpperCase() === 'HOST'));
-  const activeRole = isDriver ? 'Host' : 'Guest';
+    (user.activeRole && (user.activeRole.toUpperCase() === 'HOST' || user.activeRole.toUpperCase() === 'OWNER')) ||
+    (user.rolePreference && (user.rolePreference === 'offerRide' || user.rolePreference.toUpperCase() === 'HOST' || user.rolePreference.toUpperCase() === 'OWNER'));
+  const activeRole = isDriver ? 'Owner' : 'Rider';
 
   let formattedAvatar = user.avatarUrl;
   if (formattedAvatar) {
@@ -380,7 +380,8 @@ export const updateUserProfile = async (userId, data) => {
   if (data.rolePreference !== undefined) updatePayload.rolePreference = data.rolePreference;
   if (data.womenOnlyPreference !== undefined) updatePayload.womenOnlyPreference = data.womenOnlyPreference;
   if (data.activeRole !== undefined) {
-    const isHost = data.activeRole.toUpperCase() === 'HOST';
+    const roleUpper = data.activeRole.toUpperCase();
+    const isHost = roleUpper === 'HOST' || roleUpper === 'OWNER';
     updatePayload.rolePreference = isHost ? 'offerRide' : 'findRide';
   }
   if (data.isDriverMode !== undefined) {
@@ -426,11 +427,11 @@ export const updateUserProfile = async (userId, data) => {
   if (data.activeRole !== undefined || data.isDriverMode !== undefined) {
     const isDriver = data.isDriverMode !== undefined
       ? Boolean(data.isDriverMode)
-      : data.activeRole.toUpperCase() === 'HOST';
+      : (data.activeRole.toUpperCase() === 'HOST' || data.activeRole.toUpperCase() === 'OWNER');
     try {
       await prisma.$executeRawUnsafe(
         'UPDATE users SET active_role = ?, is_driver_mode = ? WHERE id = ?',
-        isDriver ? 'HOST' : 'GUEST',
+        isDriver ? 'OWNER' : 'RIDER',
         isDriver ? 1 : 0,
         userId
       );
@@ -448,12 +449,14 @@ export const switchRole = async (userId, data = {}) => {
   if (data.isDriverMode !== undefined) {
     isDriver = Boolean(data.isDriverMode);
   } else if (data.role !== undefined) {
-    isDriver = data.role.toUpperCase() === 'HOST';
+    const r = data.role.toUpperCase();
+    isDriver = r === 'HOST' || r === 'OWNER';
   } else if (data.activeRole !== undefined) {
-    isDriver = data.activeRole.toUpperCase() === 'HOST';
+    const r = data.activeRole.toUpperCase();
+    isDriver = r === 'HOST' || r === 'OWNER';
   }
 
-  const roleName = isDriver ? 'HOST' : 'GUEST';
+  const roleName = isDriver ? 'OWNER' : 'RIDER';
   const rolePref = isDriver ? 'offerRide' : 'findRide';
 
   const updatedUser = await prisma.user.update({

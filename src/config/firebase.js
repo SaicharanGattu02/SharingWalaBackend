@@ -226,6 +226,55 @@ export const sendIncomingCallPush = async ({
 };
 
 /**
+ * Send High-Priority Call Ended / Cancelled Push Notification
+ * Silences background ringtone and cancels incoming call notification on receiver device
+ */
+export const sendCallEndedPush = async ({ recipientUserId, callerId }) => {
+  if (!firebaseApp) return false;
+  let targetUserId = recipientUserId;
+  let tokens = getUserFcmTokens(targetUserId);
+  if (!tokens || tokens.length === 0) {
+    try {
+      const devices = await prisma.userDevice.findMany({
+        where: { userId: targetUserId },
+        select: { deviceToken: true },
+      });
+      tokens = devices.map((d) => d.deviceToken).filter(Boolean);
+    } catch (_) {}
+  }
+  if (!tokens || tokens.length === 0) return false;
+
+  const payloadData = {
+    type: 'CALL_ENDED',
+    callerId: String(callerId || ''),
+    timestamp: new Date().toISOString(),
+  };
+
+  try {
+    await Promise.allSettled(
+      tokens.map((token) =>
+        getMessaging(firebaseApp).send({
+          token,
+          data: payloadData,
+          android: {
+            priority: 'high',
+            ttl: 30 * 1000,
+          },
+          apns: {
+            headers: {
+              'apns-priority': '10',
+              'apns-push-type': 'background',
+            },
+            payload: { aps: { contentAvailable: true } },
+          },
+        })
+      )
+    );
+  } catch (_) {}
+  return true;
+};
+
+/**
  * Send Standard Push Notification (for Ride Requests, Seat Confirmed, Cancellations, etc.)
  */
 export const sendRideNotificationPush = async ({

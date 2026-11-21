@@ -78,5 +78,7 @@ export const createStrangerReelSchema = {
     caption: z.string().max(500),
     audioTrack: z.string().default('Original Sound'),
     tripId: z.string().optional(),
+    dueDate: z.string().optional(),
+    expiresAt: z.string().optional(),
   }),
 };

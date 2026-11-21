@@ -26,7 +26,7 @@ let strangerTrips = [
     isVerified: true,
     origin: 'Hyderabad',
     destination: 'Bengaluru',
-    date: 'Fri, 23 Oct 2026',
+    date: 'Fri, 27 Nov 2026',
     time: '7:30 AM',
     mode: 'bikepool',
     vibe: 'weekendGetaway',
@@ -52,7 +52,7 @@ let strangerTrips = [
     isVerified: true,
     origin: 'Hyderabad',
     destination: 'Goa (Panjim & Calangute)',
-    date: 'Fri, 10 Oct 2026',
+    date: 'Fri, 27 Nov 2026',
     time: '06:00 AM',
     mode: 'carpool',
     vibe: 'weekendGetaway',
@@ -75,7 +75,7 @@ let strangerTrips = [
     isVerified: true,
     origin: 'Hyderabad (KPHB)',
     destination: 'Bengaluru (Indiranagar)',
-    date: 'Sat, 11 Oct 2026',
+    date: 'Sat, 28 Nov 2026',
     time: '08:30 PM',
     mode: 'carpool',
     vibe: 'intercityCommute',
@@ -98,7 +98,7 @@ let strangerTrips = [
     isVerified: true,
     origin: 'Hyderabad (Gachibowli)',
     destination: 'Vijayawada (Benz Circle)',
-    date: 'Sun, 12 Oct 2026',
+    date: 'Sun, 29 Nov 2026',
     time: '07:00 AM',
     mode: 'carpool',
     vibe: 'intercityCommute',
@@ -121,7 +121,7 @@ let strangerTrips = [
     isVerified: true,
     origin: 'Hyderabad (RGIA Airport)',
     destination: 'Mumbai (T2 Terminal)',
-    date: 'Mon, 13 Oct 2026',
+    date: 'Mon, 30 Nov 2026',
     time: '11:15 AM',
     mode: 'other',
     vibe: 'cityExplore',
@@ -270,8 +270,8 @@ let strangerPlans = [
     title: 'Delhi To Chakrata',
     location: 'Chakrata hill station',
     imageUrl: 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=800&q=80',
-    dateRange: 'Nov 12 - Nov 15',
-    startDate: '2026-11-12',
+    dateRange: 'Nov 28 - Dec 01',
+    startDate: '2026-11-28',
     time: '06:00 AM',
     audience: 'Everyone',
     joinedMembers: 7,
@@ -304,8 +304,8 @@ let strangerPlans = [
     title: 'durga pooja kolkata',
     location: 'Kolkata',
     imageUrl: 'https://images.unsplash.com/photo-1567157577867-05ccb1388e66?auto=format&fit=crop&w=800&q=80',
-    dateRange: 'Nov 15 - Nov 17',
-    startDate: '2026-11-15',
+    dateRange: 'Dec 05 - Dec 08',
+    startDate: '2026-12-05',
     time: '08:30 AM',
     audience: 'Everyone',
     joinedMembers: 4,
@@ -335,8 +335,8 @@ let strangerPlans = [
     title: 'Uttarakhand Trip',
     location: 'Uttarakhand',
     imageUrl: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=800&q=80',
-    dateRange: 'Nov 18 - Nov 22',
-    startDate: '2026-11-18',
+    dateRange: 'Dec 10 - Dec 14',
+    startDate: '2026-12-10',
     time: '07:00 AM',
     audience: 'Female only',
     joinedMembers: 5,
@@ -367,8 +367,8 @@ let strangerPlans = [
     title: 'Manali Snow Adventure',
     location: 'Solang Valley, Manali',
     imageUrl: 'https://images.unsplash.com/photo-1517824806704-9040b037703b?auto=format&fit=crop&w=800&q=80',
-    dateRange: 'Nov 05 - Nov 10',
-    startDate: '2026-11-05',
+    dateRange: 'Dec 15 - Dec 20',
+    startDate: '2026-12-15',
     time: '06:30 AM',
     audience: 'Everyone',
     joinedMembers: 6,
@@ -400,8 +400,8 @@ let strangerPlans = [
     title: 'Goa Beach & Sunsets',
     location: 'North Goa (Vagator & Morjim)',
     imageUrl: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=800&q=80',
-    dateRange: 'Nov 14 - Nov 18',
-    startDate: '2026-11-14',
+    dateRange: 'Dec 22 - Dec 26',
+    startDate: '2026-12-22',
     time: '07:30 AM',
     audience: 'Everyone',
     joinedMembers: 3,
@@ -631,13 +631,18 @@ export const findStrangerTrip = (id) => {
 
 // --- 1. STRANGER TRIPS ---
 export const getStrangerTrips = async (
-  { type, filter, vibe, isWomenOnly, womenOnly, mode, search, q, host, origin, destination, priceType, interest } = {},
+  { type, filter, vibe, isWomenOnly, womenOnly, mode, search, q, host, origin, destination, priceType, interest, includeExpired } = {},
   currentUserId = null
 ) => {
   let list = strangerTrips.filter((t) => t.status !== 'CANCELLED');
 
-  // Unified `type` or `filter` query parameter
   const filterType = (type || filter || '').toLowerCase().trim();
+  const shouldFilterExpired = includeExpired !== 'true' && includeExpired !== true && filterType !== 'myrides' && filterType !== 'hosted';
+  if (shouldFilterExpired) {
+    list = list.filter((t) => !isDateTimePast(t.date, t.time) && t.status !== 'COMPLETED' && t.status !== 'EXPIRED');
+  }
+
+  // Unified `type` or `filter` query parameter
   if (filterType && filterType !== 'all') {
     if (filterType === 'carpool' || filterType === 'car') {
       list = list.filter((t) => (t.mode || '').toLowerCase() === 'carpool');
@@ -2004,7 +2009,7 @@ export const formatStrangerPlan = (p, currentUserId = null, currentUserGender = 
 };
 
 export const getStrangerPlans = async (
-  { filter, interest, category, tag, type, search, host } = {},
+  { filter, interest, category, tag, type, search, host, includeExpired } = {},
   currentUserId = null,
   currentUserGender = null
 ) => {
@@ -2057,7 +2062,11 @@ export const getStrangerPlans = async (
         (p.hostName && p.hostName.toLowerCase().includes(s))
     );
   }
-  return list.map((p) => formatStrangerPlan(p, currentUserId, currentUserGender));
+  let formatted = list.map((p) => formatStrangerPlan(p, currentUserId, currentUserGender));
+  if (includeExpired !== 'true' && includeExpired !== true) {
+    formatted = formatted.filter((p) => !p.isExpired);
+  }
+  return formatted;
 };
 
 export const getTrendingPlans = async (query = {}, currentUserId = null, currentUserGender = null) => {
@@ -2069,7 +2078,7 @@ export const getUpcomingPlans = async (query = {}, currentUserId = null, current
 
   // Format published stranger trips as plans so they appear in /plans/upcoming
   const tripPlans = strangerTrips
-    .filter((t) => t.status !== 'CANCELLED')
+    .filter((t) => t.status !== 'CANCELLED' && (query.includeExpired === 'true' || query.includeExpired === true || !isDateTimePast(t.date, t.time)))
     .map((t) => {
       const total = Number(t.totalSeats || 1);
       const avail = t.availableSeats !== undefined ? Number(t.availableSeats) : total;
@@ -2134,7 +2143,11 @@ export const getUpcomingPlans = async (query = {}, currentUserId = null, current
       };
     });
 
-  return [...tripPlans, ...basePlans];
+  const validTripPlans = (query.includeExpired === 'true' || query.includeExpired === true)
+    ? tripPlans
+    : tripPlans.filter((t) => !t.isExpired);
+
+  return [...validTripPlans, ...basePlans];
 };
 
 export const getPlansByInterest = async ({ interest, search, host } = {}, currentUserId = null, currentUserGender = null) => {
@@ -2482,7 +2495,85 @@ export const leaveStrangerPlan = async (userId, planId) => {
 };
 
 // --- 4. STRANGER REELS ---
+
+/**
+ * Automatically purges expired stranger trip reels.
+ * Deletes reel metadata and removes uploaded video/thumbnail media files from disk
+ * to preserve server storage and optimize hosting costs.
+ */
+export const purgeExpiredReels = () => {
+  const now = Date.now();
+  const toDelete = [];
+
+  strangerReels = strangerReels.filter((r) => {
+    let isExpired = false;
+
+    // 1. Explicit expiresAt ISO date
+    if (r.expiresAt) {
+      const expDate = new Date(r.expiresAt);
+      if (!isNaN(expDate.getTime()) && expDate.getTime() < now) {
+        isExpired = true;
+      }
+    }
+
+    // 2. Trip Due Date
+    if (!isExpired && r.dueDate) {
+      const parsedDue = parseDateTime(r.dueDate);
+      if (parsedDue && parsedDue.getTime() < now) {
+        isExpired = true;
+      }
+    }
+
+    // 3. Fallback to linked trip's departure date
+    if (!isExpired && r.tripId) {
+      const linked = strangerTrips.find((t) => t.id === r.tripId);
+      if (linked && linked.date) {
+        const tripDt = parseDateTime(linked.date, linked.time);
+        if (tripDt && tripDt.getTime() < now) {
+          isExpired = true;
+        }
+      }
+    }
+
+    if (isExpired) {
+      toDelete.push(r);
+      return false; // Remove from memory
+    }
+    return true;
+  });
+
+  if (toDelete.length > 0) {
+    // Free local disk storage for deleted reels
+    for (const reel of toDelete) {
+      try {
+        if (reel.videoUrl && reel.videoUrl.includes('/uploads/')) {
+          const rel = reel.videoUrl.substring(reel.videoUrl.indexOf('/uploads/'));
+          const filePath = path.join(process.cwd(), 'public', rel);
+          if (fs.existsSync(filePath)) {
+            fs.unlinkSync(filePath);
+            console.log(`[Storage Purge] Deleted expired reel video file: ${filePath}`);
+          }
+        }
+        if (reel.thumbnailUrl && reel.thumbnailUrl.includes('/uploads/')) {
+          const rel = reel.thumbnailUrl.substring(reel.thumbnailUrl.indexOf('/uploads/'));
+          const filePath = path.join(process.cwd(), 'public', rel);
+          if (fs.existsSync(filePath)) {
+            fs.unlinkSync(filePath);
+            console.log(`[Storage Purge] Deleted expired reel thumbnail: ${filePath}`);
+          }
+        }
+      } catch (err) {
+        console.warn(`[Storage Purge] Error deleting file for reel ${reel.id}:`, err?.message);
+      }
+    }
+    saveStore();
+  }
+};
+
 export const getStrangerReels = async (userId = null, req = null) => {
+  // Purge expired reels prior to returning results to ensure zero expired reels are sent
+  purgeExpiredReels();
+
   return strangerReels.map((r, idx) => {
     const linkedTrip = strangerTrips.find((t) => t.id === r.tripId) || strangerTrips[0];
     const isLiked = Array.isArray(r.likedUserIds) && userId
@@ -2506,6 +2597,8 @@ export const getStrangerReels = async (userId = null, req = null) => {
       isHost: isOwner,
       commentsCount: Array.isArray(r.comments) ? r.comments.length : (r.commentsCount || 3),
       trip: linkedTrip,
+      dueDate: r.dueDate || linkedTrip?.date || null,
+      expiresAt: r.expiresAt || null,
     };
   });
 };
@@ -2518,6 +2611,24 @@ export const createStrangerReel = async (userId, data, req = null) => {
   const absoluteVideoUrl = toAbsoluteVideoUrl(data.videoUrl, data.vibe, newReelId, req);
   const absoluteThumbnail = toAbsoluteUrl(data.thumbnailUrl, req) || 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=800&q=80';
   const absoluteAvatar = toAbsoluteUrl(data.userAvatar || user?.avatarUrl, req) || 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&w=400&q=80';
+
+  // Compute auto-delete expiration date based on trip due date
+  let computedExpiresAt = null;
+  if (data.expiresAt) {
+    const d = new Date(data.expiresAt);
+    if (!isNaN(d.getTime())) computedExpiresAt = d.toISOString();
+  } else if (data.dueDate) {
+    const d = parseDateTime(data.dueDate);
+    if (d) computedExpiresAt = d.toISOString();
+  } else if (linkedTrip && linkedTrip.date) {
+    const d = parseDateTime(linkedTrip.date, linkedTrip.time);
+    if (d) computedExpiresAt = d.toISOString();
+  }
+
+  // Default fallback: 7 days from now if no trip date is provided
+  if (!computedExpiresAt) {
+    computedExpiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+  }
 
   const newReel = {
     id: newReelId,
@@ -2542,6 +2653,8 @@ export const createStrangerReel = async (userId, data, req = null) => {
     commentsCount: 0,
     tripId: linkedTrip.id,
     trip: linkedTrip,
+    dueDate: data.dueDate || linkedTrip.date || null,
+    expiresAt: computedExpiresAt,
     createdAt: new Date().toISOString(),
   };
 

@@ -3,7 +3,7 @@ import { prisma } from '../../config/db.js';
 import { env } from '../../config/env.js';
 import { getIO } from '../../config/socket.js';
 import { ensureConversationRecord, markAsRead, resolvePeerUserId } from './chat.service.js';
-import { sendIncomingCallPush, registerUserFcmToken } from '../../config/firebase.js';
+import { sendIncomingCallPush, sendCallEndedPush, registerUserFcmToken } from '../../config/firebase.js';
 import { createNotification } from '../notification/notification.service.js';
 
 // In-memory active connected socket tracking per user
@@ -648,6 +648,11 @@ export const registerChatSocketHandlers = (io, socket) => {
       byUserId: userId,
       reason,
     });
+    // Send high-priority data push so recipient's device stops ringing if in background or killed
+    sendCallEndedPush({
+      recipientUserId: targetId,
+      callerId: userId,
+    }).catch(() => {});
   });
 
   socket.on('disconnect', () => {

@@ -18,8 +18,8 @@ export const updateProfileSchema = {
 
 export const switchRoleSchema = {
   body: z.object({
-    role: z.enum(['HOST', 'GUEST', 'Host', 'Guest', 'host', 'guest']).optional(),
-    activeRole: z.enum(['HOST', 'GUEST', 'Host', 'Guest', 'host', 'guest']).optional(),
+    role: z.enum(['HOST', 'GUEST', 'Host', 'Guest', 'host', 'guest', 'OWNER', 'RIDER', 'Owner', 'Rider', 'owner', 'rider']).optional(),
+    activeRole: z.enum(['HOST', 'GUEST', 'Host', 'Guest', 'host', 'guest', 'OWNER', 'RIDER', 'Owner', 'Rider', 'owner', 'rider']).optional(),
     isDriverMode: z.boolean().optional(),
   }),
 };
