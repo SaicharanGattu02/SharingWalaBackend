@@ -6,6 +6,7 @@ import { getIO } from '../../config/socket.js';
 import { sendRideNotificationPush } from '../../config/firebase.js';
 import { toAbsoluteUrl, getServerBaseUrl } from '../../utils/urlHelper.js';
 import { createNotification } from '../notification/notification.service.js';
+import { getLiveTripState } from '../rider/trip.socket.js';
 
 const defaultMockRides = [
   {
@@ -1749,6 +1750,10 @@ export const getActiveRideTracking = async (userId, rideId) => {
     originName: ride.startLocationName.includes(',') ? ride.startLocationName.split(',')[0].trim() : ride.startLocationName,
     destination: ride.endLocationName,
     destName: ride.endLocationName.includes(',') ? ride.endLocationName.split(',')[0].trim() : ride.endLocationName,
+    originLat: Number(ride.startLat),
+    originLng: Number(ride.startLng),
+    destLat: Number(ride.endLat),
+    destLng: Number(ride.endLng),
     date: formattedDate,
     departureTime: formattedTime,
     mode: ride.vehicle?.vehicleType === 'BIKE' ? 'bikepool' : 'carpool',
@@ -1764,12 +1769,20 @@ export const getActiveRideTracking = async (userId, rideId) => {
     vehicleColor: ride.vehicle?.color || '',
     totalSeats: ride.totalSeats,
     availableSeats: ride.availableSeats,
-    currentLocation: {
-      latitude: Number(ride.startLat) + 0.005,
-      longitude: Number(ride.startLng) + 0.005,
-      heading: 45.0,
-      speedKmh: ride.status === 'IN_PROGRESS' ? 35 : 0,
-    },
+    // Driver's last real GPS fix from the live trip socket. null until the
+    // driver's app has sent one — the app then shows the vehicle at pickup and
+    // waits for live updates instead of drawing it at a made-up position.
+    currentLocation: (() => {
+      const last = getLiveTripState(ride.id)?.lastLocation;
+      if (!last || !Number.isFinite(last.latitude) || !Number.isFinite(last.longitude)) return null;
+      return {
+        latitude: last.latitude,
+        longitude: last.longitude,
+        heading: Number.isFinite(last.bearing) ? last.bearing : 0,
+        speedKmh: Number.isFinite(last.speed) ? last.speed : 0,
+        updatedAt: last.timestamp || null,
+      };
+    })(),
     pickupLocation: userBooking?.pickupStop?.name || ride.stops?.[0]?.name || ride.startLocationName,
     pickupPoint: userBooking?.pickupStop?.name || ride.stops?.[0]?.name || ride.startLocationName,
     dropLocation: userBooking?.dropoffStop?.name || ride.stops?.[ride.stops.length - 1]?.name || ride.endLocationName,

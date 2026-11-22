@@ -5,6 +5,29 @@ import { getIO } from '../../config/socket.js';
 import { ensureConversationRecord, markAsRead, resolvePeerUserId } from './chat.service.js';
 import { sendIncomingCallPush, sendCallEndedPush, registerUserFcmToken } from '../../config/firebase.js';
 import { createNotification } from '../notification/notification.service.js';
+import {
+  bufferSignalIfNeeded,
+  endSession,
+  endSessionBetween,
+  getSessionForCallee,
+  getUnansweredOutgoingSessions,
+  isDuplicateInitiation,
+  markAccepted,
+  markCalleeReady,
+  startSession,
+} from './call.session.js';
+
+const CALLER_OFFLINE_GRACE_MS = 15 * 1000;
+const REDELIVER_INCOMING_WITHIN_MS = 45 * 1000;
+
+/** Replay WebRTC signals the callee missed while its app was waking up. */
+const replaySignals = (io, calleeId, callerId, signals) => {
+  if (!io || !signals || signals.length === 0) return;
+  console.log(`📞 [Call] Replaying ${signals.length} buffered signal(s) from ${callerId} to ${calleeId}`);
+  signals.forEach((signalData) => {
+    io.to(`user:${calleeId}`).emit('call:signal', { fromUserId: callerId, signalData });
+  });
+};
 
 // In-memory active connected socket tracking per user
 const onlineUsers = new Map(); // userId -> Set<socketId>
@@ -19,7 +42,12 @@ export const getUserLastSeen = (userId) => {
   return userLastSeen.get(userId) || null;
 };
 
-export const notifyCallRinging = async ({ callerId, receiverId, conversationId }) => {
+/**
+ * @param fromSocket true when the receiver's app itself is connected (socket
+ *   event). False for the REST call made by the push handler while the app is
+ *   still closed — in that case the app can't receive replayed signals yet.
+ */
+export const notifyCallRinging = async ({ callerId, receiverId, conversationId, fromSocket = false }) => {
   if (!callerId) return;
   let targetId = callerId;
   try {
@@ -33,6 +61,9 @@ export const notifyCallRinging = async ({ callerId, receiverId, conversationId }
   console.log(`📞 [Socket/API] Dispatching call:ringing from receiver ${receiverId} to caller ${targetId}`);
   try {
     const io = getIO();
+    if (fromSocket && receiverId) {
+      replaySignals(io, receiverId, targetId, markCalleeReady(receiverId, targetId));
+    }
     io.to(`user:${targetId}`).emit('call:ringing', {
       receiverId,
       conversationId,
@@ -162,6 +193,13 @@ export const initiateCallSession = async ({
   } catch (_) {}
 
   targets.forEach((targetId) => {
+    // The app starts every call over both socket and REST; ring only once.
+    if (isDuplicateInitiation(callerId, targetId)) {
+      console.log(`📞 [Call] Ignoring duplicate initiation ${callerId} ➔ ${targetId}`);
+      return;
+    }
+    startSession({ callerId, calleeId: targetId, payload });
+
     // 1. Live WebSocket delivery for Foreground / Locked / Active Background states
     if (io) {
       io.to(`user:${targetId}`).emit('call:incoming', payload);
@@ -225,6 +263,20 @@ export const registerChatSocketHandlers = (io, socket) => {
 
   // 1. Automatically join user's private notification channel
   socket.join(`user:${userId}`);
+
+  // 1b. Someone is calling this user and the call is still ringing (e.g. the
+  // user opened the app from the launcher instead of the call notification).
+  // Re-deliver it so the incoming call screen shows. The app ignores
+  // duplicates of a call it already shows.
+  const ringingCall = getSessionForCallee(userId);
+  if (
+    ringingCall &&
+    !ringingCall.accepted &&
+    Date.now() - ringingCall.createdAt < REDELIVER_INCOMING_WITHIN_MS
+  ) {
+    console.log(`📞 [Call] Re-delivering ringing call from ${ringingCall.callerId} to reconnected ${userId}`);
+    socket.emit('call:incoming', ringingCall.payload);
+  }
 
   // Query real-time status of another user
   socket.on('get_user_status', async ({ targetUserId }, callback) => {
@@ -516,7 +568,7 @@ export const registerChatSocketHandlers = (io, socket) => {
 
   socket.on('call:ringing', async ({ callerId, conversationId }) => {
     if (!callerId) return;
-    await notifyCallRinging({ callerId, receiverId: userId, conversationId });
+    await notifyCallRinging({ callerId, receiverId: userId, conversationId, fromSocket: true });
   });
 
   socket.on('call:accept', async ({ callerId }) => {
@@ -524,6 +576,8 @@ export const registerChatSocketHandlers = (io, socket) => {
     const targets = await resolveTargetUsers(callerId, null, userId);
     const targetId = targets[0] || callerId;
     console.log(`📞 [Socket] call:accept from ${userId} to caller ${targetId}`);
+    // Deliver any offer/ICE the receiver has not seen yet before telling the caller.
+    replaySignals(io, userId, targetId, markAccepted(userId, targetId));
     io.to(`user:${targetId}`).emit('call:accepted', {
       receiverId: userId,
       receiverName: socket.user.displayName || socket.user.username,
@@ -535,6 +589,9 @@ export const registerChatSocketHandlers = (io, socket) => {
     const targets = await resolveTargetUsers(callerId, null, userId);
     const targetId = targets[0] || callerId;
     console.log(`📞 [Socket] call:reject from ${userId} to caller ${targetId} (reason: ${reason})`);
+    // A BUSY reject comes from a receiver on another call: only end the session
+    // if it is for this caller (endSessionBetween checks that).
+    endSessionBetween(userId, targetId);
     io.to(`user:${targetId}`).emit('call:rejected', {
       receiverId: userId,
       reason,
@@ -634,6 +691,8 @@ export const registerChatSocketHandlers = (io, socket) => {
     if (!toUserId || !signalData) return;
     const targets = await resolveTargetUsers(toUserId, null, userId);
     const targetId = targets[0] || toUserId;
+    // Receiver may still be waking up from a push — keep a copy to replay.
+    bufferSignalIfNeeded({ fromUserId: userId, toUserId: targetId, signalData });
     io.to(`user:${targetId}`).emit('call:signal', {
       fromUserId: userId,
       signalData,
@@ -644,6 +703,7 @@ export const registerChatSocketHandlers = (io, socket) => {
     if (!toUserId) return;
     const targets = await resolveTargetUsers(toUserId, null, userId);
     const targetId = targets[0] || toUserId;
+    endSessionBetween(userId, targetId);
     io.to(`user:${targetId}`).emit('call:ended', {
       byUserId: userId,
       reason,
@@ -661,6 +721,26 @@ export const registerChatSocketHandlers = (io, socket) => {
       sockets.delete(socket.id);
       if (sockets.size === 0) {
         onlineUsers.delete(userId);
+
+        // Caller went offline while their call was still ringing (app killed,
+        // network lost). If they don't come back quickly, stop the ringing on
+        // the receiver's phone instead of letting it ring for a dead call.
+        getUnansweredOutgoingSessions(userId).forEach((session) => {
+          if (session.callerOfflineTimer) clearTimeout(session.callerOfflineTimer);
+          session.callerOfflineTimer = setTimeout(() => {
+            if (isUserOnline(userId)) return;
+            const current = getSessionForCallee(session.calleeId);
+            if (current !== session || current.accepted) return;
+            console.log(`📞 [Call] Caller ${userId} offline — ending ringing call to ${session.calleeId}`);
+            endSession(session.calleeId);
+            io.to(`user:${session.calleeId}`).emit('call:ended', {
+              byUserId: userId,
+              reason: 'CALLER_DISCONNECTED',
+            });
+            sendCallEndedPush({ recipientUserId: session.calleeId, callerId: userId }).catch(() => {});
+          }, CALLER_OFFLINE_GRACE_MS);
+        });
+
         const lastSeen = new Date().toISOString();
         userLastSeen.set(userId, lastSeen);
         io.emit('user:status', {

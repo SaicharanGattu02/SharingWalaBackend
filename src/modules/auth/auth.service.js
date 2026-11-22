@@ -5,7 +5,7 @@ import { env } from '../../config/env.js';
 import { ApiError } from '../../utils/apiError.js';
 import { getIO } from '../../config/socket.js';
 import { disconnectUserSockets } from '../chat/chat.socket.js';
-import { registerUserFcmToken } from '../../config/firebase.js';
+import { registerUserFcmToken, unregisterUserFcmTokens } from '../../config/firebase.js';
 import { sendMsg91Otp, verifyMsg91Otp, resendMsg91Otp, normalizePhone } from '../../config/msg91.js';
 
 /**
@@ -619,6 +619,10 @@ export const logoutUser = async (userId, deviceId = null) => {
       } catch (devErr) {
         console.warn('[AuthService] Error clearing user device during logout:', devErr.message);
       }
+
+      // 1b. Stop calls/pushes to this phone after logout (single-device policy:
+      // the next login registers its FCM token again).
+      await unregisterUserFcmTokens(userId);
 
       // 2. Broadcast socket disconnect event and forcefully close all sockets of this user
       try {

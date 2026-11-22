@@ -1,6 +1,10 @@
 import jwt from 'jsonwebtoken';
 import { asyncHandler } from '../../utils/asyncHandler.js';
 import { ApiResponse } from '../../utils/apiResponse.js';
+import { env } from '../../config/env.js';
+import { prisma } from '../../config/db.js';
+import { getIO } from '../../config/socket.js';
+import { endSessionBetween } from './call.session.js';
 import * as chatService from './chat.service.js';
 
 export const getOrCreateDirectChat = asyncHandler(async (req, res) => {
@@ -33,40 +37,48 @@ export const sendMessage = asyncHandler(async (req, res) => {
 
 import { isUserOnline, getUserLastSeen, notifyCallRinging, initiateCallSession } from './chat.socket.js';
 
-export const reportCallRinging = asyncHandler(async (req, res) => {
-  const { callerId, conversationId, receiverId: bodyReceiverId } = req.body;
-  let receiverId = req.user?.id || bodyReceiverId;
+/**
+ * These two endpoints are called from the phone's push handler while the app
+ * is closed, where the stored access token may already be expired. We still
+ * require a token signed by us (signature verified, expiry ignored) so nobody
+ * can fake "ringing"/"declined" for someone else's call.
+ */
+const resolveCallActorId = (req) => {
+  if (req.user?.id) return req.user.id;
+  const header = req.headers.authorization;
+  if (!header?.startsWith('Bearer ')) return null;
+  try {
+    const decoded = jwt.verify(header.split(' ')[1], env.jwt.secret, { ignoreExpiration: true });
+    return decoded?.userId || null;
+  } catch (_) {
+    return null;
+  }
+};
 
-  if (!receiverId && req.headers.authorization?.startsWith('Bearer ')) {
-    try {
-      const token = req.headers.authorization.split(' ')[1];
-      const decoded = jwt.decode(token);
-      if (decoded?.userId) receiverId = decoded.userId;
-    } catch (_) {}
+export const reportCallRinging = asyncHandler(async (req, res) => {
+  const { callerId, conversationId } = req.body;
+  const receiverId = resolveCallActorId(req);
+  if (!receiverId || !callerId) {
+    return res.status(401).json(new ApiResponse(401, { success: false }, 'Invalid call ringing report'));
   }
 
-  await notifyCallRinging({ callerId, receiverId, conversationId });
+  // fromSocket: false — the app is still closed, it can't take replayed signals yet.
+  await notifyCallRinging({ callerId, receiverId, conversationId, fromSocket: false });
   res.status(200).json(new ApiResponse(200, { success: true }, 'Call ringing dispatched'));
 });
 
 export const reportCallRejected = asyncHandler(async (req, res) => {
   const { callerId, reason = 'DECLINED' } = req.body;
-  let receiverId = req.user?.id || req.body.receiverId;
-  if (!receiverId && req.headers.authorization?.startsWith('Bearer ')) {
-    try {
-      const token = req.headers.authorization.split(' ')[1];
-      const decoded = jwt.decode(token);
-      if (decoded?.userId) receiverId = decoded.userId;
-    } catch (_) {}
+  const receiverId = resolveCallActorId(req);
+  if (!receiverId || !callerId) {
+    return res.status(401).json(new ApiResponse(401, { success: false }, 'Invalid call rejection report'));
   }
-  if (callerId) {
-    try {
-      const io = getIO();
-      io.to(`user:${callerId}`).emit('call:rejected', {
-        receiverId,
-        reason,
-      });
-    } catch (_) {}
+
+  endSessionBetween(receiverId, callerId);
+  try {
+    getIO().to(`user:${callerId}`).emit('call:rejected', { receiverId, reason });
+  } catch (err) {
+    console.warn('⚠️ [Call] Failed to emit call:rejected:', err.message);
   }
   res.status(200).json(new ApiResponse(200, { success: true }, 'Call rejection dispatched'));
 });

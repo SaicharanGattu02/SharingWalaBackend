@@ -62,6 +62,13 @@ try {
 
 export const registerUserFcmToken = async (userId, fcmToken) => {
   if (!userId || !fcmToken) return;
+  // A device token belongs to exactly one account. If another account used
+  // this phone before, stop sending that account's calls/pushes here.
+  for (const [otherUserId, set] of userFcmTokens.entries()) {
+    if (otherUserId !== userId && set.delete(fcmToken) && set.size === 0) {
+      userFcmTokens.delete(otherUserId);
+    }
+  }
   if (!userFcmTokens.has(userId)) {
     userFcmTokens.set(userId, new Set());
   }
@@ -94,6 +101,67 @@ export const registerUserFcmToken = async (userId, fcmToken) => {
 export const getUserFcmTokens = (userId) => {
   const set = userFcmTokens.get(userId);
   return set ? Array.from(set) : [];
+};
+
+/**
+ * All push tokens for a user: in-memory cache + database. FCM tokens contain
+ * ':'; other userDevice rows are hardware device IDs used for session control.
+ */
+const getDeliverableTokens = async (userId) => {
+  const tokens = new Set(getUserFcmTokens(userId));
+  try {
+    const devices = await prisma.userDevice.findMany({
+      where: { userId, deviceToken: { contains: ':' } },
+      select: { deviceToken: true },
+    });
+    devices.forEach((d) => d.deviceToken && tokens.add(d.deviceToken));
+  } catch (_) {}
+  return Array.from(tokens);
+};
+
+const DEAD_TOKEN_CODES = new Set([
+  'messaging/registration-token-not-registered',
+  'messaging/invalid-registration-token',
+]);
+
+/** Forget a token FCM says is dead (app uninstalled / token rotated). */
+const pruneDeadToken = async (userId, token) => {
+  const set = userFcmTokens.get(userId);
+  if (set?.delete(token)) {
+    if (set.size === 0) userFcmTokens.delete(userId);
+    saveTokens();
+  }
+  try {
+    await prisma.userDevice.deleteMany({ where: { deviceToken: token } });
+  } catch (_) {}
+};
+
+const handleSendResults = (results, tokens, userId, label) => {
+  let successCount = 0;
+  results.forEach((res, index) => {
+    if (res.status === 'fulfilled') {
+      successCount++;
+    } else {
+      console.warn(`⚠️ [FCM] ${label} delivery failed: ${res.reason?.message}`);
+      if (DEAD_TOKEN_CODES.has(res.reason?.code)) {
+        pruneDeadToken(userId, tokens[index]);
+      }
+    }
+  });
+  return successCount;
+};
+
+/** Stop all pushes to this user (call on logout). */
+export const unregisterUserFcmTokens = async (userId) => {
+  if (!userId) return;
+  if (userFcmTokens.delete(userId)) saveTokens();
+  try {
+    await prisma.userDevice.deleteMany({
+      where: { userId, deviceToken: { contains: ':' } },
+    });
+  } catch (err) {
+    console.warn('⚠️ [FCM] Failed to clear tokens on logout:', err.message);
+  }
 };
 
 /**
@@ -146,19 +214,8 @@ export const sendIncomingCallPush = async ({
     } catch (_) {}
   }
 
-  let tokens = getUserFcmTokens(targetUserId);
-  if (!tokens || tokens.length === 0) {
-    try {
-      const devices = await prisma.userDevice.findMany({
-        where: { userId: targetUserId },
-        select: { deviceToken: true },
-      });
-      tokens = devices.map((d) => d.deviceToken).filter(Boolean);
-      tokens.forEach((t) => registerUserFcmToken(targetUserId, t));
-    } catch (_) {}
-  }
-
-  if (!tokens || tokens.length === 0) {
+  const tokens = await getDeliverableTokens(targetUserId);
+  if (tokens.length === 0) {
     console.log(`ℹ️ [FCM] No registered push token for user ${targetUserId}`);
     return false;
   }
@@ -206,22 +263,7 @@ export const sendIncomingCallPush = async ({
     )
   );
 
-  let successCount = 0;
-  results.forEach((res, index) => {
-    if (res.status === 'fulfilled') {
-      successCount++;
-    } else {
-      console.warn(`⚠️ [FCM] Failed to deliver push to token: ${res.reason?.message}`);
-      if (res.reason?.code === 'messaging/registration-token-not-registered') {
-        const set = userFcmTokens.get(targetUserId);
-        if (set) {
-          set.delete(tokens[index]);
-          saveTokens();
-        }
-      }
-    }
-  });
-
+  const successCount = handleSendResults(results, tokens, targetUserId, 'Incoming call push');
   return successCount > 0;
 };
 
@@ -231,18 +273,9 @@ export const sendIncomingCallPush = async ({
  */
 export const sendCallEndedPush = async ({ recipientUserId, callerId }) => {
   if (!firebaseApp) return false;
-  let targetUserId = recipientUserId;
-  let tokens = getUserFcmTokens(targetUserId);
-  if (!tokens || tokens.length === 0) {
-    try {
-      const devices = await prisma.userDevice.findMany({
-        where: { userId: targetUserId },
-        select: { deviceToken: true },
-      });
-      tokens = devices.map((d) => d.deviceToken).filter(Boolean);
-    } catch (_) {}
-  }
-  if (!tokens || tokens.length === 0) return false;
+  const targetUserId = recipientUserId;
+  const tokens = await getDeliverableTokens(targetUserId);
+  if (tokens.length === 0) return false;
 
   const payloadData = {
     type: 'CALL_ENDED',
@@ -297,19 +330,8 @@ export const sendRideNotificationPush = async ({
     if (dp?.userId) targetUserId = dp.userId;
   } catch (_) {}
 
-  let tokens = getUserFcmTokens(targetUserId);
-  if (!tokens || tokens.length === 0) {
-    try {
-      const devices = await prisma.userDevice.findMany({
-        where: { userId: targetUserId },
-        select: { deviceToken: true },
-      });
-      tokens = devices.map((d) => d.deviceToken).filter(Boolean);
-      tokens.forEach((t) => registerUserFcmToken(targetUserId, t));
-    } catch (_) {}
-  }
-
-  if (!tokens || tokens.length === 0) {
+  const tokens = await getDeliverableTokens(targetUserId);
+  if (tokens.length === 0) {
     console.log(`ℹ️ [FCM] No registered push token for user ${targetUserId}`);
     return false;
   }
@@ -381,21 +403,7 @@ export const sendRideNotificationPush = async ({
     })
   );
 
-  let successCount = 0;
-  results.forEach((res, index) => {
-    if (res.status === 'fulfilled') {
-      successCount++;
-    } else {
-      console.warn(`⚠️ [FCM] Failed to deliver ride notification to token: ${res.reason?.message}`);
-      if (res.reason?.code === 'messaging/registration-token-not-registered') {
-        const set = userFcmTokens.get(targetUserId);
-        if (set) {
-          set.delete(tokens[index]);
-          saveTokens();
-        }
-      }
-    }
-  });
+  const successCount = handleSendResults(results, tokens, targetUserId, 'Ride notification');
 
   console.log(`📲 [FCM] Delivered push notification to ${successCount}/${tokens.length} devices for user ${targetUserId}`);
   return successCount > 0;

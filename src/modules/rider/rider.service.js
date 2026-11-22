@@ -4,6 +4,7 @@ import { prisma } from '../../config/db.js';
 import { ApiError } from '../../utils/apiError.js';
 import { formatRideForFlutter } from '../user/user.service.js';
 import { createNotification } from '../notification/notification.service.js';
+import { getIO } from '../../config/socket.js';
 
 /**
  * Helper to save base64 image data to disk as a static asset
@@ -1504,6 +1505,20 @@ export const startTrip = async (userId, rideId, options = {}) => {
         },
       },
     });
+
+    // Tell passengers the trip has started so their live tracking opens/updates.
+    try {
+      const io = getIO();
+      const payload = { tripId: rideId, status: 'IN_PROGRESS', timestamp: new Date().toISOString() };
+      io.to(`trip:${rideId}`).emit('trip:status_changed', payload);
+      for (const b of currentRide.bookings || []) {
+        if (b.passengerId && b.status === 'ACCEPTED') {
+          io.to(`user:${b.passengerId}`).emit('trip:status_changed', payload);
+        }
+      }
+    } catch (err) {
+      console.warn('[Rider] Failed to broadcast trip start:', err.message);
+    }
   }
 
   const departureDate = new Date(currentRide.departureAt);

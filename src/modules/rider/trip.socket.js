@@ -30,16 +30,65 @@ export const broadcastTripEvent = (tripId, eventName, data) => {
 };
 
 /**
+ * Who this user is on a ride: 'driver', 'passenger', or null (not on it).
+ * Cached per socket — location updates arrive every couple of seconds and must
+ * not hit the database each time. A null result is not cached, so a booking
+ * accepted after the first lookup still works.
+ */
+const resolveTripRole = async (socket, tripId) => {
+  const userId = socket.user?.id;
+  if (!userId || !tripId) return null;
+  socket.data.tripRoles = socket.data.tripRoles || {};
+  if (socket.data.tripRoles[tripId]) return socket.data.tripRoles[tripId];
+
+  try {
+    const ride = await prisma.ride.findUnique({
+      where: { id: tripId },
+      select: {
+        driver: { select: { userId: true } },
+        bookings: {
+          where: { passengerId: userId, status: { in: ['ACCEPTED', 'COMPLETED'] } },
+          select: { id: true },
+          take: 1,
+        },
+      },
+    });
+    let role = null;
+    if (ride?.driver?.userId === userId) role = 'driver';
+    else if (ride?.bookings?.length) role = 'passenger';
+    if (role) socket.data.tripRoles[tripId] = role;
+    return role;
+  } catch (err) {
+    console.warn('[TripSocket] Role lookup failed:', err.message);
+    return null;
+  }
+};
+
+const isDriverOf = async (socket, tripId) => (await resolveTripRole(socket, tripId)) === 'driver';
+
+const toFiniteNumber = (value, fallback = 0) => {
+  const n = parseFloat(value);
+  return Number.isFinite(n) ? n : fallback;
+};
+
+/**
  * Registers real-time live trip tracking, vehicle movement, deviation, and stops handlers
  */
 export const registerTripSocketHandlers = (io, socket) => {
   const userId = socket.user?.id;
 
-  // 1. Join Live Trip Room
+  // 1. Join Live Trip Room (only the ride's driver and its booked passengers)
   socket.on('trip:join', async (data) => {
     try {
       const tripId = data?.tripId || data?.rideId;
       if (!tripId) return;
+
+      const role = await resolveTripRole(socket, tripId);
+      if (!role) {
+        console.warn(`🚫 [TripSocket] User ${userId} is not on ride ${tripId} — join refused`);
+        socket.emit('trip:join_denied', { tripId, reason: 'NOT_A_PARTICIPANT' });
+        return;
+      }
 
       const roomName = `trip:${tripId}`;
       socket.join(roomName);
@@ -49,6 +98,7 @@ export const registerTripSocketHandlers = (io, socket) => {
       socket.emit('trip:joined', {
         tripId,
         joinedUserId: userId,
+        role,
         liveState: cached || null,
         timestamp: new Date().toISOString(),
       });
@@ -78,15 +128,29 @@ export const registerTripSocketHandlers = (io, socket) => {
     try {
       const tripId = data?.tripId || data?.rideId;
       if (!tripId) return;
+      if (!(await isDriverOf(socket, tripId))) return; // only the driver moves the vehicle
+
+      const latitude = toFiniteNumber(data.latitude ?? data.lat, NaN);
+      const longitude = toFiniteNumber(data.longitude ?? data.lng, NaN);
+      if (
+        !Number.isFinite(latitude) ||
+        !Number.isFinite(longitude) ||
+        Math.abs(latitude) > 90 ||
+        Math.abs(longitude) > 180 ||
+        (latitude === 0 && longitude === 0)
+      ) {
+        return;
+      }
 
       const telemetry = {
         tripId,
-        latitude: parseFloat(data.latitude || data.lat),
-        longitude: parseFloat(data.longitude || data.lng),
-        bearing: parseFloat(data.bearing || data.heading || 0),
-        speed: parseFloat(data.speed || 0),
-        accuracy: parseFloat(data.accuracy || 0),
-        timestamp: data.timestamp || new Date().toISOString(),
+        latitude,
+        longitude,
+        bearing: toFiniteNumber(data.bearing ?? data.heading, 0),
+        speed: Math.max(0, toFiniteNumber(data.speed, 0)),
+        accuracy: Math.max(0, toFiniteNumber(data.accuracy, 0)),
+        // Server time: phones' clocks drift, passengers use this to detect stale fixes.
+        timestamp: new Date().toISOString(),
         driverId: userId,
       };
 
@@ -110,6 +174,7 @@ export const registerTripSocketHandlers = (io, socket) => {
     try {
       const tripId = data?.tripId || data?.rideId;
       if (!tripId) return;
+      if (!(await isDriverOf(socket, tripId))) return;
 
       const isDeviated = Boolean(data.isDeviated);
       const distance = parseFloat(data.distance || 0);
@@ -147,6 +212,7 @@ export const registerTripSocketHandlers = (io, socket) => {
       const stopId = data?.stopId;
       const sequence = parseInt(data?.sequence, 10);
       if (!tripId) return;
+      if (!(await isDriverOf(socket, tripId))) return;
 
       const current = liveTripsState.get(tripId) || {};
       liveTripsState.set(tripId, {
@@ -177,24 +243,28 @@ export const registerTripSocketHandlers = (io, socket) => {
       const bookingId = data?.bookingId;
       const status = data?.status; // 'PICKED_UP' | 'DROPPED_OFF' | 'NO_SHOW'
       if (!tripId || !bookingId) return;
+      if (!(await isDriverOf(socket, tripId))) return;
 
       // Update Booking status in database if valid enum
       try {
+        // PICKED_UP keeps the booking ACCEPTED (pickup itself is stored by the
+        // REST onboard endpoint) — 'IN_PROGRESS' is not a BookingStatus.
         let dbStatus = null;
-        if (status === 'PICKED_UP') dbStatus = 'IN_PROGRESS';
         if (status === 'DROPPED_OFF') dbStatus = 'COMPLETED';
-        if (status === 'NO_SHOW') dbStatus = 'CANCELLED';
+        if (status === 'NO_SHOW') dbStatus = 'NO_SHOW';
 
-        let targetPassengerId = data?.passengerId;
+        // The booking must belong to this ride — never trust the client's IDs.
+        const booking = await prisma.booking.findFirst({
+          where: { id: bookingId, rideId: tripId },
+          select: { passengerId: true },
+        });
+        if (!booking) return;
+        const targetPassengerId = booking.passengerId;
         if (dbStatus) {
-          const updatedBooking = await prisma.booking.update({
+          await prisma.booking.update({
             where: { id: bookingId },
             data: { status: dbStatus },
-            select: { passengerId: true },
           });
-          if (!targetPassengerId && updatedBooking?.passengerId) {
-            targetPassengerId = updatedBooking.passengerId;
-          }
         }
 
         // Send push & in-app notification to the passenger
@@ -251,6 +321,8 @@ export const registerTripSocketHandlers = (io, socket) => {
       const tripId = data?.tripId || data?.rideId;
       const status = data?.status; // 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED'
       if (!tripId || !status) return;
+      if (!['IN_PROGRESS', 'COMPLETED', 'CANCELLED'].includes(status)) return;
+      if (!(await isDriverOf(socket, tripId))) return;
 
       // Update Ride in DB
       try {
