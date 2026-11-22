@@ -1,6 +1,6 @@
 import { exec } from 'child_process';
 import { promisify } from 'util';
-import { isDbConnected } from './db.js';
+import { isDbConnected, prisma } from './db.js';
 
 const execAsync = promisify(exec);
 
@@ -12,6 +12,11 @@ export const autoMigrateDatabase = async () => {
   if (!isDbConnected) {
     return;
   }
+
+  // Ensure file_url column can hold LONGTEXT if table already exists
+  try {
+    await prisma.$executeRawUnsafe('ALTER TABLE `driver_documents` MODIFY `file_url` LONGTEXT');
+  } catch (_) {}
 
   // Allow disabling auto-migration via env if explicitly required (e.g. SKIP_AUTO_MIGRATE=true)
   if (process.env.SKIP_AUTO_MIGRATE === 'true') {

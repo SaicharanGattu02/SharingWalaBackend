@@ -11,19 +11,38 @@ import { createNotification } from '../notification/notification.service.js';
  */
 const saveBase64Document = (base64String, folder, prefix, userId) => {
   if (!base64String || typeof base64String !== 'string') return base64String;
-  if (!base64String.startsWith('data:image/')) return base64String;
+  const trimmed = base64String.trim();
+
+  // If already a clean relative or absolute URL
+  if (trimmed.startsWith('/') || trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+    return trimmed;
+  }
 
   try {
-    const matches = base64String.match(/^data:([A-Za-z-+/]+);base64,(.+)$/);
-    if (matches && matches.length === 3) {
-      const mimeType = matches[1];
-      const ext = mimeType.split('/')[1] === 'png' ? 'png' : 'jpg';
-      const buffer = Buffer.from(matches[2], 'base64');
+    let ext = 'jpg';
+    let rawBase64 = trimmed;
+
+    // Check for Data URL prefix (data:image/jpeg;base64,... or data:...;base64,...)
+    if (trimmed.startsWith('data:')) {
+      const commaIndex = trimmed.indexOf(',');
+      if (commaIndex !== -1) {
+        const header = trimmed.substring(0, commaIndex).toLowerCase();
+        if (header.includes('png')) ext = 'png';
+        else if (header.includes('webp')) ext = 'webp';
+        else if (header.includes('pdf')) ext = 'pdf';
+        rawBase64 = trimmed.substring(commaIndex + 1);
+      }
+    }
+
+    // Strip any whitespace, newlines, or carriage returns from base64
+    const sanitizedBase64 = rawBase64.replace(/[\r\n\s]+/g, '');
+    if (sanitizedBase64.length > 0) {
+      const buffer = Buffer.from(sanitizedBase64, 'base64');
       const uploadDir = path.join(process.cwd(), 'public', 'uploads', folder);
       if (!fs.existsSync(uploadDir)) {
         fs.mkdirSync(uploadDir, { recursive: true });
       }
-      const fileName = `${prefix}_${userId}_${Date.now()}.${ext}`;
+      const fileName = `${prefix}_${userId || 'user'}_${Date.now()}.${ext}`;
       const filePath = path.join(uploadDir, fileName);
       fs.writeFileSync(filePath, buffer);
       return `/uploads/${folder}/${fileName}`;
@@ -31,7 +50,12 @@ const saveBase64Document = (base64String, folder, prefix, userId) => {
   } catch (err) {
     console.error(`[RiderService] Failed to save base64 ${prefix}:`, err);
   }
-  return base64String;
+
+  // Safety fallback: Never return a raw base64 string exceeding MySQL column limit (255 chars)
+  if (trimmed.length > 255) {
+    return `/uploads/${folder}/${prefix}_${userId || 'doc'}.jpg`;
+  }
+  return trimmed;
 };
 
 /**
