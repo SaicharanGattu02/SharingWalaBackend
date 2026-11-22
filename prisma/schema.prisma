@@ -459,7 +459,7 @@ model DriverDocument {
   driverId       String             @map("driver_id")
   documentType   DocumentType       @map("document_type")
   documentNumber String?            @map("document_number")
-  fileUrl        String             @map("file_url")
+  fileUrl        String             @db.LongText @map("file_url")
   status         VerificationStatus @default(PENDING)
   expiryDate     DateTime?          @map("expiry_date")
   verifiedAt     DateTime?          @map("verified_at")

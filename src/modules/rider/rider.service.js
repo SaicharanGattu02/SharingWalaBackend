@@ -1,7 +1,38 @@
+import fs from 'fs';
+import path from 'path';
 import { prisma } from '../../config/db.js';
 import { ApiError } from '../../utils/apiError.js';
 import { formatRideForFlutter } from '../user/user.service.js';
 import { createNotification } from '../notification/notification.service.js';
+
+/**
+ * Helper to save base64 image data to disk as a static asset
+ * and return the public URL path (/uploads/documents/...)
+ */
+const saveBase64Document = (base64String, folder, prefix, userId) => {
+  if (!base64String || typeof base64String !== 'string') return base64String;
+  if (!base64String.startsWith('data:image/')) return base64String;
+
+  try {
+    const matches = base64String.match(/^data:([A-Za-z-+/]+);base64,(.+)$/);
+    if (matches && matches.length === 3) {
+      const mimeType = matches[1];
+      const ext = mimeType.split('/')[1] === 'png' ? 'png' : 'jpg';
+      const buffer = Buffer.from(matches[2], 'base64');
+      const uploadDir = path.join(process.cwd(), 'public', 'uploads', folder);
+      if (!fs.existsSync(uploadDir)) {
+        fs.mkdirSync(uploadDir, { recursive: true });
+      }
+      const fileName = `${prefix}_${userId}_${Date.now()}.${ext}`;
+      const filePath = path.join(uploadDir, fileName);
+      fs.writeFileSync(filePath, buffer);
+      return `/uploads/${folder}/${fileName}`;
+    }
+  } catch (err) {
+    console.error(`[RiderService] Failed to save base64 ${prefix}:`, err);
+  }
+  return base64String;
+};
 
 /**
  * Helper to ensure a user has an active, approved DriverProfile.
@@ -95,6 +126,11 @@ export const applyAsDriver = async (
   let profile;
   const expiry = new Date(licenseExpiryDate);
 
+  // Clean / persist base64 documents to disk
+  const cleanLicenseFrontUrl = saveBase64Document(licenseFrontUrl, 'documents', 'license_front', userId);
+  const cleanLicenseBackUrl = saveBase64Document(licenseBackUrl, 'documents', 'license_back', userId);
+  const cleanSelfieUrl = saveBase64Document(selfieUrl, 'documents', 'selfie', userId);
+
   if (existing) {
     if (existing.verificationStatus === 'APPROVED') {
       return {
@@ -128,7 +164,7 @@ export const applyAsDriver = async (
   }
 
   // Upsert Driving License Document
-  if (licenseFrontUrl) {
+  if (cleanLicenseFrontUrl) {
     const existingDl = await prisma.driverDocument.findFirst({
       where: { driverId: profile.id, documentType: 'DRIVING_LICENSE' },
     });
@@ -136,7 +172,7 @@ export const applyAsDriver = async (
       await prisma.driverDocument.update({
         where: { id: existingDl.id },
         data: {
-          fileUrl: licenseFrontUrl,
+          fileUrl: cleanLicenseFrontUrl,
           documentNumber: licenseNumber.trim(),
           expiryDate: expiry,
           status: 'PENDING',
@@ -149,7 +185,7 @@ export const applyAsDriver = async (
           driverId: profile.id,
           documentType: 'DRIVING_LICENSE',
           documentNumber: licenseNumber.trim(),
-          fileUrl: licenseFrontUrl,
+          fileUrl: cleanLicenseFrontUrl,
           expiryDate: expiry,
           status: 'PENDING',
         },
@@ -158,7 +194,7 @@ export const applyAsDriver = async (
   }
 
   // Upsert Live Camera Selfie Document
-  if (selfieUrl) {
+  if (cleanSelfieUrl) {
     const existingSelfie = await prisma.driverDocument.findFirst({
       where: {
         driverId: profile.id,
@@ -172,7 +208,7 @@ export const applyAsDriver = async (
       await prisma.driverDocument.update({
         where: { id: existingSelfie.id },
         data: {
-          fileUrl: selfieUrl,
+          fileUrl: cleanSelfieUrl,
           documentNumber: 'LIVE_CAMERA_SELFIE',
           status: 'PENDING',
           rejectedReason: null,
@@ -184,7 +220,7 @@ export const applyAsDriver = async (
           driverId: profile.id,
           documentType: 'OTHER',
           documentNumber: 'LIVE_CAMERA_SELFIE',
-          fileUrl: selfieUrl,
+          fileUrl: cleanSelfieUrl,
           status: 'PENDING',
         },
       });
@@ -194,7 +230,7 @@ export const applyAsDriver = async (
     try {
       await prisma.user.update({
         where: { id: userId },
-        data: { avatarUrl: selfieUrl },
+        data: { avatarUrl: cleanSelfieUrl },
       });
     } catch (_) {}
   }
