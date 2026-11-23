@@ -41,11 +41,11 @@ export const offerRideSchema = {
     rideType: z.string().default('oneTime'), // 'oneTime' or 'recurring'
     activeDays: z.array(z.string()).optional(), // e.g. ['Mon', 'Tue', 'Wed', 'Thu', 'Fri']
     origin: z.string().min(2),
-    originLat: z.number().optional().default(17.448293),
-    originLng: z.number().optional().default(78.391487),
+    originLat: z.number().optional(),
+    originLng: z.number().optional(),
     destination: z.string().min(2),
-    destLat: z.number().optional().default(17.437462),
-    destLng: z.number().optional().default(78.365448),
+    destLat: z.number().optional(),
+    destLng: z.number().optional(),
     departureTime: z.string().min(1), // e.g. "08:30 AM"
     returnTime: z.string().optional(), // e.g. "06:00 PM"
     date: z.string().optional(), // e.g. "Today" or ISO string

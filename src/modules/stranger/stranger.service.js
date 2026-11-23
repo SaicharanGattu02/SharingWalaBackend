@@ -8,6 +8,12 @@ import { sendRideNotificationPush } from '../../config/firebase.js';
 import { toAbsoluteVideoUrl, toAbsoluteUrl } from '../../utils/urlHelper.js';
 import { createNotification } from '../notification/notification.service.js';
 
+// Real coordinate or 0 (= unknown). Never substitute a made-up location.
+const toCoord = (v) => {
+  const n = Number(v);
+  return Number.isFinite(n) && n !== 0 ? n : 0;
+};
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const storeFilePath = path.join(__dirname, 'stranger_store.json');
@@ -725,6 +731,9 @@ export const getStrangerTrips = async (
     const isConfirmed = currentUserId
       ? passengers.some((p) => p.passengerId === currentUserId && (p.isConfirmed || p.status === 'Confirmed' || p.status === 'accepted'))
       : false;
+    const wasRejected = Boolean(
+      currentUserId && (t.rejectedRequests || []).some((r) => r.passengerId === currentUserId)
+    );
 
     return {
       ...t,
@@ -738,11 +747,11 @@ export const getStrangerTrips = async (
       passengerRequests,
       isHost,
       hasRequested: Boolean(userRequest),
-      userRequestStatus: userRequest ? userRequest.status : (isConfirmed ? 'confirmed' : 'none'),
+      userRequestStatus: userRequest ? userRequest.status : (isConfirmed ? 'confirmed' : (wasRejected ? 'rejected' : 'none')),
       userRequest: userRequest || null,
       isConfirmedPassenger: isConfirmed,
       isConnected: isHost || Boolean(userRequest) || isConfirmed,
-      canRequest: !isHost && !userRequest && !isConfirmed && (t.availableSeats > 0),
+      canRequest: !isHost && !userRequest && !isConfirmed && !wasRejected && (t.availableSeats > 0),
     };
   });
 };
@@ -760,6 +769,9 @@ export const getStrangerTripById = async (id, currentUserId = null) => {
   const isConfirmed = currentUserId
     ? passengers.some((p) => p.passengerId === currentUserId && (p.isConfirmed || p.status === 'Confirmed' || p.status === 'accepted'))
     : false;
+  const wasRejected = Boolean(
+    currentUserId && (t.rejectedRequests || []).some((r) => r.passengerId === currentUserId)
+  );
 
   return {
     ...t,
@@ -775,11 +787,11 @@ export const getStrangerTripById = async (id, currentUserId = null) => {
     passengerRequests,
     isHost,
     hasRequested: Boolean(userRequest),
-    userRequestStatus: userRequest ? userRequest.status : (isConfirmed ? 'confirmed' : 'none'),
+    userRequestStatus: userRequest ? userRequest.status : (isConfirmed ? 'confirmed' : (wasRejected ? 'rejected' : 'none')),
     userRequest: userRequest || null,
     isConfirmedPassenger: isConfirmed,
     isConnected: isHost || Boolean(userRequest) || isConfirmed,
-    canRequest: !isHost && !userRequest && !isConfirmed && (t.availableSeats > 0),
+    canRequest: !isHost && !userRequest && !isConfirmed && !wasRejected && (t.availableSeats > 0),
   };
 };
 
@@ -998,8 +1010,8 @@ export const startStrangerTrip = (userId, tripId) => {
     passengers: trip.passengers || [],
     passengerCount: (trip.passengers || []).length,
     stops: [
-      { id: 'stop_1', name: trip.origin, type: 'START', latitude: 17.448293, longitude: 78.391487, sequence: 1 },
-      { id: 'stop_2', name: trip.destination, type: 'END', latitude: 12.971598, longitude: 77.594562, sequence: 2 },
+      { id: 'stop_1', name: trip.origin, type: 'START', latitude: toCoord(trip.originLat), longitude: toCoord(trip.originLng), sequence: 1 },
+      { id: 'stop_2', name: trip.destination, type: 'END', latitude: toCoord(trip.destLat), longitude: toCoord(trip.destLng), sequence: 2 },
     ],
     message: 'Stranger trip started successfully! Drive safely.',
   };
@@ -1108,6 +1120,10 @@ export const createStrangerTrip = async (userId, data) => {
     isVerified: true,
     origin: data.origin,
     destination: data.destination,
+    originLat: toCoord(data.originLat),
+    originLng: toCoord(data.originLng),
+    destLat: toCoord(data.destLat),
+    destLng: toCoord(data.destLng),
     date: data.date,
     time: data.time,
     mode: data.mode || 'carpool',
@@ -1178,11 +1194,11 @@ export const createStrangerTrip = async (userId, data) => {
           totalSeats: totalSeats || 3,
           availableSeats: totalSeats || 3,
           startLocationName: data.origin,
-          startLat: 17.448293,
-          startLng: 78.391487,
+          startLat: toCoord(data.originLat),
+          startLng: toCoord(data.originLng),
           endLocationName: data.destination,
-          endLat: 12.971598,
-          endLng: 77.594562,
+          endLat: toCoord(data.destLat),
+          endLng: toCoord(data.destLng),
           status: 'PUBLISHED',
           womenOnly: Boolean(data.isWomenOnly),
           notes: data.notes || '',
@@ -1195,8 +1211,8 @@ export const createStrangerTrip = async (userId, data) => {
           },
           stops: {
             create: [
-              { name: data.origin, sequence: 1, stopType: 'START', latitude: 17.448293, longitude: 78.391487 },
-              { name: data.destination, sequence: 2, stopType: 'END', latitude: 12.971598, longitude: 77.594562 },
+              { name: data.origin, sequence: 1, stopType: 'START', latitude: toCoord(data.originLat), longitude: toCoord(data.originLng) },
+              { name: data.destination, sequence: 2, stopType: 'END', latitude: toCoord(data.destLat), longitude: toCoord(data.destLng) },
             ],
           },
         },
@@ -1348,6 +1364,10 @@ export const joinStrangerTrip = async (userId, tripId, body = {}) => {
     select: { id: true, displayName: true, phone: true, avatarUrl: true },
   });
 
+  if ((trip.rejectedRequests || []).some((r) => r.passengerId === userId)) {
+    throw new ApiError(400, 'The host declined your request for this trip. Try another trip that fits you.');
+  }
+
   const requestId = `req_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
   const totalFare = Number(trip.pricePerPerson || 0) * seatsRequested;
 
@@ -1361,13 +1381,12 @@ export const joinStrangerTrip = async (userId, tripId, body = {}) => {
     passengerAvatar: user?.avatarUrl || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=400&q=80',
     seatsRequested,
     totalFare,
-    notes: body.notes || 'Looking forward to co-traveling together!',
+    notes: String(body.note || body.notes || '').trim().slice(0, 300) || 'Looking forward to co-traveling together!',
     status: 'pending',
     requestedAt: new Date().toISOString(),
   };
 
   trip.passengerRequests.push(newRequest);
-  trip.isConnected = true;
   saveStore();
 
   // Sync to Prisma booking if Prisma ride exists
@@ -1454,12 +1473,39 @@ export const joinStrangerTrip = async (userId, tripId, body = {}) => {
 
   return {
     success: true,
-    message: 'Opt-in request sent successfully! The host will review your request.',
+    message: `Request sent to ${trip.hostName || 'the host'}. You'll be notified once they accept.`,
+    status: 'pending',
+    userRequestStatus: 'pending',
     request: newRequest,
     passengerRequest: newRequest,
     bookingId: requestId,
     tripId: trip.id,
     availableSeats: trip.availableSeats,
+  };
+};
+
+/** Passenger withdraws a request the host hasn't answered yet. */
+export const cancelStrangerTripRequest = async (userId, tripId) => {
+  const trip = findStrangerTrip(tripId);
+  if (!trip) throw new ApiError(404, 'Stranger trip not found');
+  const idx = (trip.passengerRequests || []).findIndex(
+    (r) => r.passengerId === userId && r.status === 'pending'
+  );
+  if (idx === -1) throw new ApiError(404, 'No pending request to withdraw');
+  const [req] = trip.passengerRequests.splice(idx, 1);
+  saveStore();
+  try {
+    await prisma.booking.update({
+      where: { id: req.bookingId || req.id },
+      data: { status: 'CANCELLED' },
+    });
+  } catch (_) {}
+  return {
+    success: true,
+    status: 'cancelled',
+    userRequestStatus: 'none',
+    message: 'Your request was withdrawn',
+    tripId: trip.id,
   };
 };
 
@@ -1558,7 +1604,28 @@ export const respondToStrangerTripRequest = async (hostUserId, tripId, requestId
   } else if (isReject) {
     req.status = 'rejected';
     trip.passengerRequests.splice(reqIndex, 1);
+    if (!Array.isArray(trip.rejectedRequests)) trip.rejectedRequests = [];
+    trip.rejectedRequests.push({ ...req, rejectedAt: new Date().toISOString() });
     saveStore();
+
+    const rejectedPassengerId = req.passengerId || req.userId;
+    if (rejectedPassengerId && !String(rejectedPassengerId).startsWith('mock_')) {
+      createNotification({
+        userId: rejectedPassengerId,
+        type: 'BOOKING_REJECTED',
+        title: 'Trip request declined',
+        message: `${trip.hostName || 'The host'} couldn't take you to ${trip.destination || 'the destination'} this time.`,
+        data: { tripId: trip.id, rideId: trip.id, bookingId: req.bookingId || req.id, route: '/stranger-mode' },
+        sendPush: true,
+      }).catch(() => {});
+      try {
+        getIO()?.to(`user:${rejectedPassengerId}`).emit('trip:rejected', {
+          tripId: trip.id,
+          bookingId: req.bookingId || req.id,
+          status: 'REJECTED',
+        });
+      } catch (_) {}
+    }
     try {
       await prisma.booking.update({
         where: { id: req.bookingId || req.id },
@@ -1944,15 +2011,28 @@ export const formatStrangerPlan = (p, currentUserId = null, currentUserGender = 
     : null;
   const canGenderJoin = !isFemaleOnly || (normalizedUserGender === 'FEMALE');
 
-  const canJoin = !expiryInfo.isExpired && !isFull && !isJoined && canGenderJoin;
+  // Per-user request state: none | pending | accepted | rejected
+  const myRequest = latestPlanRequestFor(p, currentUserId);
+  let requestStatus = 'none';
+  if (isJoined || isHost) requestStatus = 'accepted';
+  else if (myRequest && ['pending', 'rejected'].includes(myRequest.status)) requestStatus = myRequest.status;
+  const joinRequests = Array.isArray(p.joinRequests) ? p.joinRequests : [];
+  const pendingRequestsCount = joinRequests.filter((r) => r.status === 'pending').length;
+
+  const canJoin =
+    !expiryInfo.isExpired && !isFull && !isJoined && canGenderJoin && requestStatus === 'none';
 
   let cannotJoinReason = null;
   if (expiryInfo.isExpired) {
     cannotJoinReason = 'Join window closed (cut-off is 30 minutes before departure)';
-  } else if (isFull) {
-    cannotJoinReason = 'This travel plan is full';
   } else if (isJoined) {
     cannotJoinReason = 'You have already joined this plan';
+  } else if (requestStatus === 'pending') {
+    cannotJoinReason = 'Your request is waiting for the host';
+  } else if (requestStatus === 'rejected') {
+    cannotJoinReason = 'The host declined your request';
+  } else if (isFull) {
+    cannotJoinReason = 'This travel plan is full';
   } else if (!canGenderJoin) {
     cannotJoinReason = 'This plan is exclusively for female travelers (Female only)';
   }
@@ -1960,10 +2040,12 @@ export const formatStrangerPlan = (p, currentUserId = null, currentUserGender = 
   let status = 'OPEN';
   if (expiryInfo.isExpired) {
     status = 'EXPIRED';
-  } else if (isFull) {
-    status = 'FULL';
   } else if (isJoined) {
     status = 'JOINED';
+  } else if (requestStatus === 'pending') {
+    status = 'REQUESTED';
+  } else if (isFull) {
+    status = 'FULL';
   }
 
   return {
@@ -2005,6 +2087,10 @@ export const formatStrangerPlan = (p, currentUserId = null, currentUserGender = 
     isJoined,
     isHost,
     status,
+    requestStatus,
+    isRequested: requestStatus === 'pending',
+    // Only the host sees how many people are waiting.
+    pendingRequestsCount: isHost ? pendingRequestsCount : 0,
   };
 };
 
@@ -2092,6 +2178,9 @@ export const getUpcomingPlans = async (query = {}, currentUserId = null, current
       const isConfirmed = currentUserId
         ? passengers.some((p) => p.passengerId === currentUserId && (p.isConfirmed || p.status === 'Confirmed' || p.status === 'accepted'))
         : false;
+      const wasRejected = Boolean(
+        currentUserId && (t.rejectedRequests || []).some((r) => r.passengerId === currentUserId)
+      );
 
       const expiryInfo = getPlanExpiryInfo({
         startDate: t.date,
@@ -2117,7 +2206,7 @@ export const getUpcomingPlans = async (query = {}, currentUserId = null, current
         joinedMembers: Math.max(1, booked),
         totalMembers: total,
         availableSeats: avail,
-        canJoin: !expiryInfo.isExpired && avail > 0 && !isConfirmed && !userRequest,
+        canJoin: !expiryInfo.isExpired && avail > 0 && !isConfirmed && !userRequest && !wasRejected,
         isPrivate: false,
         isTrending: false,
         isUpcoming: true,
@@ -2134,12 +2223,15 @@ export const getUpcomingPlans = async (query = {}, currentUserId = null, current
         passengers,
         passengerRequests,
         isHost,
-        isJoined: isConfirmed || Boolean(userRequest),
+        isJoined: isConfirmed,
+        requestStatus: isHost || isConfirmed ? 'accepted' : (userRequest ? 'pending' : (wasRejected ? 'rejected' : 'none')),
+        isRequested: Boolean(userRequest) && !isConfirmed,
+        pendingRequestsCount: isHost ? passengerRequests.length : 0,
         hasRequested: Boolean(userRequest),
-        userRequestStatus: userRequest ? userRequest.status : (isConfirmed ? 'confirmed' : 'none'),
+        userRequestStatus: userRequest ? userRequest.status : (isConfirmed ? 'confirmed' : (wasRejected ? 'rejected' : 'none')),
         userRequest: userRequest || null,
         isConnected: isHost || Boolean(userRequest) || isConfirmed,
-        canRequest: !isHost && !userRequest && !isConfirmed && (avail > 0) && !expiryInfo.isExpired,
+        canRequest: !isHost && !userRequest && !isConfirmed && !wasRejected && (avail > 0) && !expiryInfo.isExpired,
       };
     });
 
@@ -2402,54 +2494,207 @@ export const joinStrangerPlan = async (userId, planId, body = {}) => {
     };
   }
 
-  // 5. Capacity Check
+  // 5. Existing request checks — joining is always host-approved, never instant.
+  if (!Array.isArray(rawPlan.joinRequests)) rawPlan.joinRequests = [];
+  const existing = latestPlanRequestFor(rawPlan, effectiveUserId);
+  if (existing && existing.status === 'pending') {
+    const formatted = formatStrangerPlan(rawPlan, effectiveUserId, effectiveGender);
+    return {
+      success: true,
+      status: 'pending',
+      requestStatus: 'pending',
+      isRequested: true,
+      isJoined: false,
+      request: existing,
+      message: `Your request is already with ${rawPlan.hostName || 'the host'}. We'll notify you once they respond.`,
+      plan: formatted,
+    };
+  }
+  if (existing && existing.status === 'rejected') {
+    throw new ApiError(400, 'The host declined your request for this plan. Try another plan that fits you.');
+  }
+
+  // 6. Capacity Check
   const total = Number(rawPlan.totalMembers || 10);
   if (rawPlan.members.length >= total) {
     throw new ApiError(400, 'This travel plan is already full');
   }
 
-  // Add new member
-  const newMember = {
+  const request = {
+    id: `preq_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
     userId: effectiveUserId,
     name: memberName,
     avatar: memberAvatar,
     phone: dbUser?.phone || body.phone || null,
     gender: effectiveGender || null,
-    joinedAt: new Date().toISOString(),
+    note: String(body.note || body.notes || body.message || '').trim().slice(0, 300),
+    status: 'pending',
+    requestedAt: new Date().toISOString(),
   };
-
-  rawPlan.members.push(newMember);
-  rawPlan.joinedUserIds.push(effectiveUserId);
-  rawPlan.joinedMembers = rawPlan.members.length;
-
+  rawPlan.joinRequests.push(request);
   saveStore();
 
   const formattedPlan = formatStrangerPlan(rawPlan, effectiveUserId, effectiveGender);
 
-  // Broadcast real-time Socket.io event to all connected clients
-  try {
-    const io = getIO();
-    io.emit('plan:member_joined', {
-      planId: rawPlan.id,
-      joinedMembers: formattedPlan.joinedMembers,
-      totalMembers: formattedPlan.totalMembers,
-      availableSeats: formattedPlan.availableSeats,
-      member: newMember,
-      plan: formattedPlan,
-    });
-    io.emit('plan:updated', formattedPlan);
-  } catch (socketErr) {
-    // Socket emit is best-effort
+  // Tell the host there's someone to review.
+  if (rawPlan.hostId && rawPlan.hostId !== effectiveUserId) {
+    createNotification({
+      userId: rawPlan.hostId,
+      type: 'PLAN_JOIN_REQUEST',
+      title: 'New join request 🎒',
+      message: `${memberName} wants to join "${rawPlan.title}". Review the request.`,
+      data: { planId: rawPlan.id, requestId: request.id, passengerId: effectiveUserId, route: '/stranger-mode' },
+      sendPush: true,
+    }).catch(() => {});
+    try {
+      getIO().to(`user:${rawPlan.hostId}`).emit('plan:join_requested', {
+        planId: rawPlan.id,
+        request,
+        pendingRequestsCount: formattedPlan.pendingRequestsCount,
+      });
+    } catch {}
   }
 
   return {
     success: true,
-    isJoined: true,
+    status: 'pending',
+    requestStatus: 'pending',
+    isRequested: true,
+    isJoined: false,
     joinedMembers: formattedPlan.joinedMembers,
     totalMembers: formattedPlan.totalMembers,
     availableSeats: formattedPlan.availableSeats,
-    message: 'Joined travel plan successfully!',
-    member: newMember,
+    message: `Request sent to ${rawPlan.hostName || 'the host'}. You'll be notified once they accept.`,
+    request,
+    plan: formattedPlan,
+  };
+};
+
+/** Most recent join request a user made on a plan (any status). */
+function latestPlanRequestFor(plan, userId) {
+  if (!userId || !Array.isArray(plan.joinRequests)) return null;
+  const mine = plan.joinRequests.filter((r) => r.userId === userId);
+  return mine.length ? mine[mine.length - 1] : null;
+}
+
+/** Host: list join requests for a plan (pending first). */
+export const getStrangerPlanRequests = async (hostUserId, planId) => {
+  // Trips also appear in the plans feed — review their seat requests instead.
+  const linkedTrip = strangerTrips.find((t) => t.id === planId);
+  if (linkedTrip) {
+    if (linkedTrip.hostId !== hostUserId) {
+      throw new ApiError(403, 'Only the trip host can view join requests');
+    }
+    const toItem = (r, status) => ({
+      id: r.id,
+      userId: r.passengerId,
+      name: r.passengerName,
+      avatar: r.passengerAvatar,
+      note: r.notes,
+      seats: r.seatsRequested,
+      status,
+      requestedAt: r.requestedAt,
+    });
+    const pending = (linkedTrip.passengerRequests || []).map((r) => toItem(r, 'pending'));
+    const accepted = (linkedTrip.passengers || []).map((r) => toItem(r, 'accepted'));
+    const rejected = (linkedTrip.rejectedRequests || []).map((r) => toItem(r, 'rejected'));
+    return {
+      planId: linkedTrip.id,
+      title: `${linkedTrip.origin} to ${linkedTrip.destination}`,
+      pendingCount: pending.length,
+      requests: [...pending, ...accepted, ...rejected],
+    };
+  }
+
+  const rawPlan = findStrangerPlan(planId);
+  if (!rawPlan) throw new ApiError(404, 'Travel plan not found');
+  if (rawPlan.hostId !== hostUserId) {
+    throw new ApiError(403, 'Only the plan host can view join requests');
+  }
+  const list = Array.isArray(rawPlan.joinRequests) ? rawPlan.joinRequests : [];
+  const order = { pending: 0, accepted: 1, rejected: 2, cancelled: 3 };
+  return {
+    planId: rawPlan.id,
+    title: rawPlan.title,
+    pendingCount: list.filter((r) => r.status === 'pending').length,
+    requests: [...list].sort((a, b) => (order[a.status] ?? 9) - (order[b.status] ?? 9)),
+  };
+};
+
+/** Host: accept or reject a join request. */
+export const respondToStrangerPlanRequest = async (hostUserId, planId, requestId, action) => {
+  if (strangerTrips.some((t) => t.id === planId)) {
+    return respondToStrangerTripRequest(hostUserId, planId, requestId, action);
+  }
+  const rawPlan = findStrangerPlan(planId);
+  if (!rawPlan) throw new ApiError(404, 'Travel plan not found');
+  if (rawPlan.hostId !== hostUserId) {
+    throw new ApiError(403, 'Only the plan host can respond to join requests');
+  }
+  const req = (rawPlan.joinRequests || []).find((r) => r.id === requestId);
+  if (!req) throw new ApiError(404, 'Join request not found');
+  if (req.status !== 'pending') {
+    throw new ApiError(400, `This request was already ${req.status}`);
+  }
+
+  const act = String(action || '').toUpperCase();
+  const isAccept = ['ACCEPT', 'ACCEPTED', 'APPROVE'].includes(act);
+  const isReject = ['REJECT', 'REJECTED', 'DECLINE'].includes(act);
+  if (!isAccept && !isReject) throw new ApiError(400, 'Invalid action. Must be ACCEPT or REJECT');
+
+  if (!Array.isArray(rawPlan.members)) rawPlan.members = [];
+  if (!Array.isArray(rawPlan.joinedUserIds)) rawPlan.joinedUserIds = rawPlan.members.map((m) => m.userId || m.id);
+
+  if (isAccept) {
+    const total = Number(rawPlan.totalMembers || 10);
+    if (rawPlan.members.length >= total) {
+      throw new ApiError(400, 'Cannot accept: this plan is already full');
+    }
+    rawPlan.members.push({
+      userId: req.userId,
+      name: req.name,
+      avatar: req.avatar,
+      phone: req.phone,
+      gender: req.gender,
+      joinedAt: new Date().toISOString(),
+    });
+    if (!rawPlan.joinedUserIds.includes(req.userId)) rawPlan.joinedUserIds.push(req.userId);
+    rawPlan.joinedMembers = rawPlan.members.length;
+    req.status = 'accepted';
+  } else {
+    req.status = 'rejected';
+  }
+  req.respondedAt = new Date().toISOString();
+  saveStore();
+
+  const formattedPlan = formatStrangerPlan(rawPlan, hostUserId);
+
+  createNotification({
+    userId: req.userId,
+    type: isAccept ? 'PLAN_REQUEST_ACCEPTED' : 'PLAN_REQUEST_REJECTED',
+    title: isAccept ? "You're in! 🎉" : 'Join request declined',
+    message: isAccept
+      ? `${rawPlan.hostName || 'The host'} accepted you on "${rawPlan.title}". Say hi in the group chat.`
+      : `${rawPlan.hostName || 'The host'} couldn't take you on "${rawPlan.title}" this time.`,
+    data: { planId: rawPlan.id, requestId: req.id, route: '/stranger-mode' },
+    sendPush: true,
+  }).catch(() => {});
+
+  try {
+    const io = getIO();
+    io.to(`user:${req.userId}`).emit('plan:request_responded', {
+      planId: rawPlan.id,
+      requestId: req.id,
+      status: req.status,
+    });
+    if (isAccept) io.emit('plan:updated', formatStrangerPlan(rawPlan));
+  } catch {}
+
+  return {
+    success: true,
+    status: req.status,
+    message: isAccept ? `${req.name} has been added to your plan` : `${req.name}'s request was declined`,
+    request: req,
     plan: formattedPlan,
   };
 };
@@ -2458,6 +2703,22 @@ export const leaveStrangerPlan = async (userId, planId) => {
   const rawPlan = findStrangerPlan(planId);
   if (!rawPlan) {
     throw new ApiError(404, 'Travel plan not found');
+  }
+
+  // Withdrawing a request that hasn't been answered yet.
+  const pending = latestPlanRequestFor(rawPlan, userId);
+  if (pending && pending.status === 'pending') {
+    pending.status = 'cancelled';
+    pending.respondedAt = new Date().toISOString();
+    saveStore();
+    return {
+      success: true,
+      isJoined: false,
+      status: 'cancelled',
+      requestStatus: 'none',
+      message: 'Your join request was withdrawn',
+      plan: formatStrangerPlan(rawPlan, userId),
+    };
   }
 
   if (Array.isArray(rawPlan.members)) {

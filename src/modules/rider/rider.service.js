@@ -6,6 +6,13 @@ import { formatRideForFlutter } from '../user/user.service.js';
 import { createNotification } from '../notification/notification.service.js';
 import { getIO } from '../../config/socket.js';
 
+// Real coordinate or 0 (= unknown). Never substitute a made-up location —
+// the app treats 0 as "unknown" and geocodes the place name instead.
+const toCoord = (v) => {
+  const n = Number(v);
+  return Number.isFinite(n) && n !== 0 ? n : 0;
+};
+
 /**
  * Helper to save base64 image data to disk as a static asset
  * and return the public URL path (/uploads/documents/...)
@@ -655,11 +662,11 @@ export const offerRide = async (userId, data) => {
           driverId: driver.id,
           vehicleId,
           startLocationName: data.origin,
-          startLat: data.originLat || 17.448293,
-          startLng: data.originLng || 78.391487,
+          startLat: toCoord(data.originLat),
+          startLng: toCoord(data.originLng),
           endLocationName: data.destination,
-          endLat: data.destLat || 17.437462,
-          endLng: data.destLng || 78.365448,
+          endLat: toCoord(data.destLat),
+          endLng: toCoord(data.destLng),
           departureTime: data.departureTime || '08:30 AM',
           returnTime: data.returnTime || '06:00 PM',
           startDate: new Date(),
@@ -705,11 +712,11 @@ export const offerRide = async (userId, data) => {
       totalSeats,
       availableSeats: totalSeats,
       startLocationName: data.origin,
-      startLat: data.originLat || 17.448293,
-      startLng: data.originLng || 78.391487,
+      startLat: toCoord(data.originLat),
+      startLng: toCoord(data.originLng),
       endLocationName: data.destination,
-      endLat: data.destLat || 17.437462,
-      endLng: data.destLng || 78.365448,
+      endLat: toCoord(data.destLat),
+      endLng: toCoord(data.destLng),
       status: 'PUBLISHED',
       womenOnly: Boolean(data.isWomenOnly),
       autoAccept: Boolean(data.autoAccept),
@@ -727,16 +734,16 @@ export const offerRide = async (userId, data) => {
           {
             sequence: 1,
             name: meetingPoint,
-            latitude: data.originLat || 17.448293,
-            longitude: data.originLng || 78.391487,
+            latitude: toCoord(data.originLat),
+            longitude: toCoord(data.originLng),
             stopType: 'START',
             estimatedArrivalAt: departureDate,
           },
           {
             sequence: 2,
             name: data.destination,
-            latitude: data.destLat || 17.437462,
-            longitude: data.destLng || 78.365448,
+            latitude: toCoord(data.destLat),
+            longitude: toCoord(data.destLng),
             stopType: 'END',
             estimatedArrivalAt: estimatedArrival,
           },

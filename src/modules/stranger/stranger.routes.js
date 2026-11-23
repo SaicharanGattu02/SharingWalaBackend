@@ -24,6 +24,7 @@ router.post('/trips/:id/join', authenticate, strangerController.joinTrip);
 router.post('/trips/:id/connect', authenticate, strangerController.joinTrip);
 router.post('/trips/:id/request', authenticate, strangerController.joinTrip);
 router.post('/trips/:id/opt-in', authenticate, strangerController.joinTrip);
+router.post('/trips/:id/request/cancel', authenticate, strangerController.cancelTripRequest);
 router.post('/trips/:id/requests/:requestId/respond', authenticate, strangerController.respondToRequest);
 router.post('/trips/:id/requests/:requestId/accept', authenticate, strangerController.acceptRequest);
 router.post('/trips/:id/requests/:requestId/reject', authenticate, strangerController.rejectRequest);
@@ -45,6 +46,10 @@ router.post('/plans/:id/join', optionalAuthenticate, strangerController.joinPlan
 router.post('/plans/:id/request', optionalAuthenticate, strangerController.joinPlan);
 router.post('/plans/:id/opt-in', optionalAuthenticate, strangerController.joinPlan);
 router.post('/plans/:id/leave', optionalAuthenticate, strangerController.leavePlan);
+router.get('/plans/:id/requests', authenticate, strangerController.getPlanRequests);
+router.post('/plans/:id/requests/:requestId/respond', authenticate, strangerController.respondToPlanRequest);
+router.post('/plans/:id/requests/:requestId/accept', authenticate, strangerController.respondToPlanRequest);
+router.post('/plans/:id/requests/:requestId/reject', authenticate, strangerController.respondToPlanRequest);
 
 // --- 4. STRANGER REELS ---
 router.post('/reels/upload', uploadRoutes);

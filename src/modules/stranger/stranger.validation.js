@@ -4,6 +4,10 @@ export const createStrangerTripSchema = {
   body: z.object({
     origin: z.string().min(2),
     destination: z.string().min(2),
+    originLat: z.number().optional(),
+    originLng: z.number().optional(),
+    destLat: z.number().optional(),
+    destLng: z.number().optional(),
     date: z.string().min(1),
     time: z.string().min(1),
     mode: z.enum(['carpool', 'bikepool', 'other']).default('carpool'),

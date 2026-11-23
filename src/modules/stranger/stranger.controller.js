@@ -146,6 +146,32 @@ export const leavePlan = asyncHandler(async (req, res) => {
   res.status(200).json(new ApiResponse(200, result, result.message));
 });
 
+// Host reviews who asked to join a plan
+export const getPlanRequests = asyncHandler(async (req, res) => {
+  const result = await strangerService.getStrangerPlanRequests(req.user.id, req.params.id);
+  res.status(200).json(new ApiResponse(200, result, 'Join requests retrieved'));
+});
+
+export const respondToPlanRequest = asyncHandler(async (req, res) => {
+  const action =
+    req.body?.action ||
+    req.body?.status ||
+    (req.path.endsWith('/accept') ? 'ACCEPT' : req.path.endsWith('/reject') ? 'REJECT' : '');
+  const result = await strangerService.respondToStrangerPlanRequest(
+    req.user.id,
+    req.params.id,
+    req.params.requestId,
+    action
+  );
+  res.status(200).json(new ApiResponse(200, result, result.message));
+});
+
+// Passenger withdraws a pending trip request
+export const cancelTripRequest = asyncHandler(async (req, res) => {
+  const result = await strangerService.cancelStrangerTripRequest(req.user.id, req.params.id);
+  res.status(200).json(new ApiResponse(200, result, result.message));
+});
+
 // --- Reels ---
 export const getReels = asyncHandler(async (req, res) => {
   const reels = await strangerService.getStrangerReels(req.user?.id, req);
