@@ -6,6 +6,7 @@ import { prisma } from '../../config/db.js';
 import { getIO } from '../../config/socket.js';
 import { endSessionBetween } from './call.session.js';
 import * as chatService from './chat.service.js';
+import * as privacy from './chat.privacy.service.js';
 
 export const getOrCreateDirectChat = asyncHandler(async (req, res) => {
   const recipientId = req.body.recipientUserId || req.body.recipientId || req.body.peerUserId || req.body.userId;
@@ -118,4 +119,36 @@ export const getUserOnlineStatus = asyncHandler(async (req, res) => {
   res.status(200).json(
     new ApiResponse(200, { userId: targetUserId, isOnline, lastSeen }, 'User online status retrieved')
   );
+});
+
+// --- WhatsApp-style chat privacy -------------------------------------------
+export const archiveConversation = asyncHandler(async (req, res) => {
+  const archived = req.body?.archived !== false;
+  const result = await privacy.setConversationArchived(req.user.id, req.params.id, archived);
+  res.status(200).json(new ApiResponse(200, result, result.message));
+});
+
+export const deleteConversation = asyncHandler(async (req, res) => {
+  const result = await privacy.deleteConversationForMe(req.user.id, req.params.id);
+  res.status(200).json(new ApiResponse(200, result, result.message));
+});
+
+export const clearConversation = asyncHandler(async (req, res) => {
+  const result = await privacy.clearConversationForMe(req.user.id, req.params.id);
+  res.status(200).json(new ApiResponse(200, result, result.message));
+});
+
+export const getBlockedUsers = asyncHandler(async (req, res) => {
+  const result = await privacy.getBlockedUsers(req.user.id);
+  res.status(200).json(new ApiResponse(200, result, 'Blocked contacts'));
+});
+
+export const blockUser = asyncHandler(async (req, res) => {
+  const result = await privacy.blockUser(req.user.id, req.params.userId, req.body?.reason);
+  res.status(200).json(new ApiResponse(200, result, result.message));
+});
+
+export const unblockUser = asyncHandler(async (req, res) => {
+  const result = await privacy.unblockUser(req.user.id, req.params.userId);
+  res.status(200).json(new ApiResponse(200, result, result.message));
 });

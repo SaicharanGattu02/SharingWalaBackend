@@ -3,6 +3,7 @@ import { prisma } from '../../config/db.js';
 import { env } from '../../config/env.js';
 import { getIO } from '../../config/socket.js';
 import { ensureConversationRecord, markAsRead, resolvePeerUserId } from './chat.service.js';
+import { hasBlocked, recipientsWhoBlocked, unhideConversationFor } from './chat.privacy.service.js';
 import { sendIncomingCallPush, sendCallEndedPush, registerUserFcmToken } from '../../config/firebase.js';
 import { createNotification } from '../notification/notification.service.js';
 import {
@@ -192,7 +193,20 @@ export const initiateCallSession = async ({
     io = getIO();
   } catch (_) {}
 
+  // Blocked either way: the call silently never rings (the caller just sees
+  // it go unanswered), like WhatsApp.
+  const blockedTargets = new Set();
+  for (const targetId of targets) {
+    if ((await hasBlocked(targetId, callerId)) || (await hasBlocked(callerId, targetId))) {
+      blockedTargets.add(targetId);
+    }
+  }
+
   targets.forEach((targetId) => {
+    if (blockedTargets.has(targetId)) {
+      console.log(`📞 [Call] Not ringing ${targetId}: blocked`);
+      return;
+    }
     // The app starts every call over both socket and REST; ring only once.
     if (isDuplicateInitiation(callerId, targetId)) {
       console.log(`📞 [Call] Ignoring duplicate initiation ${callerId} ➔ ${targetId}`);
@@ -219,7 +233,7 @@ export const initiateCallSession = async ({
   if (conversationId && io) {
     io.to(`conv:${conversationId}`).emit('call:incoming_in_room', {
       ...payload,
-      toUserIds: targets,
+      toUserIds: targets.filter((t) => !blockedTargets.has(t)),
     });
   }
 
@@ -396,6 +410,13 @@ export const registerChatSocketHandlers = (io, socket) => {
             message: 'This conversation has been archived and is now read-only',
           });
         }
+        if (participant.peerUserId && (await hasBlocked(effectiveUserId, participant.peerUserId))) {
+          return socket.emit('chat_error', {
+            conversationId,
+            code: 'BLOCKED_BY_YOU',
+            message: 'You blocked this contact. Unblock them to send a message.',
+          });
+        }
 
         // Persist message in Prisma under canonical conversation ID
         const message = await prisma.chatMessage.create({
@@ -451,13 +472,6 @@ export const registerChatSocketHandlers = (io, socket) => {
           createdAt: message.createdAt.toISOString(),
         };
 
-        // Real-time broadcast to all clients currently inside the conversation room
-        io.to(`conv:${targetConvId}`).emit('new_message', socketPayload);
-        if (conversationId !== targetConvId) {
-          io.to(`conv:${conversationId}`).emit('new_message', socketPayload);
-        }
-
-        // Real-time notification badge alert to participants outside the room
         const recipientUserIds = new Set();
         if (participant.conversation && participant.conversation.participants) {
           participant.conversation.participants.forEach((p) => {
@@ -467,6 +481,25 @@ export const registerChatSocketHandlers = (io, socket) => {
         if (participant.peerUserId && participant.peerUserId !== effectiveUserId) {
           recipientUserIds.add(participant.peerUserId);
         }
+
+        // People who blocked the sender silently never receive it.
+        const silent = await recipientsWhoBlocked(effectiveUserId, [...recipientUserIds]);
+        silent.forEach((id) => recipientUserIds.delete(id));
+        // A deleted chat comes back when a new message arrives.
+        await unhideConversationFor(targetConvId, [effectiveUserId, ...recipientUserIds]);
+
+        // Real-time broadcast to clients inside the conversation room
+        const roomEmit = (room) => {
+          let target = io.to(room);
+          silent.forEach((id) => {
+            target = target.except(`user:${id}`);
+          });
+          target.emit('new_message', socketPayload);
+        };
+        roomEmit(`conv:${targetConvId}`);
+        if (conversationId !== targetConvId) roomEmit(`conv:${conversationId}`);
+
+        // Notification badge alert to participants outside the room
 
         recipientUserIds.forEach((recipientUserId) => {
           if (!recipientUserId || recipientUserId === effectiveUserId) return;

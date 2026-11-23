@@ -983,6 +983,14 @@ model ConversationParticipant {
   userId         String       @map("user_id")
   lastReadAt     DateTime?    @map("last_read_at")
   isMuted        Boolean      @default(false) @map("is_muted")
+  // Per-user chat list state (WhatsApp-style): archiving or deleting a chat
+  // only affects this participant's own view.
+  isArchived     Boolean      @default(false) @map("is_archived")
+  archivedAt     DateTime?    @map("archived_at")
+  // "Delete chat": hidden from my list until a new message arrives, and
+  // messages up to clearedAt are no longer shown to me.
+  isHidden       Boolean      @default(false) @map("is_hidden")
+  clearedAt      DateTime?    @map("cleared_at")
   joinedAt       DateTime     @default(now()) @map("joined_at")
 
   conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)

@@ -23,5 +23,11 @@ router.get('/conversations/:id/messages', validate(getMessagesQuerySchema), chat
 router.post('/conversations/:id/messages', validate(sendMessageSchema), chatController.sendMessage);
 router.post('/conversations/:id/read', chatController.markAsRead);
 router.get('/users/:userId/status', chatController.getUserOnlineStatus);
+router.post('/conversations/:id/archive', chatController.archiveConversation);
+router.post('/conversations/:id/clear', chatController.clearConversation);
+router.delete('/conversations/:id', chatController.deleteConversation);
+router.get('/blocked', chatController.getBlockedUsers);
+router.post('/users/:userId/block', chatController.blockUser);
+router.delete('/users/:userId/block', chatController.unblockUser);
 
 export default router;

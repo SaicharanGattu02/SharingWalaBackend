@@ -5,6 +5,13 @@ import { prisma } from '../../config/db.js';
 import { ApiError } from '../../utils/apiError.js';
 import { getIO } from '../../config/socket.js';
 import { createNotification } from '../notification/notification.service.js';
+import {
+  getMyBlockMap,
+  hasBlocked,
+  recipientsWhoBlocked,
+  unhideConversationFor,
+  visibleMessagesWhere,
+} from './chat.privacy.service.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -674,7 +681,9 @@ export const getUserConversations = async (userId, typeFilter = null, search = n
     console.warn('[ChatService] Community auto-sync error:', syncErr.message);
   }
 
-  const whereClause = { userId };
+  // Chats the user deleted stay out of the list until a new message arrives.
+  const whereClause = { userId, isHidden: false };
+  const blockMap = await getMyBlockMap(userId);
 
   if (typeFilter) {
     const filter = String(typeFilter).toUpperCase().trim();
@@ -795,19 +804,31 @@ export const getUserConversations = async (userId, typeFilter = null, search = n
     participations.map(async (p) => {
       const conv = p.conversation;
       const lastRead = p.lastReadAt || new Date(0);
+      // Only what this user may see: not before they cleared the chat, and
+      // nothing from people they blocked after blocking them.
+      const visible = visibleMessagesWhere(userId, p, blockMap);
 
       const unreadCount = await prisma.chatMessage.count({
         where: {
           conversationId: conv.id,
           createdAt: { gt: lastRead },
           senderId: { not: userId },
+          isDeleted: false,
+          ...visible,
         },
       });
 
       const meta = resolveConversationMetadata(conv, userId);
       const otherParticipant = conv.participants?.find((part) => part.userId !== userId);
 
-      const lastMsg = conv.messages[0] || null;
+      const lastMsg =
+        p.clearedAt || blockMap.size
+          ? await prisma.chatMessage.findFirst({
+              where: { conversationId: conv.id, isDeleted: false, ...visible },
+              orderBy: { createdAt: 'desc' },
+              include: { sender: { select: { id: true, displayName: true } } },
+            })
+          : conv.messages[0] || null;
       let formattedLastMessage = null;
       let effectiveTime = null;
 
@@ -842,7 +863,11 @@ export const getUserConversations = async (userId, typeFilter = null, search = n
         bikerTrip: conv.bikerTrip,
         lastMessage: formattedLastMessage,
         unreadCount,
-        isArchived: conv.isArchived,
+        // Per-user archive (WhatsApp-style), not the global conversation flag.
+        isArchived: Boolean(p.isArchived),
+        isBlocked: Boolean(
+          !meta.isGroup && otherParticipant?.userId && blockMap.has(otherParticipant.userId)
+        ),
         lastMessageAt: effectiveTime ? new Date(effectiveTime).toISOString() : new Date(0).toISOString(),
       };
     })
@@ -910,11 +935,22 @@ export const getConversationMessages = async (userId, conversationId, { page = 1
   // Search messages in target canonical conversation OR legacy conversation ID
   const searchConvIds = targetConvId === conversationId ? [targetConvId] : [targetConvId, conversationId];
 
+  const [myParticipant, blockMap] = await Promise.all([
+    prisma.conversationParticipant.findUnique({
+      where: { conversationId_userId: { conversationId: targetConvId, userId } },
+      select: { clearedAt: true, isArchived: true },
+    }),
+    getMyBlockMap(userId),
+  ]);
+  const visible = visibleMessagesWhere(userId, myParticipant, blockMap);
+  const peerId = otherParticipant?.userId || participant.peerUserId || null;
+
   const [messages, total] = await Promise.all([
     prisma.chatMessage.findMany({
       where: {
         conversationId: { in: searchConvIds },
         isDeleted: false,
+        ...visible,
       },
       skip,
       take: limit,
@@ -929,6 +965,7 @@ export const getConversationMessages = async (userId, conversationId, { page = 1
       where: {
         conversationId: { in: searchConvIds },
         isDeleted: false,
+        ...visible,
       },
     }),
   ]);
@@ -986,6 +1023,9 @@ export const getConversationMessages = async (userId, conversationId, { page = 1
 
   return {
     conversationId: targetConvId,
+    isArchived: Boolean(myParticipant?.isArchived),
+    isBlocked: Boolean(peerId && blockMap.has(peerId)),
+    peerId,
     messages: formattedMessages,
     pagination: {
       total,
@@ -1002,6 +1042,9 @@ export const sendChatMessage = async (userId, conversationId, data) => {
 
   if (participant.conversation && participant.conversation.isArchived) {
     throw new ApiError(400, 'This conversation has been archived and is read-only');
+  }
+  if (participant.peerUserId && (await hasBlocked(userId, participant.peerUserId))) {
+    throw new ApiError(403, 'You blocked this contact. Unblock them to send a message.');
   }
 
   const message = await prisma.chatMessage.create({
@@ -1054,11 +1097,6 @@ export const sendChatMessage = async (userId, conversationId, data) => {
       createdAt: message.createdAt.toISOString(),
     };
 
-    io.to(`conv:${targetConvId}`).emit('new_message', payload);
-    if (conversationId !== targetConvId) {
-      io.to(`conv:${conversationId}`).emit('new_message', payload);
-    }
-
     const recipientIds = new Set();
     if (participant.conversation && participant.conversation.participants) {
       participant.conversation.participants.forEach((p) => {
@@ -1068,6 +1106,21 @@ export const sendChatMessage = async (userId, conversationId, data) => {
     if (participant.peerUserId && participant.peerUserId !== userId) {
       recipientIds.add(participant.peerUserId);
     }
+
+    // People who blocked the sender silently never receive it (WhatsApp-style).
+    const silent = await recipientsWhoBlocked(userId, [...recipientIds]);
+    silent.forEach((id) => recipientIds.delete(id));
+    await unhideConversationFor(targetConvId, [userId, ...recipientIds]);
+
+    const roomEmit = (room) => {
+      let target = io.to(room);
+      silent.forEach((id) => {
+        target = target.except(`user:${id}`);
+      });
+      target.emit('new_message', payload);
+    };
+    roomEmit(`conv:${targetConvId}`);
+    if (conversationId !== targetConvId) roomEmit(`conv:${conversationId}`);
 
     const msgPreview = message.messageType === 'LOCATION_SHARE'
       ? '📍 Shared a location'
