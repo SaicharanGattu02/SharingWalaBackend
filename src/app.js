@@ -5,6 +5,7 @@ import morgan from 'morgan';
 import path from 'path';
 import { env } from './config/env.js';
 import routes from './routes/index.js';
+import shareLinkRoutes from './modules/share/share.routes.js';
 import { errorHandler } from './middlewares/error.middleware.js';
 import { ApiError } from './utils/apiError.js';
 import { ApiResponse } from './utils/apiResponse.js';
@@ -58,6 +59,10 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Static Assets (uploads, avatars)
 app.use('/uploads', express.static(path.join(process.cwd(), 'public', 'uploads')));
+
+// Shareable trip links (/r/ride/:id) + Android App Links verification
+// (/.well-known/assetlinks.json). Opens the app if installed, else Play Store.
+app.use(shareLinkRoutes);
 
 // Root Route
 app.get('/', (req, res) => {
