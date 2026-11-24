@@ -1012,12 +1012,39 @@ export const getRideDetails = async (rideId, currentUserId = null) => {
 
     const mockRide = defaultMockRides.find((r) => r.id === rideId);
     if (mockRide) {
+      let requestStatus = 'none';
+      let userBooking = null;
+
+      if (currentUserId) {
+        try {
+          const myBooking = await prisma.booking.findFirst({
+            where: {
+              rideId: mockRide.id,
+              passengerId: currentUserId,
+            },
+            orderBy: { createdAt: 'desc' },
+          });
+          if (myBooking) {
+            const statusLower = myBooking.status.toLowerCase();
+            requestStatus = statusLower === 'declined' ? 'rejected' : statusLower;
+            userBooking = {
+              bookingId: myBooking.id,
+              status: requestStatus,
+              seatsRequested: myBooking.seatsRequested,
+              totalFare: Number(myBooking.totalCostContribution || 0),
+              notes: myBooking.passengerNotes || '',
+              requestedAt: myBooking.requestedAt || myBooking.createdAt,
+            };
+          }
+        } catch (e) {}
+      }
+
       return {
         ...mockRide,
-        requestStatus: 'none',
-        bookingStatus: 'none',
-        isRequestSent: false,
-        userBooking: null,
+        requestStatus,
+        bookingStatus: requestStatus,
+        isRequestSent: requestStatus !== 'none',
+        userBooking,
         isFeedbackSubmitted: false,
         hasSubmittedFeedback: false,
         hasRated: false,
