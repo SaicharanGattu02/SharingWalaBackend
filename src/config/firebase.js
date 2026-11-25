@@ -165,6 +165,48 @@ export const unregisterUserFcmTokens = async (userId) => {
 };
 
 /**
+ * Resolves a push recipient identifier (User ID, DriverProfile ID, or
+ * conversation ID like direct_u1_u2 / trip_...) to a concrete User ID.
+ */
+const resolvePushUserId = async (recipientUserId, excludeUserId = null) => {
+  let targetUserId = recipientUserId;
+  if (!targetUserId) return targetUserId;
+  try {
+    const dp = await prisma.driverProfile.findUnique({
+      where: { id: targetUserId },
+      select: { userId: true },
+    });
+    if (dp?.userId) targetUserId = dp.userId;
+  } catch (_) {}
+
+  if (
+    targetUserId &&
+    (targetUserId.startsWith('direct_') ||
+      targetUserId.startsWith('trip_') ||
+      targetUserId.startsWith('cm'))
+  ) {
+    try {
+      if (targetUserId.startsWith('direct_')) {
+        const raw = targetUserId.replace('direct_', '');
+        const parts = raw.split('_').filter(Boolean);
+        const other = parts.find((p) => p !== excludeUserId);
+        if (other) targetUserId = other;
+      } else {
+        const conv = await prisma.conversation.findUnique({
+          where: { id: targetUserId },
+          include: { participants: { select: { userId: true } } },
+        });
+        if (conv?.participants) {
+          const other = conv.participants.find((p) => p.userId !== excludeUserId);
+          if (other?.userId) targetUserId = other.userId;
+        }
+      }
+    } catch (_) {}
+  }
+  return targetUserId;
+};
+
+/**
  * Send High-Priority Incoming Call Push Notification
  * Wakes up device in background/killed/locked state and triggers the full-screen IncomingCallScreen
  */
@@ -181,38 +223,7 @@ export const sendIncomingCallPush = async ({
     return false;
   }
 
-  // Defensive: If recipient is a DriverProfile ID, resolve to User ID
-  let targetUserId = recipientUserId;
-  try {
-    const dp = await prisma.driverProfile.findUnique({
-      where: { id: recipientUserId },
-      select: { userId: true },
-    });
-    if (dp?.userId) {
-      targetUserId = dp.userId;
-    }
-  } catch (_) {}
-
-  // Defensive: If recipient is a conversation ID, resolve to the peer user ID
-  if (targetUserId && (targetUserId.startsWith('direct_') || targetUserId.startsWith('trip_') || targetUserId.startsWith('cm'))) {
-    try {
-      if (targetUserId.startsWith('direct_')) {
-        const raw = targetUserId.replace('direct_', '');
-        const parts = raw.split('_').filter(Boolean);
-        const other = parts.find((p) => p !== callerId);
-        if (other) targetUserId = other;
-      } else {
-        const conv = await prisma.conversation.findUnique({
-          where: { id: targetUserId },
-          include: { participants: { select: { userId: true } } },
-        });
-        if (conv?.participants) {
-          const other = conv.participants.find((p) => p.userId !== callerId);
-          if (other?.userId) targetUserId = other.userId;
-        }
-      }
-    } catch (_) {}
-  }
+  const targetUserId = await resolvePushUserId(recipientUserId, callerId);
 
   const tokens = await getDeliverableTokens(targetUserId);
   if (tokens.length === 0) {
@@ -292,7 +303,7 @@ export const sendIncomingCallPush = async ({
  */
 export const sendCallEndedPush = async ({ recipientUserId, callerId }) => {
   if (!firebaseApp) return false;
-  const targetUserId = recipientUserId;
+  const targetUserId = await resolvePushUserId(recipientUserId, callerId);
   const tokens = await getDeliverableTokens(targetUserId);
   if (tokens.length === 0) return false;
 

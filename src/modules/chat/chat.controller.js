@@ -36,7 +36,8 @@ export const sendMessage = asyncHandler(async (req, res) => {
   res.status(201).json(new ApiResponse(201, message, 'Message sent successfully'));
 });
 
-import { isUserOnline, getUserLastSeen, notifyCallRinging, initiateCallSession } from './chat.socket.js';
+import { isUserOnline, getUserLastSeen, notifyCallRinging, initiateCallSession, resolveTargetUsers } from './chat.socket.js';
+import { sendCallEndedPush } from '../../config/firebase.js';
 
 /**
  * These two endpoints are called from the phone's push handler while the app
@@ -82,6 +83,34 @@ export const reportCallRejected = asyncHandler(async (req, res) => {
     console.warn('⚠️ [Call] Failed to emit call:rejected:', err.message);
   }
   res.status(200).json(new ApiResponse(200, { success: true }, 'Call rejection dispatched'));
+});
+
+export const reportCallEnded = asyncHandler(async (req, res) => {
+  const { toUserId, targetUserId, callerId, conversationId, reason = 'HUNG_UP' } = req.body;
+  const actorId = resolveCallActorId(req);
+  const rawTarget = toUserId || targetUserId || callerId || conversationId;
+  if (!actorId || !rawTarget) {
+    return res.status(401).json(new ApiResponse(401, { success: false }, 'Invalid call end report'));
+  }
+
+  const targets = await resolveTargetUsers(rawTarget, conversationId || null, actorId);
+  const targetId = targets[0] || rawTarget;
+
+  endSessionBetween(actorId, targetId);
+  try {
+    getIO().to(`user:${targetId}`).emit('call:ended', {
+      byUserId: actorId,
+      reason,
+    });
+  } catch (err) {
+    console.warn('⚠️ [Call] Failed to emit call:ended:', err.message);
+  }
+  sendCallEndedPush({
+    recipientUserId: targetId,
+    callerId: actorId,
+  }).catch(() => {});
+
+  res.status(200).json(new ApiResponse(200, { success: true }, 'Call end dispatched'));
 });
 
 export const initiateCall = asyncHandler(async (req, res) => {
