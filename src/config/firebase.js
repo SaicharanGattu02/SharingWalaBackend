@@ -243,17 +243,36 @@ export const sendIncomingCallPush = async ({
       getMessaging(firebaseApp).send({
         token,
         data: payloadData,
+        // Include OS notification fallback so Android still rings/alerts on
+        // call_channel_v8 even if the app was swiped away and the OS blocks
+        // the background Dart isolate.
+        notification: {
+          title: payloadData.title,
+          body: payloadData.body,
+        },
         android: {
           priority: 'high',
           ttl: 60 * 1000, // 60 seconds (ttl in Firebase Admin SDK is in milliseconds)
+          notification: {
+            channelId: 'call_channel_v8',
+            tag: 'incoming_call',
+            sound: 'share2go_ring',
+            priority: 'max',
+            defaultVibrateTimings: true,
+            clickAction: 'FLUTTER_NOTIFICATION_CLICK',
+            visibility: 'public',
+          },
         },
         apns: {
           headers: {
             'apns-priority': '10',
-            'apns-push-type': 'background',
           },
           payload: {
             aps: {
+              alert: {
+                title: payloadData.title,
+                body: payloadData.body,
+              },
               contentAvailable: true,
               sound: 'default',
             },
@@ -380,24 +399,24 @@ export const sendRideNotificationPush = async ({
         },
       };
 
-      // For non-chat notifications (rides/bookings), include native notification block so OS tray
-      // can display even if process is suspended. For chat messages, high-priority data payload
-      // wakes _firebaseMessagingBackgroundHandler to display WhatsApp-style inline interactive reply box.
-      if (!isChatMessage) {
-        message.notification = {
-          title: String(title),
-          body: String(body),
-        };
-        message.android.notification = {
-          channelId: targetChannelId,
-          sound: 'default',
-          priority: 'max',
-          defaultSound: true,
-          defaultVibrateTimings: true,
-          clickAction: 'FLUTTER_NOTIFICATION_CLICK',
-          visibility: 'public',
-        };
-      }
+      // Include native notification block for both chat and ride/booking pushes so
+      // Android OS displays them even when the app is killed and background isolates
+      // are throttled. When the background isolate does wake up, it replaces the
+      // tagged OS notification with the rich inline-reply notification.
+      message.notification = {
+        title: String(title),
+        body: String(body),
+      };
+      message.android.notification = {
+        channelId: targetChannelId,
+        ...(isChatMessage ? { tag: `chat_${data.conversationId || targetUserId}` } : {}),
+        sound: 'default',
+        priority: 'max',
+        defaultSound: true,
+        defaultVibrateTimings: true,
+        clickAction: 'FLUTTER_NOTIFICATION_CLICK',
+        visibility: 'public',
+      };
 
       return getMessaging(firebaseApp).send(message);
     })
