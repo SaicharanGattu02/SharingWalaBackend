@@ -1695,33 +1695,47 @@ export const getActiveRideTracking = async (userId, rideId) => {
 
   // Auto-resolve if rideId is not passed or is 'active' / 'current'
   if (!targetRideId || targetRideId === 'active' || targetRideId === 'current') {
-    // 1. Check passenger bookings in active/in_progress rides
-    const activeBooking = await prisma.booking.findFirst({
+    const driver = await prisma.driverProfile.findUnique({ where: { userId } });
+
+    // 1. Prefer genuinely IN_PROGRESS rides first (passenger or driver)
+    const inProgressBooking = await prisma.booking.findFirst({
       where: {
         passengerId: userId,
         status: { in: ['ACCEPTED', 'COMPLETED'] },
-        ride: {
-          status: { in: ['IN_PROGRESS', 'PUBLISHED'] },
-        },
+        ride: { status: 'IN_PROGRESS' },
       },
-      include: { ride: true },
       orderBy: { createdAt: 'desc' },
     });
 
-    if (activeBooking) {
-      targetRideId = activeBooking.rideId;
-    } else {
-      // 2. Check if driver of an active in_progress ride
-      const driver = await prisma.driverProfile.findUnique({ where: { userId } });
-      if (driver) {
-        const activeDriverRide = await prisma.ride.findFirst({
-          where: {
-            driverId: driver.id,
-            status: { in: ['IN_PROGRESS', 'PUBLISHED'] },
-          },
+    if (inProgressBooking) {
+      targetRideId = inProgressBooking.rideId;
+    } else if (driver) {
+      const inProgressDriverRide = await prisma.ride.findFirst({
+        where: { driverId: driver.id, status: 'IN_PROGRESS' },
+        orderBy: { departureAt: 'desc' },
+      });
+      if (inProgressDriverRide) targetRideId = inProgressDriverRide.id;
+    }
+
+    // 2. Fall back to upcoming PUBLISHED rides if nothing is IN_PROGRESS
+    if (!targetRideId) {
+      const publishedBooking = await prisma.booking.findFirst({
+        where: {
+          passengerId: userId,
+          status: { in: ['ACCEPTED', 'COMPLETED'] },
+          ride: { status: 'PUBLISHED' },
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      if (publishedBooking) {
+        targetRideId = publishedBooking.rideId;
+      } else if (driver) {
+        const publishedDriverRide = await prisma.ride.findFirst({
+          where: { driverId: driver.id, status: 'PUBLISHED' },
           orderBy: { departureAt: 'desc' },
         });
-        if (activeDriverRide) targetRideId = activeDriverRide.id;
+        if (publishedDriverRide) targetRideId = publishedDriverRide.id;
       }
     }
   }

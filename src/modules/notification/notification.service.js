@@ -131,10 +131,11 @@ export const getUnreadCount = async (userId) => {
         where: {
           userId,
           readAt: null,
+          type: { not: 'CHAT_MESSAGE' },
         },
       });
     },
-    () => inMemoryNotifications.filter((n) => n.userId === userId && !n.readAt).length
+    () => inMemoryNotifications.filter((n) => n.userId === userId && !n.readAt && n.type !== 'CHAT_MESSAGE').length
   );
 };
 
@@ -160,6 +161,28 @@ export const createNotification = async ({
     });
     if (dp?.userId) targetUserId = dp.userId;
   } catch (_) {}
+
+  // Chat messages & missed calls should only trigger push notifications, never
+  // clutter the in-app Notifications feed/API.
+  if (type === 'CHAT_MESSAGE') {
+    if (sendPush) {
+      try {
+        await sendRideNotificationPush({
+          recipientUserId: targetUserId,
+          title,
+          body: message,
+          data: {
+            ...data,
+            type: 'CHAT_MESSAGE',
+            route: data?.route || '/chat-conversation',
+          },
+        });
+      } catch (pushErr) {
+        console.warn('[NotificationService] Chat push delivery error:', pushErr.message);
+      }
+    }
+    return null;
+  }
 
   const stringifiedData = typeof data === 'string' ? data : JSON.stringify(data);
 
@@ -293,7 +316,7 @@ export const getUserNotifications = async (userId, { category, type, role, unrea
       const where = {
         userId,
         ...(isUnreadOnly ? { readAt: null } : {}),
-        ...(typeFilter ? { type: typeFilter } : {}),
+        ...(typeFilter ? { type: typeFilter } : { type: { not: 'CHAT_MESSAGE' } }),
       };
 
       const [notifications, totalCount, unreadCount] = await Promise.all([
@@ -304,13 +327,13 @@ export const getUserNotifications = async (userId, { category, type, role, unrea
           take: Number(limit),
         }),
         prisma.notification.count({ where }),
-        prisma.notification.count({ where: { userId, readAt: null } }),
+        prisma.notification.count({ where: { userId, readAt: null, type: { not: 'CHAT_MESSAGE' } } }),
       ]);
 
       return { notifications, totalCount, unreadCount };
     },
     () => {
-      let filtered = inMemoryNotifications.filter((n) => n.userId === userId);
+      let filtered = inMemoryNotifications.filter((n) => n.userId === userId && n.type !== 'CHAT_MESSAGE');
       if (isUnreadOnly) filtered = filtered.filter((n) => !n.readAt);
       if (typeFilter) {
         if (typeFilter.in) {
@@ -320,7 +343,7 @@ export const getUserNotifications = async (userId, { category, type, role, unrea
         }
       }
 
-      const unreadCount = inMemoryNotifications.filter((n) => n.userId === userId && !n.readAt).length;
+      const unreadCount = inMemoryNotifications.filter((n) => n.userId === userId && !n.readAt && n.type !== 'CHAT_MESSAGE').length;
       return {
         notifications: filtered.slice((page - 1) * limit, page * limit),
         totalCount: filtered.length,

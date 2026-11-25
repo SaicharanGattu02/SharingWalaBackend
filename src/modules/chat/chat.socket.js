@@ -508,7 +508,9 @@ export const registerChatSocketHandlers = (io, socket) => {
           io.to(`user:${recipientUserId}`).emit('message_notification', {
             conversationId: targetConvId,
             conversationType: participant.conversation?.type || 'DIRECT',
+            senderId: effectiveUserId,
             senderName: socketPayload.senderName,
+            senderAvatar: socketPayload.senderAvatar || '',
             preview: msgPreview,
             createdAt: message.createdAt,
           });
@@ -525,6 +527,7 @@ export const registerChatSocketHandlers = (io, socket) => {
               conversationId: targetConvId,
               senderId: effectiveUserId,
               senderName: socketPayload.senderName,
+              senderAvatar: socketPayload.senderAvatar || '',
               route: '/chat-conversation',
             },
             sendPush: true,

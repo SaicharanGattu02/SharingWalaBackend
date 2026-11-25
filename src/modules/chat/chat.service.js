@@ -1130,7 +1130,9 @@ export const sendChatMessage = async (userId, conversationId, data) => {
       io.to(`user:${recipientId}`).emit('message_notification', {
         conversationId: targetConvId,
         conversationType: participant.conversation?.type || 'DIRECT',
+        senderId: userId,
         senderName: message.sender.displayName,
+        senderAvatar: message.sender.avatarUrl || '',
         preview: msgPreview,
         createdAt: message.createdAt,
       });
@@ -1146,6 +1148,7 @@ export const sendChatMessage = async (userId, conversationId, data) => {
           conversationId: targetConvId,
           senderId: userId,
           senderName: message.sender.displayName,
+          senderAvatar: message.sender.avatarUrl || '',
           route: '/chat-conversation',
         },
         sendPush: true,
