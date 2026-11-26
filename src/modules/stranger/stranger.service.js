@@ -3019,41 +3019,1400 @@ export const addReelComment = async (userId, reelId, text) => {
   return newComment;
 };
 
-// --- 5. TRIP GLOBE (Dynamic Destinations & Live Stranger Trips) ---
+// --- 5. TRIP GLOBE (Dynamic Destinations, Budget Breakdown, Transport, Weather & Itinerary) ---
 const GLOBE_CITY_CATALOG = [
-  { id: 'delhi', name: 'Delhi', region: 'india', lat: 28.6139, lon: 77.2090, pricePerPerson: 5500, days: 3, vibe: 'Capital', place: 'Delhi NCR', emoji: '🏙️', match: 92, rating: 4.7, tagline: 'Red Fort, India Gate and Old Delhi food trails' },
-  { id: 'jaipur', name: 'Jaipur', region: 'india', lat: 26.9124, lon: 75.7873, pricePerPerson: 8422, days: 4, vibe: 'Heritage', place: 'Rajasthan', emoji: '🏰', match: 91, rating: 4.7, tagline: 'Forts, palaces and pink-city bazaars' },
-  { id: 'agra', name: 'Agra', region: 'india', lat: 27.1767, lon: 78.0081, pricePerPerson: 7452, days: 3, vibe: 'Iconic', place: 'Uttar Pradesh', emoji: '🕌', match: 88, rating: 4.6, tagline: 'Sunrise at the Taj Mahal' },
-  { id: 'varanasi', name: 'Varanasi', region: 'india', lat: 25.3176, lon: 82.9739, pricePerPerson: 8000, days: 3, vibe: 'Spiritual', place: 'Uttar Pradesh', emoji: '🛕', match: 84, rating: 4.5, tagline: 'Ghats, Ganga aarti and old lanes' },
-  { id: 'amritsar', name: 'Amritsar', region: 'india', lat: 31.6340, lon: 74.8723, pricePerPerson: 6865, days: 4, vibe: 'Pilgrim', place: 'Punjab', emoji: '⛩️', match: 90, rating: 4.7, tagline: 'Golden Temple, Wagah and kulcha' },
-  { id: 'jaisalmer', name: 'Jaisalmer', region: 'india', lat: 26.9157, lon: 70.9083, pricePerPerson: 12200, days: 4, vibe: 'Desert', place: 'Rajasthan', emoji: '🐫', match: 86, rating: 4.4, tagline: 'Camel safari under the stars' },
-  { id: 'srinagar', name: 'Srinagar', region: 'india', lat: 34.0837, lon: 74.7973, pricePerPerson: 15500, days: 5, vibe: 'Mountain', place: 'Jammu & Kashmir', emoji: '🛶', match: 80, rating: 4.8, tagline: 'Dal Lake shikara and Mughal gardens' },
-  { id: 'goa', name: 'Goa', region: 'india', lat: 15.2993, lon: 74.1240, pricePerPerson: 9800, days: 4, vibe: 'Beach', place: 'Goa', emoji: '🏖️', match: 93, rating: 4.8, tagline: 'Beaches, coastal rides and sunset shacks' },
-  { id: 'hyderabad', name: 'Hyderabad', region: 'india', lat: 17.3850, lon: 78.4867, pricePerPerson: 6200, days: 3, vibe: 'Tech & Food', place: 'Telangana', emoji: '🍛', match: 89, rating: 4.7, tagline: 'Charminar, Golconda and biryani trails' },
-  { id: 'bengaluru', name: 'Bengaluru', region: 'india', lat: 12.9716, lon: 77.5946, pricePerPerson: 7200, days: 3, vibe: 'City', place: 'Karnataka', emoji: '🌿', match: 87, rating: 4.6, tagline: 'Cafes, Cubbon Park and weekend getaways' },
-  { id: 'manali', name: 'Manali', region: 'india', lat: 32.2432, lon: 77.1892, pricePerPerson: 10500, days: 5, vibe: 'Mountain', place: 'Himachal Pradesh', emoji: '🏔️', match: 91, rating: 4.8, tagline: 'Solang Valley, Rohtang and pine cafes' },
-  { id: 'udaipur', name: 'Udaipur', region: 'india', lat: 24.5854, lon: 73.7125, pricePerPerson: 9200, days: 4, vibe: 'Lakes', place: 'Rajasthan', emoji: '🚤', match: 89, rating: 4.7, tagline: 'City of Lakes and sunset palaces' },
-  { id: 'mumbai', name: 'Mumbai', region: 'india', lat: 19.0760, lon: 72.8777, pricePerPerson: 8500, days: 3, vibe: 'Coastal', place: 'Maharashtra', emoji: '🌊', match: 86, rating: 4.6, tagline: 'Marine Drive, Colaba and ferry rides' },
-  { id: 'kathmandu', name: 'Kathmandu', region: 'abroad', lat: 27.7172, lon: 85.3240, pricePerPerson: 18000, days: 4, vibe: 'Himalaya', place: 'Nepal', emoji: '⛰️', match: 83, rating: 4.5, tagline: 'Temples and mountain air' },
-  { id: 'bangkok', name: 'Bangkok', region: 'abroad', lat: 13.7563, lon: 100.5018, pricePerPerson: 28000, days: 5, vibe: 'Street food', place: 'Thailand', emoji: '🛺', match: 87, rating: 4.6, tagline: 'Temples, canals and night markets' },
-  { id: 'dubai', name: 'Dubai', region: 'abroad', lat: 25.2048, lon: 55.2708, pricePerPerson: 42000, days: 4, vibe: 'Skyline', place: 'UAE', emoji: '🏜️', match: 85, rating: 4.4, tagline: 'Desert dunes and the tallest towers' },
-  { id: 'singapore', name: 'Singapore', region: 'abroad', lat: 1.3521, lon: 103.8198, pricePerPerson: 38000, days: 4, vibe: 'City', place: 'Singapore', emoji: '🌆', match: 89, rating: 4.7, tagline: 'Gardens by the Bay and hawker centres' },
-  { id: 'bali', name: 'Bali', region: 'abroad', lat: -8.3405, lon: 115.0920, pricePerPerson: 45000, days: 6, vibe: 'Beach', place: 'Indonesia', emoji: '🌴', match: 88, rating: 4.8, tagline: 'Rice terraces, surf and temples' },
-  { id: 'paris', name: 'Paris', region: 'abroad', lat: 48.8566, lon: 2.3522, pricePerPerson: 120000, days: 7, vibe: 'Romance', place: 'France', emoji: '🗼', match: 82, rating: 4.6, tagline: 'Cafes, museums and the Seine' },
-  { id: 'tokyo', name: 'Tokyo', region: 'abroad', lat: 35.6762, lon: 139.6503, pricePerPerson: 95000, days: 7, vibe: 'Neon', place: 'Japan', emoji: '🗾', match: 84, rating: 4.7, tagline: 'Shibuya crossings and quiet shrines' },
+  {
+    id: 'corbett',
+    name: 'Jim Corbett',
+    region: 'india',
+    lat: 29.5300,
+    lon: 78.7747,
+    days: 4,
+    vibe: 'Wildlife',
+    place: 'Uttarakhand',
+    emoji: '🐘',
+    match: 90,
+    rating: 4.4,
+    stayPerNight: 1265,
+    foodPerDay: 700,
+    localPerDay: 200,
+    actPerDay: 1260,
+    seasonNote: 'Cool & crisp',
+    tagline: "India's oldest national park: tigers, elephants, rivers.",
+    highlights: [
+      'Jeep safari in Bijrani or Jhirna zone',
+      'Dhikala overnight forest lodge',
+      'Corbett Falls',
+      'Garjiya Devi Temple',
+      'Kosi river walk',
+      'Corbett Museum (Kaladhungi)',
+    ],
+    mustEat: ['Kumaoni thali', 'Bhatt ki churkani', 'Bal mithai'],
+    proTips: [
+      'Dhikala is the best zone but books out months ahead',
+      'Overnight train from Delhi to Ramnagar saves a day',
+      'The core zones close in monsoon',
+    ],
+    avoidThis: ["Resorts far from gates: you'll lose safari time"],
+  },
+  {
+    id: 'ranthambore',
+    name: 'Ranthambore',
+    region: 'india',
+    lat: 26.0173,
+    lon: 76.5026,
+    days: 4,
+    vibe: 'Safari',
+    place: 'Rajasthan',
+    emoji: '🐯',
+    match: 90,
+    rating: 4.5,
+    stayPerNight: 1350,
+    foodPerDay: 650,
+    localPerDay: 220,
+    actPerDay: 1180,
+    seasonNote: 'Pleasant weather',
+    tagline: 'Tiger safaris among fort ruins.',
+    highlights: [
+      'Morning Gypsy safari in Zone 2 or 3',
+      'Ranthambore Fort UNESCO trek',
+      'Padam Talao & Jogi Mahal',
+      'Trinetra Ganesh Temple',
+      'Surwal Lake birdwatching',
+      'Dastkar Craft Centre',
+    ],
+    mustEat: ['Dal Baati Churma', 'Ker Sangri', 'Ghevar'],
+    proTips: [
+      'Book Gypsy zones 1–5 well in advance',
+      'Carry a warm layer for 6 AM open-jeep safaris',
+    ],
+    avoidThis: ['Mid-day safaris in peak summer without sun protection'],
+  },
+  {
+    id: 'goa',
+    name: 'Goa',
+    region: 'india',
+    lat: 15.2993,
+    lon: 74.1240,
+    days: 4,
+    vibe: 'Beach',
+    place: 'Goa',
+    emoji: '🏖️',
+    match: 93,
+    rating: 4.8,
+    stayPerNight: 1100,
+    foodPerDay: 650,
+    localPerDay: 300,
+    actPerDay: 550,
+    seasonNote: 'Breezy coastal sun',
+    tagline: 'Beaches, coastal rides and sunset shacks.',
+    highlights: [
+      'Chapora Fort & Vagator sunset',
+      'Scooter ride along Anjuna–Baga coast',
+      'Fontainhas Latin Quarter walk',
+      'Old Goa Basilica & Se Cathedral',
+      'Palolem kayak & butterfly beach',
+      'South Goa quiet beach shacks',
+    ],
+    mustEat: ['Fish curry rice', 'Prawn balchao', 'Bebinca'],
+    proTips: [
+      'Rent a scooter for ₹400/day to hop beaches easily',
+      'Split North (party/cafes) and South (quiet beaches)',
+    ],
+    avoidThis: ['Unmetered airport taxis — use GoaMiles app'],
+  },
+  {
+    id: 'jaipur',
+    name: 'Jaipur',
+    region: 'india',
+    lat: 26.9124,
+    lon: 75.7873,
+    days: 4,
+    vibe: 'Heritage',
+    place: 'Rajasthan',
+    emoji: '🏰',
+    match: 91,
+    rating: 4.7,
+    stayPerNight: 950,
+    foodPerDay: 550,
+    localPerDay: 250,
+    actPerDay: 450,
+    seasonNote: 'Sunny & clear',
+    tagline: 'Forts, palaces and pink-city bazaars.',
+    highlights: [
+      'Hawa Mahal & Johari Bazaar walk',
+      'Amber Fort & Panna Meena ka Kund',
+      'Nahargarh Fort sunset overlook',
+      'City Palace & Jantar Mantar',
+      'Patrika Gate morning photo stop',
+      'Chokhi Dhani cultural dinner',
+    ],
+    mustEat: ['Pyaaz Kachori', 'Dal Baati Churma', 'Lassi at Lassiwala'],
+    proTips: [
+      'Get the composite monument ticket for 5 forts/palaces',
+      'Visit Amber Fort right at 8 AM opening',
+    ],
+    avoidThis: ['Shopping at driver-recommended emporiums'],
+  },
+  {
+    id: 'manali',
+    name: 'Manali',
+    region: 'india',
+    lat: 32.2432,
+    lon: 77.1892,
+    days: 5,
+    vibe: 'Mountain',
+    place: 'Himachal Pradesh',
+    emoji: '🏔️',
+    match: 91,
+    rating: 4.8,
+    stayPerNight: 1050,
+    foodPerDay: 600,
+    localPerDay: 280,
+    actPerDay: 500,
+    seasonNote: 'Crisp mountain air',
+    tagline: 'Solang Valley, Atal Tunnel and pine cafes.',
+    highlights: [
+      'Old Manali cafes & Manu Temple',
+      'Solang Valley snow & paragliding',
+      'Atal Tunnel & Sissu Waterfall drive',
+      'Hadimba Devi cedar forest temple',
+      'Vashisht hot water springs',
+      'Jogini Falls trek',
+    ],
+    mustEat: ['Siddu', 'Trout fish', 'Himachali Dham'],
+    proTips: [
+      'Stay in Old Manali or Vashisht for better cafes and views',
+      'Check Rohtang/Atal Tunnel weather before morning start',
+    ],
+    avoidThis: ['Mall Road traffic at peak evening hours'],
+  },
+  {
+    id: 'udaipur',
+    name: 'Udaipur',
+    region: 'india',
+    lat: 24.5854,
+    lon: 73.7125,
+    days: 4,
+    vibe: 'Lakes',
+    place: 'Rajasthan',
+    emoji: '🚤',
+    match: 89,
+    rating: 4.7,
+    stayPerNight: 1050,
+    foodPerDay: 580,
+    localPerDay: 240,
+    actPerDay: 420,
+    seasonNote: 'Pleasant by the lakes',
+    tagline: 'City of Lakes and sunset palaces.',
+    highlights: [
+      'Lake Pichola sunset boat ride',
+      'City Palace & Jagdish Temple',
+      'Ambrai Ghat night view',
+      'Sajjangarh Monsoon Palace sunset',
+      'Fateh Sagar Lake promenade',
+      'Bagore Ki Haveli folk show',
+    ],
+    mustEat: ['Mirchi Bada', 'Makhaniya Lassi', 'Mewari Thali'],
+    proTips: [
+      'Book a lakeside rooftop cafe near Lal Ghat for sunset',
+      'Walk the old city lanes instead of taking cabs',
+    ],
+    avoidThis: ['Skipping the evening Dharohar dance at Bagore Ki Haveli'],
+  },
+  {
+    id: 'srinagar',
+    name: 'Srinagar & Gulmarg',
+    region: 'india',
+    lat: 34.0837,
+    lon: 74.7973,
+    days: 5,
+    vibe: 'Mountain',
+    place: 'Jammu & Kashmir',
+    emoji: '🛶',
+    match: 88,
+    rating: 4.8,
+    stayPerNight: 1400,
+    foodPerDay: 650,
+    localPerDay: 400,
+    actPerDay: 750,
+    seasonNote: 'Cold & scenic',
+    tagline: 'Dal Lake shikara, Gulmarg gondola and Mughal gardens.',
+    highlights: [
+      'Dal Lake sunset Shikara ride',
+      'Nishat & Shalimar Mughal Gardens',
+      'Gulmarg Gondola Phase 1 & 2',
+      'Pahalgam Betaab Valley day trip',
+      'Floating vegetable market at dawn',
+      'Lal Chowk & Hazratbal walk',
+    ],
+    mustEat: ['Kashmiri Kahwa', 'Rogan Josh', 'Yakhni Pulao'],
+    proTips: [
+      'Book Gulmarg Gondola tickets online weeks in advance',
+      'Keep postpaid SIMs (Airtel/Jio) active in J&K',
+    ],
+    avoidThis: ['Paying unnegotiated shikara rates — check fixed tariff'],
+  },
+  {
+    id: 'varanasi',
+    name: 'Varanasi',
+    region: 'india',
+    lat: 25.3176,
+    lon: 82.9739,
+    days: 3,
+    vibe: 'Spiritual',
+    place: 'Uttar Pradesh',
+    emoji: '🛕',
+    match: 84,
+    rating: 4.5,
+    stayPerNight: 850,
+    foodPerDay: 450,
+    localPerDay: 180,
+    actPerDay: 350,
+    seasonNote: 'Pleasant on the ghats',
+    tagline: 'Ghats, Ganga aarti and old lanes.',
+    highlights: [
+      'Dashashwamedh Ghat evening Ganga Aarti',
+      'Sunrise wooden boat ride on the Ganga',
+      'Kashi Vishwanath Corridor',
+      'Assi Ghat morning Subah-e-Banaras',
+      'Sarnath Buddhist Stupa',
+      'Kachori Gali breakfast walk',
+    ],
+    mustEat: ['Banarasi Tamatar Chaat', 'Malaiyyo', 'Blue Lassi'],
+    proTips: [
+      'Stay near Assi or Dashashwamedh Ghat for walkable access',
+      'Reach Dashashwamedh 45 mins early for a good aarti seat',
+    ],
+    avoidThis: ['Using cars in the narrow old-city lanes'],
+  },
+  {
+    id: 'amritsar',
+    name: 'Amritsar',
+    region: 'india',
+    lat: 31.6340,
+    lon: 74.8723,
+    days: 3,
+    vibe: 'Pilgrim',
+    place: 'Punjab',
+    emoji: '⛩️',
+    match: 90,
+    rating: 4.7,
+    stayPerNight: 800,
+    foodPerDay: 480,
+    localPerDay: 180,
+    actPerDay: 250,
+    seasonNote: 'Crisp & lively',
+    tagline: 'Golden Temple, Wagah and kulcha trails.',
+    highlights: [
+      'Golden Temple night & dawn darshan',
+      'Jallianwala Bagh memorial',
+      'Partition Museum at Town Hall',
+      'Attari–Wagah Border retreat ceremony',
+      'Gobindgarh Fort evening show',
+      'Heritage Street food walk',
+    ],
+    mustEat: ['Amritsari Kulcha', 'Makki di Roti & Sarson da Saag', 'Pinni'],
+    proTips: [
+      'Visit Golden Temple both at midnight and sunrise',
+      'Reach Wagah Border by 3:30 PM for good gallery seats',
+    ],
+    avoidThis: ['Heavy bags at Wagah Border — lockers are limited'],
+  },
+  {
+    id: 'agra',
+    name: 'Agra',
+    region: 'india',
+    lat: 27.1767,
+    lon: 78.0081,
+    days: 3,
+    vibe: 'Iconic',
+    place: 'Uttar Pradesh',
+    emoji: '🕌',
+    match: 88,
+    rating: 4.6,
+    stayPerNight: 850,
+    foodPerDay: 500,
+    localPerDay: 200,
+    actPerDay: 450,
+    seasonNote: 'Clear mornings',
+    tagline: 'Sunrise at the Taj Mahal and Mughal forts.',
+    highlights: [
+      'Taj Mahal sunrise entry (East Gate)',
+      'Agra Fort riverside ramparts',
+      'Mehtab Bagh sunset Taj reflection',
+      'Itimad-ud-Daulah (Baby Taj)',
+      'Fatehpur Sikri half-day trip',
+      'Sadar Bazaar chaat street',
+    ],
+    mustEat: ['Agra Petha', 'Bedai & Jalebi', 'Mughlai Paratha'],
+    proTips: [
+      'Taj Mahal is closed on Fridays — plan accordingly',
+      'Book Taj tickets online to skip dawn queues',
+    ],
+    avoidThis: ['Bringing tripods/powerbanks inside Taj Mahal'],
+  },
+  {
+    id: 'jaisalmer',
+    name: 'Jaisalmer',
+    region: 'india',
+    lat: 26.9157,
+    lon: 70.9083,
+    days: 4,
+    vibe: 'Desert',
+    place: 'Rajasthan',
+    emoji: '🐫',
+    match: 86,
+    rating: 4.5,
+    stayPerNight: 1100,
+    foodPerDay: 550,
+    localPerDay: 280,
+    actPerDay: 650,
+    seasonNote: 'Cool desert nights',
+    tagline: 'Golden fort and camel safari under the stars.',
+    highlights: [
+      'Sonar Quila (Living Golden Fort) walk',
+      'Patwon Ki Haveli intricate sandstone',
+      'Sam Sand Dunes sunset camel & jeep safari',
+      'Overnight desert camp & folk music',
+      'Gadisar Lake morning walk',
+      'Kuldhara abandoned village',
+    ],
+    mustEat: ['Ker Sangri', 'Ghotua Ladoo', 'Rajasthani Thali'],
+    proTips: [
+      'Spend 1 night in the fort and 1 night in Khuri/Sam dunes',
+      'Carry a light jacket for desert nights',
+    ],
+    avoidThis: ['Overcrowded tourist traps near the main dune entrance'],
+  },
+  {
+    id: 'rishikesh',
+    name: 'Rishikesh',
+    region: 'india',
+    lat: 30.0869,
+    lon: 78.2676,
+    days: 3,
+    vibe: 'Adventure',
+    place: 'Uttarakhand',
+    emoji: '🛶',
+    match: 91,
+    rating: 4.7,
+    stayPerNight: 800,
+    foodPerDay: 480,
+    localPerDay: 200,
+    actPerDay: 650,
+    seasonNote: 'Pleasant river breeze',
+    tagline: 'River rafting, Ganga cafes and Himalayan foothills.',
+    highlights: [
+      '16 km Shivpuri-to-Tapovan river rafting',
+      'Triveni Ghat evening Ganga Aarti',
+      'Beatles Ashram (Chaurasi Kutia)',
+      'Neer Garh Waterfall hike',
+      'Tapovan riverside cafe hopping',
+      'Parmarth Niketan sunset',
+    ],
+    mustEat: ['Aloo Puri', 'Ayurvedic thali', 'Tapovan cafe bowls'],
+    proTips: [
+      'Stay in Tapovan or Laxman Jhula for cafes and hostels',
+      'Book rafting directly at Shivpuri/Tapovan counters',
+    ],
+    avoidThis: ['Driving into narrow Tapovan lanes on weekends'],
+  },
+  {
+    id: 'munnar',
+    name: 'Munnar',
+    region: 'india',
+    lat: 10.0889,
+    lon: 77.0595,
+    days: 4,
+    vibe: 'Tea Hills',
+    place: 'Kerala',
+    emoji: '🍃',
+    match: 90,
+    rating: 4.7,
+    stayPerNight: 1100,
+    foodPerDay: 520,
+    localPerDay: 300,
+    actPerDay: 380,
+    seasonNote: 'Misty & cool',
+    tagline: 'Rolling tea estates, misty peaks and waterfalls.',
+    highlights: [
+      'Kolukkumalai sunrise jeep safari',
+      'Eravikulam National Park (Nilgiri Tahr)',
+      'Tata Tea Museum & tasting',
+      'Mattupetty Dam & Echo Point',
+      'Top Station valley overlook',
+      'Attukad Waterfalls',
+    ],
+    mustEat: ['Appam & Stew', 'Kerala Parotta', 'Fresh cardamom tea'],
+    proTips: [
+      'Start by 4:30 AM for Kolukkumalai sunrise above the clouds',
+      'Book Eravikulam slots online',
+    ],
+    avoidThis: ['Skipping Chinnakanal tea estate viewpoints'],
+  },
+  {
+    id: 'coorg',
+    name: 'Coorg',
+    region: 'india',
+    lat: 12.3375,
+    lon: 75.8069,
+    days: 3,
+    vibe: 'Coffee',
+    place: 'Karnataka',
+    emoji: '☕',
+    match: 89,
+    rating: 4.6,
+    stayPerNight: 1150,
+    foodPerDay: 550,
+    localPerDay: 320,
+    actPerDay: 400,
+    seasonNote: 'Lush & pleasant',
+    tagline: 'Coffee plantations, misty hills and Abbey Falls.',
+    highlights: [
+      'Coffee estate guided walk & tasting',
+      'Raja’s Seat sunset viewpoint',
+      'Abbey Falls & hanging bridge',
+      'Dubare Elephant Camp',
+      'Namdroling Golden Temple (Bylakuppe)',
+      'Mandalpatti jeep trail',
+    ],
+    mustEat: ['Pandi Curry & Akki Roti', 'Kadambuttu', 'Coorg filter coffee'],
+    proTips: [
+      'Pick a coffee estate homestay over town hotels',
+      'Carry rain gear if visiting June–September',
+    ],
+    avoidThis: ['Driving Mandalapatti trail in a low-clearance sedan'],
+  },
+  {
+    id: 'gangtok',
+    name: 'Gangtok & Sikkim',
+    region: 'india',
+    lat: 27.3314,
+    lon: 88.6138,
+    days: 5,
+    vibe: 'Himalaya',
+    place: 'Sikkim',
+    emoji: '🏔️',
+    match: 89,
+    rating: 4.8,
+    stayPerNight: 1150,
+    foodPerDay: 550,
+    localPerDay: 450,
+    actPerDay: 500,
+    seasonNote: 'Crisp mountain skies',
+    tagline: 'Tsomgo Lake, MG Marg and Kanchenjunga views.',
+    highlights: [
+      'Tsomgo Lake & Baba Mandir excursion',
+      'MG Marg pedestrian promenade',
+      'Rumtek Monastery',
+      'Tashi Viewpoint Kanchenjunga dawn',
+      'Ban Jhakri Falls & Ropeway',
+      'Nathula Pass (with permit)',
+    ],
+    mustEat: ['Sikkimese Momos', 'Thukpa', 'Phagshapa'],
+    proTips: [
+      'Arrange Nathula/Tsomgo permits 1 day ahead via local agent',
+      'Keep passport-size photos and Voter ID/Passport handy',
+    ],
+    avoidThis: ['Last-minute Nathula plans on Mondays/Tuesdays (closed)'],
+  },
+  {
+    id: 'pondicherry',
+    name: 'Pondicherry',
+    region: 'india',
+    lat: 11.9416,
+    lon: 79.8083,
+    days: 3,
+    vibe: 'Coastal',
+    place: 'Puducherry',
+    emoji: '🥐',
+    match: 88,
+    rating: 4.6,
+    stayPerNight: 1050,
+    foodPerDay: 600,
+    localPerDay: 220,
+    actPerDay: 300,
+    seasonNote: 'Warm sea breeze',
+    tagline: 'French Quarter boulevards, cafes and Rock Beach.',
+    highlights: [
+      'White Town French Quarter cycling',
+      'Rock Beach sunrise promenade',
+      'Auroville Matrimandir viewpoint',
+      'Paradise Beach boat crossing',
+      'Sri Aurobindo Ashram',
+      'Serenity Beach morning surf',
+    ],
+    mustEat: ['Croissants & wood-fired pizza', 'Creole seafood', 'Filter coffee'],
+    proTips: [
+      'Stay in White Town for early morning photo walks',
+      'Rent a bicycle or scooter to explore Auroville',
+    ],
+    avoidThis: ['Weekend afternoon heat without hydration'],
+  },
+  {
+    id: 'hyderabad',
+    name: 'Hyderabad',
+    region: 'india',
+    lat: 17.3850,
+    lon: 78.4867,
+    days: 3,
+    vibe: 'Heritage & Food',
+    place: 'Telangana',
+    emoji: '🍛',
+    match: 89,
+    rating: 4.7,
+    stayPerNight: 950,
+    foodPerDay: 550,
+    localPerDay: 220,
+    actPerDay: 380,
+    seasonNote: 'Pleasant evenings',
+    tagline: 'Charminar, Golconda Fort and biryani trails.',
+    highlights: [
+      'Charminar & Laad Bazaar morning walk',
+      'Golconda Fort sunset & sound show',
+      'Chowmahalla Palace',
+      'Hussain Sagar & Necklace Road',
+      'Qutb Shahi Tombs',
+      'Irani chai & Osmania biscuits',
+    ],
+    mustEat: ['Hyderabadi Dum Biryani', 'Irani Chai', 'Double Ka Meetha'],
+    proTips: [
+      'Visit Charminar before 9 AM to beat crowds',
+      'Try Paradise or Shadab for classic biryani',
+    ],
+    avoidThis: ['Old City traffic during Friday afternoon hours'],
+  },
+  {
+    id: 'mumbai',
+    name: 'Mumbai',
+    region: 'india',
+    lat: 19.0760,
+    lon: 72.8777,
+    days: 3,
+    vibe: 'Coastal',
+    place: 'Maharashtra',
+    emoji: '🌊',
+    match: 86,
+    rating: 4.6,
+    stayPerNight: 1350,
+    foodPerDay: 650,
+    localPerDay: 250,
+    actPerDay: 450,
+    seasonNote: 'Breezy evenings',
+    tagline: 'Marine Drive, Colaba and Elephanta ferry rides.',
+    highlights: [
+      'Gateway of India & Colaba Causeway',
+      'Marine Drive sunset walk',
+      'Elephanta Caves morning ferry',
+      'Kala Ghoda art & heritage precinct',
+      'Bandra Bandstand & Carter Road',
+      'Chowpatty street food',
+    ],
+    mustEat: ['Vada Pav', 'Pav Bhaji', 'Bombay Sandwich'],
+    proTips: [
+      'Use Mumbai Metro + local trains during rush hours',
+      'Book Elephanta ferry from Gateway before 11 AM',
+    ],
+    avoidThis: ['Cross-city cabs between 5 PM and 8 PM'],
+  },
+  {
+    id: 'bengaluru',
+    name: 'Bengaluru',
+    region: 'india',
+    lat: 12.9716,
+    lon: 77.5946,
+    days: 3,
+    vibe: 'City & Cafes',
+    place: 'Karnataka',
+    emoji: '🌿',
+    match: 87,
+    rating: 4.6,
+    stayPerNight: 1100,
+    foodPerDay: 600,
+    localPerDay: 250,
+    actPerDay: 350,
+    seasonNote: 'Cool & breezy',
+    tagline: 'Cubbon Park, craft cafes and Nandi Hills sunrise.',
+    highlights: [
+      'Cubbon Park morning walk',
+      'Lalbagh Botanical Garden',
+      'Nandi Hills sunrise drive',
+      'Indiranagar & Church Street cafes',
+      'Bangalore Palace',
+      'VV Puram Food Street',
+    ],
+    mustEat: ['Benne Masala Dosa', 'Filter Coffee', 'Bisi Bele Bath'],
+    proTips: [
+      'Leave by 4:30 AM for Nandi Hills sunrise',
+      'Use Namma Metro to bypass Silk Board & MG Road traffic',
+    ],
+    avoidThis: ['Outer Ring Road during weekday peak hours'],
+  },
+  {
+    id: 'andaman',
+    name: 'Andaman Islands',
+    region: 'india',
+    lat: 11.6234,
+    lon: 92.7265,
+    days: 5,
+    vibe: 'Island',
+    place: 'Andaman & Nicobar',
+    emoji: '🏝️',
+    match: 92,
+    rating: 4.9,
+    stayPerNight: 1650,
+    foodPerDay: 700,
+    localPerDay: 450,
+    actPerDay: 950,
+    seasonNote: 'Clear turquoise water',
+    tagline: 'Radhanagar Beach, Havelock reefs and Cellular Jail.',
+    highlights: [
+      'Radhanagar Beach sunset at Havelock',
+      'Elephant Beach snorkeling & coral reef',
+      'Cellular Jail Light & Sound show',
+      'Neil Island natural rock bridge',
+      'Ross Island heritage ruins',
+      'Scuba diving at Nemo Reef',
+    ],
+    mustEat: ['Grilled Lobster', 'Coconut Prawn Curry', 'Fresh Seafood Thali'],
+    proTips: [
+      'Book Makruzz / Nautika inter-island ferries in advance',
+      'Spend at least 2 nights in Havelock Island',
+    ],
+    avoidThis: ['Last-minute ferry bookings during Dec–Jan peak'],
+  },
+  {
+    id: 'shillong',
+    name: 'Shillong & Cherrapunji',
+    region: 'india',
+    lat: 25.5788,
+    lon: 91.8933,
+    days: 5,
+    vibe: 'Waterfalls',
+    place: 'Meghalaya',
+    emoji: '🌧️',
+    match: 91,
+    rating: 4.8,
+    stayPerNight: 1200,
+    foodPerDay: 550,
+    localPerDay: 420,
+    actPerDay: 450,
+    seasonNote: 'Misty hills & falls',
+    tagline: 'Living root bridges, Dawki crystal river and Mawlynnong.',
+    highlights: [
+      'Double Decker Living Root Bridge trek (Nongriat)',
+      'Dawki Umngot crystal-clear river boating',
+      'Nohkalikai & Seven Sisters Waterfalls',
+      'Mawlynnong Asia’s cleanest village',
+      'Umiam Lake & Laitlum Canyons',
+      'Police Bazaar live music cafes',
+    ],
+    mustEat: ['Jadoh', 'Dohneiiong', 'Smoked Pork & Bamboo Shoot'],
+    proTips: [
+      'Start the Nongriat 3,500-step trek before 7 AM',
+      'Carry cash for village entry & parking fees',
+    ],
+    avoidThis: ['Dawki boating during heavy monsoon when water turns muddy'],
+  },
+  {
+    id: 'hampi',
+    name: 'Hampi',
+    region: 'india',
+    lat: 15.3350,
+    lon: 76.4600,
+    days: 3,
+    vibe: 'Heritage',
+    place: 'Karnataka',
+    emoji: '🪨',
+    match: 90,
+    rating: 4.8,
+    stayPerNight: 850,
+    foodPerDay: 450,
+    localPerDay: 220,
+    actPerDay: 300,
+    seasonNote: 'Warm & sunny',
+    tagline: 'Boulder landscapes, Vijayanagara ruins and coracle rides.',
+    highlights: [
+      'Virupaksha Temple & Hampi Bazaar',
+      'Vittala Temple Stone Chariot',
+      'Matanga Hill sunrise panorama',
+      'Tungabhadra coracle boat ride',
+      'Hippie Island (Sanapur) boulder cafes',
+      'Anjanadri Hill sunset steps',
+    ],
+    mustEat: ['South Indian Thali', 'Banana Pancakes at Hippie Island', 'Jolada Rotti'],
+    proTips: [
+      'Rent a moped or bicycle to explore the ruins',
+      'Climb Matanga Hill 30 mins before sunrise',
+    ],
+    avoidThis: ['Midday boulder treks without hat and water'],
+  },
+  {
+    id: 'varkala',
+    name: 'Varkala',
+    region: 'india',
+    lat: 8.7379,
+    lon: 76.7163,
+    days: 4,
+    vibe: 'Cliff Beach',
+    place: 'Kerala',
+    emoji: '🏄',
+    match: 91,
+    rating: 4.8,
+    stayPerNight: 1100,
+    foodPerDay: 550,
+    localPerDay: 220,
+    actPerDay: 450,
+    seasonNote: 'Warm coastal breeze',
+    tagline: 'Red cliffs above the Arabian Sea, surf and cafes.',
+    highlights: [
+      'North Cliff sunset promenade & cafes',
+      'Papanasam Beach morning swim',
+      'Morning surf lesson at Black Beach',
+      'Munroe Island backwater canoeing',
+      'Jatayu Earth’s Center day trip',
+      'Kappil Beach & Edava Lake drive',
+    ],
+    mustEat: ['Kerala Fish Pollichathu', 'Appam & Egg Roast', 'Cliffside Seafood'],
+    proTips: [
+      'Stay along North Cliff for ocean-view cafes',
+      'Book an early morning surf session when waves are clean',
+    ],
+    avoidThis: ['Strong rip currents in unguarded beach zones'],
+  },
+  {
+    id: 'darjeeling',
+    name: 'Darjeeling',
+    region: 'india',
+    lat: 27.0410,
+    lon: 88.2663,
+    days: 4,
+    vibe: 'Tea & Rail',
+    place: 'West Bengal',
+    emoji: '🚂',
+    match: 89,
+    rating: 4.7,
+    stayPerNight: 1100,
+    foodPerDay: 520,
+    localPerDay: 300,
+    actPerDay: 400,
+    seasonNote: 'Crisp misty mornings',
+    tagline: 'Toy train, Tiger Hill sunrise and Himalayan tea.',
+    highlights: [
+      'Tiger Hill Kanchenjunga sunrise',
+      'Darjeeling Himalayan Toy Train joyride',
+      'Happy Valley Tea Estate tour',
+      'Batasia Loop & Ghoom Monastery',
+      'Mall Road & Keventer’s breakfast',
+      'Peace Pagoda & Himalayan Mountaineering Institute',
+    ],
+    mustEat: ['Darjeeling First Flush Tea', 'Steamed Pork Momos', 'Churpee'],
+    proTips: [
+      'Book Toy Train joyride seats on IRCTC early',
+      'Leave for Tiger Hill at 4 AM for clear Kanchenjunga views',
+    ],
+    avoidThis: ['Skipping warm layers even in spring/autumn'],
+  },
+  {
+    id: 'gokarna',
+    name: 'Gokarna',
+    region: 'india',
+    lat: 14.5479,
+    lon: 74.3188,
+    days: 3,
+    vibe: 'Beach Trek',
+    place: 'Karnataka',
+    emoji: '⛺',
+    match: 90,
+    rating: 4.7,
+    stayPerNight: 900,
+    foodPerDay: 480,
+    localPerDay: 200,
+    actPerDay: 350,
+    seasonNote: 'Sunny beach weather',
+    tagline: 'Five-beach coastal trek, Kudle sunsets and shacks.',
+    highlights: [
+      'Belekan to Kudle 5-beach coastal trek',
+      'Om Beach sunset & Namaste Cafe',
+      'Paradise & Half Moon Beach',
+      'Mirjan Fort afternoon drive',
+      'Yana Caves forest trail',
+      'Kudle Beach stargazing',
+    ],
+    mustEat: ['Seafood Platter', 'Neer Dosa', 'Fresh Lime Soda at Om Beach'],
+    proTips: [
+      'Do the beach trek from Paradise → Om → Kudle in the morning',
+      'Carry a headlamp if walking beach trails after sunset',
+    ],
+    avoidThis: ['Swimming at Half Moon Beach alone at high tide'],
+  },
+  {
+    id: 'auli',
+    name: 'Auli',
+    region: 'india',
+    lat: 30.5284,
+    lon: 79.5699,
+    days: 4,
+    vibe: 'Snow',
+    place: 'Uttarakhand',
+    emoji: '⛷️',
+    match: 88,
+    rating: 4.7,
+    stayPerNight: 1450,
+    foodPerDay: 600,
+    localPerDay: 350,
+    actPerDay: 850,
+    seasonNote: 'Cold & snowy',
+    tagline: 'Asia’s longest cable car and Nanda Devi snow slopes.',
+    highlights: [
+      'Joshimath–Auli Ropeway cable car',
+      'Gorson Bugyal snow meadow trek',
+      'Auli Artificial Lake & ski slopes',
+      'Nanda Devi 270° peak views',
+      'Chattrakund forest walk',
+      'Joshimath Narsingh Temple',
+    ],
+    mustEat: ['Kumaoni Raita', 'Aloo Ke Gutke', 'Hot Maggi on the slopes'],
+    proTips: [
+      'Pre-book the Auli ropeway slot during winter snow months',
+      'Stay near Clifftop or Joshimath depending on road snow',
+    ],
+    avoidThis: ['Driving without snow chains after heavy snowfall'],
+  },
+  {
+    id: 'shimla',
+    name: 'Shimla',
+    region: 'india',
+    lat: 31.1048,
+    lon: 77.1734,
+    days: 3,
+    vibe: 'Hill Station',
+    place: 'Himachal Pradesh',
+    emoji: '🌲',
+    match: 86,
+    rating: 4.5,
+    stayPerNight: 1050,
+    foodPerDay: 550,
+    localPerDay: 240,
+    actPerDay: 350,
+    seasonNote: 'Cool pine breeze',
+    tagline: 'The Ridge, Kalka–Shimla toy train and pine walks.',
+    highlights: [
+      'Kalka–Shimla UNESCO Toy Train',
+      'The Ridge & Christ Church evening walk',
+      'Jakhoo Temple hilltop cable car',
+      'Kufri cedar ridges & snow point',
+      'Mall Road heritage bakeries',
+      'Chadwick Falls forest trail',
+    ],
+    mustEat: ['Chana Madra', 'Sidu', 'Embassy Cafe pastries'],
+    proTips: [
+      'Book Shivalik Deluxe Express toy train from Kalka',
+      'Walk Mashobra–Craignano trails to escape Mall Road crowds',
+    ],
+    avoidThis: ['Driving private cars into restricted Mall Road zones'],
+  },
+  {
+    id: 'lonavala',
+    name: 'Lonavala',
+    region: 'india',
+    lat: 18.7557,
+    lon: 73.4091,
+    days: 2,
+    vibe: 'Getaway',
+    place: 'Maharashtra',
+    emoji: '⛰️',
+    match: 87,
+    rating: 4.5,
+    stayPerNight: 1200,
+    foodPerDay: 550,
+    localPerDay: 250,
+    actPerDay: 300,
+    seasonNote: 'Breezy Sahyadri hills',
+    tagline: 'Tiger’s Leap, Karla Caves and monsoon waterfalls.',
+    highlights: [
+      'Tiger’s Leap & Lion’s Point cliff views',
+      'Karla & Bhaja Buddhist rock-cut caves',
+      'Bhushi Dam steps',
+      'Lohagad Fort trek',
+      'Pawna Lake sunset camping',
+      'Maganlal Chikki tasting',
+    ],
+    mustEat: ['Lonavala Chikki', 'Vada Pav', 'Hot Corn on the Cob'],
+    proTips: [
+      'Visit Lohagad Fort early morning for misty views',
+      'Weekdays are far quieter than Saturday–Sunday',
+    ],
+    avoidThis: ['Mumbai–Pune Expressway bottleneck on Sunday evenings'],
+  },
+  {
+    id: 'mcleodganj',
+    name: 'McLeodganj',
+    region: 'india',
+    lat: 32.2426,
+    lon: 76.3213,
+    days: 4,
+    vibe: 'Trek & Zen',
+    place: 'Himachal Pradesh',
+    emoji: '☸️',
+    match: 91,
+    rating: 4.8,
+    stayPerNight: 950,
+    foodPerDay: 500,
+    localPerDay: 220,
+    actPerDay: 380,
+    seasonNote: 'Cool Dhauladhar air',
+    tagline: 'Triund ridge trek, Tibetan monasteries and Bhagsu cafes.',
+    highlights: [
+      'Triund Ridge 9 km Himalayan trek',
+      'Tsuglagkhang Dalai Lama Temple',
+      'Bhagsu Waterfall & Shiva Cafe',
+      'Dharamkot forest cafes',
+      'Naddi sunset Dhauladhar viewpoint',
+      'St. John in the Wilderness Church',
+    ],
+    mustEat: ['Thenthuk', 'Tibetan Momos', 'Bhagsu Cake'],
+    proTips: [
+      'Stay in Dharamkot or Bhagsu for quieter backpacker vibes',
+      'Start the Triund trek by 7 AM',
+    ],
+    avoidThis: ['Loud traffic in main McLeodganj square'],
+  },
+  {
+    id: 'kutch',
+    name: 'Rann of Kutch',
+    region: 'india',
+    lat: 23.7337,
+    lon: 69.8597,
+    days: 3,
+    vibe: 'White Desert',
+    place: 'Gujarat',
+    emoji: '🌕',
+    match: 88,
+    rating: 4.7,
+    stayPerNight: 1500,
+    foodPerDay: 550,
+    localPerDay: 380,
+    actPerDay: 550,
+    seasonNote: 'Crisp winter nights',
+    tagline: 'Endless white salt desert under full-moon skies.',
+    highlights: [
+      'Great Rann of Kutch sunset & full-moon walk',
+      'Kala Dungar (Black Hill) panoramic view',
+      'Dholavira Harappan ruins & Road to Heaven',
+      'Bhunga mud-hut artisan villages (Hodka)',
+      'Rann Utsav cultural folk evening',
+      'Aina Mahal & Prag Mahal in Bhuj',
+    ],
+    mustEat: ['Kutchi Dabeli', 'Bajra Rotlo & Ringan Bharta', 'Gujarati Thali'],
+    proTips: [
+      'Carry your Rann permit online or at Bhirandiyara checkpoint',
+      'Plan around a full moon (Nov–Feb) for the brightest salt flats',
+    ],
+    avoidThis: ['Visiting March–October when the Rann is flooded or too hot'],
+  },
+  {
+    id: 'mussoorie',
+    name: 'Mussoorie',
+    region: 'india',
+    lat: 30.4598,
+    lon: 78.0644,
+    days: 3,
+    vibe: 'Hill Station',
+    place: 'Uttarakhand',
+    emoji: '🏔️',
+    match: 88,
+    rating: 4.6,
+    stayPerNight: 1100,
+    foodPerDay: 550,
+    localPerDay: 240,
+    actPerDay: 350,
+    seasonNote: 'Cool mountain mist',
+    tagline: 'Landour cedar trails, Camel’s Back Road and Doon lights.',
+    highlights: [
+      'Landour Char Dukan & Sister’s Bazaar walk',
+      'Lal Tibba telescope point',
+      'Camel’s Back Road sunset stroll',
+      'George Everest House ridge hike',
+      'Kempty Falls morning visit',
+      'Company Garden & Mall Road',
+    ],
+    mustEat: ['Char Dukan Pancakes & Bun Omelette', 'Garhwali Thali', 'Hot Chocolate'],
+    proTips: [
+      'Walk Landour loop early morning for quiet deodar forests',
+      'Rent a scooter from Library Chowk to dodge parking queues',
+    ],
+    avoidThis: ['Weekend Mall Road traffic jams after 4 PM'],
+  },
+  {
+    id: 'alleppey',
+    name: 'Alleppey',
+    region: 'india',
+    lat: 9.4981,
+    lon: 76.3388,
+    days: 3,
+    vibe: 'Backwaters',
+    place: 'Kerala',
+    emoji: '🛶',
+    match: 90,
+    rating: 4.7,
+    stayPerNight: 1350,
+    foodPerDay: 550,
+    localPerDay: 220,
+    actPerDay: 650,
+    seasonNote: 'Warm palm breeze',
+    tagline: 'Houseboats, narrow palm canals and Marari Beach.',
+    highlights: [
+      'Vembanad Lake & Kuttanad backwater cruise',
+      'Sunrise shikara ride through narrow canals',
+      'Marari Beach quiet palm coast',
+      'Alleppey Lighthouse & pier',
+      'Champakulam village walk',
+      'Toddy shop traditional lunch',
+    ],
+    mustEat: ['Karimeen Pollichathu', 'Puttu & Kadala Curry', 'Appam with Fish Molee'],
+    proTips: [
+      'Take a small shikara boat for narrow canals that houseboats cannot enter',
+      'Stay 1 night at Marari Beach + 1 night on backwaters',
+    ],
+    avoidThis: ['Booking uninspected houseboats via roadside touts'],
+  },
+  {
+    id: 'ooty',
+    name: 'Ooty & Coonoor',
+    region: 'india',
+    lat: 11.4102,
+    lon: 76.6950,
+    days: 3,
+    vibe: 'Nilgiris',
+    place: 'Tamil Nadu',
+    emoji: '🌿',
+    match: 88,
+    rating: 4.6,
+    stayPerNight: 1050,
+    foodPerDay: 500,
+    localPerDay: 260,
+    actPerDay: 350,
+    seasonNote: 'Cool Nilgiri air',
+    tagline: 'Nilgiri Mountain Railway, Doddabetta and tea slopes.',
+    highlights: [
+      'Mettupalayam–Coonoor–Ooty Nilgiri Toy Train',
+      'Doddabetta Peak misty overlook',
+      'Sim’s Park & Dolphin’s Nose in Coonoor',
+      'Pykara Lake & Pine Forest',
+      'Government Botanical Gardens',
+      'Homemade chocolate & tea factory visit',
+    ],
+    mustEat: ['Ooty Varkey', 'Homemade Dark Chocolate', 'Nilgiri Tea'],
+    proTips: [
+      'Stay in Coonoor for quieter heritage bungalows and tea views',
+      'Book Nilgiri Toy Train tickets 30+ days in advance',
+    ],
+    avoidThis: ['Ooty Lake paddleboats during long holiday queues'],
+  },
+  {
+    id: 'kasol',
+    name: 'Kasol & Tosh',
+    region: 'india',
+    lat: 32.0100,
+    lon: 77.3150,
+    days: 4,
+    vibe: 'Parvati Valley',
+    place: 'Himachal Pradesh',
+    emoji: '🌲',
+    match: 91,
+    rating: 4.7,
+    stayPerNight: 800,
+    foodPerDay: 500,
+    localPerDay: 240,
+    actPerDay: 350,
+    seasonNote: 'Crisp valley pine air',
+    tagline: 'Parvati river trails, Kheerganga trek and Tosh wooden cafes.',
+    highlights: [
+      'Kheerganga hot-springs ridge trek',
+      'Chalal riverside pine forest walk',
+      'Tosh village wooden balcony cafes',
+      'Manikaran Sahib hot springs',
+      'Pulga Fairy Forest walk',
+      'Kasol riverside evening cafes',
+    ],
+    mustEat: ['Shakshuka & Wood-fired Pizza', 'Siddu', 'Israeli Platter'],
+    proTips: [
+      'Base yourself in Tosh or Pulga for panoramic snow peaks',
+      'Carry cash — ATMs in Tosh/Barshaini often run dry',
+    ],
+    avoidThis: ['Starting Kheerganga trek after 10 AM in winter'],
+  },
 ];
 
-export const getGlobeDestinations = async ({ origin = 'delhi', region = 'all' } = {}) => {
+const haversineKm = (lat1, lon1, lat2, lon2) => {
+  const toRad = (d) => (d * Math.PI) / 180;
+  const R = 6371;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+  return Math.round(R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
+};
+
+const buildTransportOptions = (originName, distanceKm) => {
+  const cfg = globePricingConfig;
+  const mult = Number(cfg.peakMultiplier) || 1.0;
+  const busPrice = Math.round(
+    (distanceKm <= 450
+      ? cfg.busShortBase + distanceKm * cfg.busShortPerKm
+      : cfg.busLongBase + distanceKm * cfg.busLongPerKm) * mult
+  );
+  const trainPrice = Math.round(busPrice * cfg.trainMultiplier);
+  const roadPrice = Math.round((cfg.roadBase + distanceKm * cfg.roadPerKm) * mult);
+  const hrs = Math.max(2, Math.round(distanceKm / 48));
+
+  const options = [
+    {
+      mode: 'Train · 3AC',
+      icon: '🚆',
+      detail: `${hrs} hrs one way · comfortable overnight or day train`,
+      price: trainPrice,
+      unit: 'return / person',
+    },
+    {
+      mode: 'Volvo AC bus',
+      icon: '🚌',
+      detail: `${hrs + 1} hrs one way · overnight buses run`,
+      price: busPrice,
+      unit: 'return / person',
+    },
+    {
+      mode: 'Road trip',
+      icon: '🚗',
+      detail: `${Math.max(2, hrs - 1)} hrs one way · fuel + tolls, 1 car split 2 ways`,
+      price: roadPrice,
+      unit: 'return / person',
+    },
+  ];
+
+  if (distanceKm > 750) {
+    const flightPrice = Math.round((cfg.flightBase + distanceKm * cfg.flightPerKm) * mult);
+    options.unshift({
+      mode: 'Flight · Economy',
+      icon: '✈️',
+      detail: `${Math.max(1, Math.round(distanceKm / 650))} hr flight from ${originName}`,
+      price: flightPrice,
+      unit: 'return / person',
+    });
+  }
+
+  return options;
+};
+
+const buildStructuredPlan = ({ originName, city, days, primaryTransport }) => {
+  const hl = Array.isArray(city.highlights) ? city.highlights : [];
+  const eat = Array.isArray(city.mustEat) ? city.mustEat : [];
+  const plan = [];
+
+  for (let d = 1; d <= days; d++) {
+    if (d === 1) {
+      const items = [
+        `${primaryTransport.icon} ${originName} → ${city.name} by ${primaryTransport.mode}`,
+        'Check in & freshen up',
+      ];
+      if (hl[0]) items.push(hl[0]);
+      if (eat[0]) items.push(`🍽️ Dinner: try ${eat[0]}`);
+      plan.push({ day: 1, title: 'Day 1 · Arrive & settle in', items });
+    } else if (d === days) {
+      const items = [];
+      if (hl[hl.length - 1]) items.push(hl[hl.length - 1]);
+      items.push('🛍️ Souvenir shopping & checkout');
+      items.push(`${primaryTransport.icon} Return to ${originName}`);
+      plan.push({ day: d, title: `Day ${d} · Last morning & head home`, items });
+    } else {
+      const idx = (d - 2) * 2 + 1;
+      const items = [];
+      if (hl[idx]) items.push(hl[idx]);
+      if (hl[idx + 1]) items.push(hl[idx + 1]);
+      if (eat[d - 1]) items.push(`🍽️ Must eat: ${eat[d - 1]}`);
+      if (items.length === 0) items.push(`Explore ${city.name} local spots`);
+      plan.push({ day: d, title: `Day ${d} · Explore`, items });
+    }
+  }
+  return plan;
+};
+
+const buildDynamicBudget = ({ city, distanceKm, days, travelers, livePrice, travelCost }) => {
+  const nights = Math.max(1, days - 1);
+  const stay = Math.round((city.stayPerNight || 1000) * nights);
+  const food = Math.round((city.foodPerDay || 550) * days);
+  const local = Math.round((city.localPerDay || 220) * days);
+  const activities = Math.round((city.actPerDay || 450) * days);
+
+  if (livePrice && Number(livePrice) > 0) {
+    const total = Math.round(Number(livePrice));
+    const specs = [
+      { label: 'Travel', ratio: 0.14, color: '#F97316' },
+      { label: 'Stay', ratio: 0.30, color: '#3B82F6' },
+      { label: 'Food', ratio: 0.20, color: '#10B981' },
+      { label: 'Local transport', ratio: 0.08, color: '#06B6D4' },
+      { label: 'Activities', ratio: 0.23, color: '#A855F7' },
+      { label: 'Buffer (5%)', ratio: 0.05, color: '#64748B' },
+    ];
+    return {
+      pricePerPerson: total,
+      groupTotal: total * travelers,
+      youSave: Math.max(0, Math.round(total * 0.08)),
+      stayPerNight: Math.round((total * 0.30) / nights),
+      budgetNote: `${nights} nights · budget hotels · live trip pricing`,
+      budgetBreakdown: specs.map((s) => ({
+        label: s.label,
+        amount: Math.round(total * s.ratio),
+        ratio: s.ratio,
+        color: s.color,
+      })),
+    };
+  }
+
+  const subTotal = travelCost + stay + food + local + activities;
+  const bufferRatio = Number(globePricingConfig.bufferRatio) || 0.05;
+  const buffer = Math.round(subTotal * bufferRatio);
+  const total = subTotal + buffer;
+  const benchmark = Math.round(total * 1.078);
+
+  const rawItems = [
+    { label: 'Travel', amount: travelCost, color: '#F97316' },
+    { label: 'Stay', amount: stay, color: '#3B82F6' },
+    { label: 'Food', amount: food, color: '#10B981' },
+    { label: 'Local transport', amount: local, color: '#06B6D4' },
+    { label: 'Activities', amount: activities, color: '#A855F7' },
+    { label: 'Buffer (5%)', amount: buffer, color: '#64748B' },
+  ];
+
+  return {
+    pricePerPerson: total,
+    groupTotal: total * travelers,
+    youSave: Math.max(250, benchmark - total),
+    stayPerNight: Math.round(stay / nights),
+    budgetNote: `${nights} nights · budget hotels · smart 2026 estimate`,
+    budgetBreakdown: rawItems.map((item) => ({
+      ...item,
+      ratio: Number((item.amount / total).toFixed(4)),
+    })),
+  };
+};
+
+const WEATHER_CACHE = new Map();
+
+const mapWmoCodeToSymbol = (code) => {
+  if (code === 0) return 'clearsky_day';
+  if (code <= 3) return 'partlycloudy_day';
+  if (code === 45 || code === 48) return 'fog';
+  if (code >= 51 && code <= 67) return 'rain';
+  if (code >= 71 && code <= 77) return 'snow';
+  if (code >= 80) return 'rainshowers_day';
+  return 'cloudy';
+};
+
+export const getGlobeWeather = async ({ lat, lon } = {}) => {
+  const numLat = Number(lat);
+  const numLon = Number(lon);
+  if (!Number.isFinite(numLat) || !Number.isFinite(numLon)) {
+    throw new ApiError(400, 'Valid lat and lon are required');
+  }
+
+  const key = `${numLat.toFixed(2)},${numLon.toFixed(2)}`;
+  const cached = WEATHER_CACHE.get(key);
+  if (cached && Date.now() - cached.fetchedAt < 30 * 60 * 1000) {
+    return cached.data;
+  }
+
+  try {
+    const url =
+      `https://api.open-meteo.com/v1/forecast?latitude=${numLat}&longitude=${numLon}` +
+      `&current=temperature_2m,relative_humidity_2m,wind_speed_10m,weather_code` +
+      `&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,weather_code&timezone=auto`;
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error('Weather upstream error');
+    const json = await resp.json();
+
+    const cur = json.current || {};
+    const daily = json.daily || {};
+    const dates = Array.isArray(daily.time) ? daily.time : [];
+    const days = dates.slice(0, 7).map((date, i) => ({
+      date,
+      min: Math.round(Number(daily.temperature_2m_min?.[i] ?? 15)),
+      max: Math.round(Number(daily.temperature_2m_max?.[i] ?? 26)),
+      rain: Number(daily.precipitation_sum?.[i] ?? 0),
+      symbol: mapWmoCodeToSymbol(Number(daily.weather_code?.[i] ?? 0)),
+    }));
+
+    const data = {
+      now: {
+        temp: Math.round(Number(cur.temperature_2m ?? 22)),
+        wind: Math.round(Number(cur.wind_speed_10m ?? 8)),
+        humidity: Math.round(Number(cur.relative_humidity_2m ?? 60)),
+        symbol: mapWmoCodeToSymbol(Number(cur.weather_code ?? 0)),
+      },
+      days,
+      source: 'Open-Meteo',
+      updated: new Date().toISOString(),
+    };
+
+    WEATHER_CACHE.set(key, { fetchedAt: Date.now(), data });
+    return data;
+  } catch {
+    return {
+      now: { temp: 22, wind: 8, humidity: 62, symbol: 'clearsky_day' },
+      days: [],
+      source: 'Estimate',
+      updated: new Date().toISOString(),
+    };
+  }
+};
+
+export const getGlobeDestinations = async ({
+  origin = 'delhi',
+  region = 'all',
+  lat,
+  lon,
+  days,
+  travelers = 2,
+} = {}) => {
+  const catalog = getActiveCatalog();
   const originKey = String(origin || 'delhi').trim().toLowerCase();
-  const originCity =
-    GLOBE_CITY_CATALOG.find((c) => c.id === originKey || c.name.toLowerCase() === originKey) ||
-    GLOBE_CITY_CATALOG[0];
+  const catalogMatch = catalog.find(
+    (c) => c.id === originKey || c.name.toLowerCase() === originKey
+  );
+  const parsedLat = Number(lat);
+  const parsedLon = Number(lon);
+  const hasCoords = Number.isFinite(parsedLat) && Number.isFinite(parsedLon);
+  const travelerCount = Math.max(1, Math.min(12, Number(travelers) || 2));
+
+  const originCity = catalogMatch
+    ? {
+        ...catalogMatch,
+        ...(hasCoords ? { lat: parsedLat, lon: parsedLon } : {}),
+      }
+    : hasCoords
+      ? {
+          id: originKey,
+          name: String(origin || 'Current City'),
+          region: 'india',
+          lat: parsedLat,
+          lon: parsedLon,
+          emoji: '📍',
+          place: 'India',
+        }
+      : catalog[0] || GLOBE_CITY_CATALOG[0];
 
   const liveTrips = Array.isArray(strangerTrips) ? strangerTrips : [];
   const livePlans = Array.isArray(strangerPlans) ? strangerPlans : [];
 
-  const enriched = GLOBE_CITY_CATALOG
-    .filter((c) => c.id !== originCity.id)
+  const enriched = catalog
+    .filter(
+      (c) =>
+        c.id !== originCity.id &&
+        c.name.toLowerCase() !== originCity.name.toLowerCase()
+    )
     .map((city) => {
       const needle = city.name.toLowerCase();
       const matchingTrips = liveTrips.filter((t) => {
@@ -3067,13 +4426,57 @@ export const getGlobeDestinations = async ({ origin = 'delhi', region = 'all' } 
       });
 
       const firstTrip = matchingTrips[0];
-      const livePrice = firstTrip?.pricePerPerson && Number(firstTrip.pricePerPerson) > 0
-        ? Math.round(Number(firstTrip.pricePerPerson))
-        : city.pricePerPerson;
+      const explicitLivePrice =
+        firstTrip?.pricePerPerson && Number(firstTrip.pricePerPerson) > 0
+          ? Math.round(Number(firstTrip.pricePerPerson))
+          : null;
+
+      const tripDays = Number(days) > 0 ? Number(days) : city.days;
+      const distanceKm = haversineKm(originCity.lat, originCity.lon, city.lat, city.lon);
+      const howToGetThere = buildTransportOptions(originCity.name, distanceKm);
+      const primaryTransport = howToGetThere.find((t) => t.mode.includes('Volvo')) || howToGetThere[0];
+
+      const budget = buildDynamicBudget({
+        city,
+        distanceKm,
+        days: tripDays,
+        travelers: travelerCount,
+        livePrice: explicitLivePrice,
+        travelCost: primaryTransport.price,
+      });
+
+      const structuredPlan = buildStructuredPlan({
+        originName: originCity.name,
+        city,
+        days: tripDays,
+        primaryTransport,
+      });
 
       return {
-        ...city,
-        pricePerPerson: livePrice,
+        id: city.id,
+        name: city.name,
+        region: city.region,
+        lat: city.lat,
+        lon: city.lon,
+        days: tripDays,
+        vibe: city.vibe,
+        place: city.place,
+        emoji: city.emoji,
+        match: city.match,
+        rating: city.rating,
+        seasonNote: city.seasonNote,
+        distanceKm,
+        pricePerPerson: budget.pricePerPerson,
+        groupOf2: budget.groupTotal,
+        youSave: budget.youSave,
+        stayPerNight: budget.stayPerNight,
+        budgetNote: budget.budgetNote,
+        budgetBreakdown: budget.budgetBreakdown,
+        howToGetThere,
+        structuredPlan,
+        mustEat: city.mustEat,
+        proTips: city.proTips,
+        avoidThis: city.avoidThis,
         activeTripsCount: matchingTrips.length + matchingPlans.length,
         liveTripId: firstTrip?.id || null,
         liveHostName: firstTrip?.hostName || null,
@@ -3081,9 +4484,14 @@ export const getGlobeDestinations = async ({ origin = 'delhi', region = 'all' } 
       };
     });
 
-  const filtered = region === 'india' || region === 'abroad'
+  const filtered = (region === 'india' || region === 'abroad'
     ? enriched.filter((c) => c.region === region)
-    : enriched;
+    : enriched
+  ).filter(
+    (c) =>
+      c.id !== originCity.id &&
+      c.name.toLowerCase() !== originCity.name.toLowerCase()
+  );
 
   return {
     origin: {
@@ -3095,12 +4503,241 @@ export const getGlobeDestinations = async ({ origin = 'delhi', region = 'all' } 
       emoji: originCity.emoji,
       place: originCity.place,
     },
-    origins: GLOBE_CITY_CATALOG.filter((c) => c.region === 'india').slice(0, 7).map((c) => ({
+    origins: getActiveCatalog().filter((c) => c.region === 'india').slice(0, 7).map((c) => ({
       id: c.id,
       name: c.name,
       lat: c.lat,
       lon: c.lon,
     })),
     destinations: filtered,
+  };
+};
+
+// --- Persisted Admin-Editable Globe Catalog & Pricing Config ---
+const globeCatalogFilePath = path.join(__dirname, 'globe_catalog.json');
+
+const DEFAULT_GLOBE_PRICING_CONFIG = {
+  busShortBase: 600,
+  busShortPerKm: 1.1,
+  busLongBase: 900,
+  busLongPerKm: 0.95,
+  trainMultiplier: 1.14,
+  roadBase: 950,
+  roadPerKm: 4.8,
+  flightBase: 4200,
+  flightPerKm: 2.6,
+  bufferRatio: 0.05,
+  peakMultiplier: 1.0,
+};
+
+let globePricingConfig = { ...DEFAULT_GLOBE_PRICING_CONFIG };
+let globeCatalog = GLOBE_CITY_CATALOG.map((c) => ({ ...c, isActive: true }));
+
+const loadGlobeCatalog = () => {
+  try {
+    if (fs.existsSync(globeCatalogFilePath)) {
+      const raw = JSON.parse(fs.readFileSync(globeCatalogFilePath, 'utf8'));
+      if (raw && typeof raw === 'object') {
+        if (raw.pricingConfig && typeof raw.pricingConfig === 'object') {
+          globePricingConfig = { ...DEFAULT_GLOBE_PRICING_CONFIG, ...raw.pricingConfig };
+        }
+        if (Array.isArray(raw.destinations) && raw.destinations.length > 0) {
+          globeCatalog = raw.destinations;
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('⚠️ Failed to load globe_catalog.json, using default catalog:', err.message);
+  }
+};
+
+const saveGlobeCatalog = () => {
+  try {
+    fs.writeFileSync(
+      globeCatalogFilePath,
+      JSON.stringify({ pricingConfig: globePricingConfig, destinations: globeCatalog }, null, 2),
+      'utf8'
+    );
+  } catch (err) {
+    console.error('❌ Failed to save globe_catalog.json:', err.message);
+  }
+};
+
+const getActiveCatalog = () => globeCatalog.filter((c) => c.isActive !== false);
+
+loadGlobeCatalog();
+
+export const adminGetGlobeConfig = async () => ({
+  pricingConfig: globePricingConfig,
+  destinations: globeCatalog,
+});
+
+export const adminUpdateGlobePricingConfig = async (payload = {}) => {
+  const numericKeys = Object.keys(DEFAULT_GLOBE_PRICING_CONFIG);
+  for (const k of numericKeys) {
+    if (payload[k] !== undefined && Number.isFinite(Number(payload[k]))) {
+      globePricingConfig[k] = Number(payload[k]);
+    }
+  }
+  saveGlobeCatalog();
+  return globePricingConfig;
+};
+
+export const adminCreateGlobeDestination = async (payload = {}) => {
+  const name = String(payload.name || '').trim();
+  if (!name) throw new ApiError(400, 'Destination name is required');
+  const id = String(
+    payload.id || name.toLowerCase().replace(/[^a-z0-9]+/g, '_')
+  ).trim();
+  if (globeCatalog.some((c) => c.id === id)) {
+    throw new ApiError(409, `Destination "${id}" already exists`);
+  }
+  const newItem = {
+    id,
+    name,
+    region: payload.region === 'abroad' ? 'abroad' : 'india',
+    lat: Number(payload.lat) || 22.8,
+    lon: Number(payload.lon) || 79.0,
+    days: Math.max(1, Number(payload.days) || 3),
+    vibe: String(payload.vibe || 'Explore'),
+    place: String(payload.place || 'India'),
+    emoji: String(payload.emoji || '📍'),
+    match: Number(payload.match) || 88,
+    rating: Number(payload.rating) || 4.6,
+    stayPerNight: Number(payload.stayPerNight) || 1000,
+    foodPerDay: Number(payload.foodPerDay) || 550,
+    localPerDay: Number(payload.localPerDay) || 220,
+    actPerDay: Number(payload.actPerDay) || 450,
+    seasonNote: String(payload.seasonNote || 'Pleasant weather'),
+    tagline: String(payload.tagline || ''),
+    highlights: Array.isArray(payload.highlights) ? payload.highlights : [],
+    mustEat: Array.isArray(payload.mustEat) ? payload.mustEat : [],
+    proTips: Array.isArray(payload.proTips) ? payload.proTips : [],
+    avoidThis: Array.isArray(payload.avoidThis) ? payload.avoidThis : [],
+    isActive: payload.isActive !== false,
+  };
+  globeCatalog.push(newItem);
+  saveGlobeCatalog();
+  return newItem;
+};
+
+export const adminUpdateGlobeDestination = async (id, payload = {}) => {
+  const idx = globeCatalog.findIndex((c) => c.id === id);
+  if (idx === -1) throw new ApiError(404, 'Globe destination not found');
+  const current = globeCatalog[idx];
+  const updated = {
+    ...current,
+    ...(payload.name !== undefined ? { name: String(payload.name) } : {}),
+    ...(payload.place !== undefined ? { place: String(payload.place) } : {}),
+    ...(payload.emoji !== undefined ? { emoji: String(payload.emoji) } : {}),
+    ...(payload.vibe !== undefined ? { vibe: String(payload.vibe) } : {}),
+    ...(payload.tagline !== undefined ? { tagline: String(payload.tagline) } : {}),
+    ...(payload.seasonNote !== undefined ? { seasonNote: String(payload.seasonNote) } : {}),
+    ...(payload.days !== undefined ? { days: Math.max(1, Number(payload.days)) } : {}),
+    ...(payload.stayPerNight !== undefined ? { stayPerNight: Number(payload.stayPerNight) } : {}),
+    ...(payload.foodPerDay !== undefined ? { foodPerDay: Number(payload.foodPerDay) } : {}),
+    ...(payload.localPerDay !== undefined ? { localPerDay: Number(payload.localPerDay) } : {}),
+    ...(payload.actPerDay !== undefined ? { actPerDay: Number(payload.actPerDay) } : {}),
+    ...(payload.match !== undefined ? { match: Number(payload.match) } : {}),
+    ...(payload.rating !== undefined ? { rating: Number(payload.rating) } : {}),
+    ...(Array.isArray(payload.highlights) ? { highlights: payload.highlights } : {}),
+    ...(Array.isArray(payload.mustEat) ? { mustEat: payload.mustEat } : {}),
+    ...(Array.isArray(payload.proTips) ? { proTips: payload.proTips } : {}),
+    ...(Array.isArray(payload.avoidThis) ? { avoidThis: payload.avoidThis } : {}),
+    ...(payload.isActive !== undefined ? { isActive: Boolean(payload.isActive) } : {}),
+  };
+  globeCatalog[idx] = updated;
+  saveGlobeCatalog();
+  return updated;
+};
+
+export const adminDeleteGlobeDestination = async (id) => {
+  const idx = globeCatalog.findIndex((c) => c.id === id);
+  if (idx === -1) throw new ApiError(404, 'Globe destination not found');
+  const [removed] = globeCatalog.splice(idx, 1);
+  saveGlobeCatalog();
+  return removed;
+};
+
+export const adminImportGlobeCatalog = async ({
+  pricingConfig,
+  destinations,
+  mode = 'merge',
+} = {}) => {
+  if (!pricingConfig && !Array.isArray(destinations)) {
+    throw new ApiError(400, 'Provide pricingConfig and/or a destinations array in JSON');
+  }
+
+  if (pricingConfig && typeof pricingConfig === 'object') {
+    for (const k of Object.keys(DEFAULT_GLOBE_PRICING_CONFIG)) {
+      if (pricingConfig[k] !== undefined && Number.isFinite(Number(pricingConfig[k]))) {
+        globePricingConfig[k] = Number(pricingConfig[k]);
+      }
+    }
+  }
+
+  let updatedCount = 0;
+  let addedCount = 0;
+
+  if (Array.isArray(destinations)) {
+    const normalized = destinations
+      .filter((d) => d && typeof d === 'object' && String(d.name || '').trim())
+      .map((d) => {
+        const name = String(d.name).trim();
+        const id = String(d.id || name.toLowerCase().replace(/[^a-z0-9]+/g, '_')).trim();
+        return {
+          id,
+          name,
+          region: d.region === 'abroad' ? 'abroad' : 'india',
+          lat: Number.isFinite(Number(d.lat)) ? Number(d.lat) : 22.8,
+          lon: Number.isFinite(Number(d.lon)) ? Number(d.lon) : 79.0,
+          days: Math.max(1, Number(d.days) || 3),
+          vibe: String(d.vibe || 'Explore'),
+          place: String(d.place || 'India'),
+          emoji: String(d.emoji || '📍'),
+          match: Number(d.match) || 88,
+          rating: Number(d.rating) || 4.6,
+          stayPerNight: Number(d.stayPerNight) || 1000,
+          foodPerDay: Number(d.foodPerDay) || 550,
+          localPerDay: Number(d.localPerDay) || 220,
+          actPerDay: Number(d.actPerDay) || 450,
+          seasonNote: String(d.seasonNote || 'Pleasant weather'),
+          tagline: String(d.tagline || ''),
+          highlights: Array.isArray(d.highlights) ? d.highlights.map(String) : [],
+          mustEat: Array.isArray(d.mustEat) ? d.mustEat.map(String) : [],
+          proTips: Array.isArray(d.proTips) ? d.proTips.map(String) : [],
+          avoidThis: Array.isArray(d.avoidThis) ? d.avoidThis.map(String) : [],
+          isActive: d.isActive !== false,
+        };
+      });
+
+    if (normalized.length === 0) {
+      throw new ApiError(400, 'No valid destination entries found in destinations array');
+    }
+
+    if (mode === 'replace') {
+      globeCatalog = normalized;
+      addedCount = normalized.length;
+    } else {
+      for (const item of normalized) {
+        const idx = globeCatalog.findIndex((c) => c.id === item.id);
+        if (idx >= 0) {
+          globeCatalog[idx] = { ...globeCatalog[idx], ...item };
+          updatedCount += 1;
+        } else {
+          globeCatalog.push(item);
+          addedCount += 1;
+        }
+      }
+    }
+  }
+
+  saveGlobeCatalog();
+  return {
+    mode,
+    updatedCount,
+    addedCount,
+    totalDestinations: globeCatalog.length,
+    pricingConfig: globePricingConfig,
   };
 };

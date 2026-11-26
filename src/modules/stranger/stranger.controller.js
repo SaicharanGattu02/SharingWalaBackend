@@ -212,6 +212,72 @@ export const getGlobeDestinations = asyncHandler(async (req, res) => {
   const result = await strangerService.getGlobeDestinations({
     origin: req.query.origin,
     region: req.query.region,
+    lat: req.query.lat,
+    lon: req.query.lon,
+    days: req.query.days,
+    travelers: req.query.travelers,
   });
   res.status(200).json(new ApiResponse(200, result, 'Globe destinations retrieved'));
+});
+
+export const getGlobeWeather = asyncHandler(async (req, res) => {
+  const result = await strangerService.getGlobeWeather({
+    lat: req.query.lat,
+    lon: req.query.lon,
+  });
+  res.status(200).json(new ApiResponse(200, result, 'Globe weather retrieved'));
+});
+
+// --- Globe Admin Panel Config ---
+export const adminGetGlobeConfig = asyncHandler(async (req, res) => {
+  const result = await strangerService.adminGetGlobeConfig();
+  res.status(200).json(new ApiResponse(200, result, 'Globe admin config retrieved'));
+});
+
+export const adminUpdateGlobePricingConfig = asyncHandler(async (req, res) => {
+  const result = await strangerService.adminUpdateGlobePricingConfig(req.body);
+  res.status(200).json(new ApiResponse(200, result, 'Globe pricing config updated'));
+});
+
+export const adminCreateGlobeDestination = asyncHandler(async (req, res) => {
+  const result = await strangerService.adminCreateGlobeDestination(req.body);
+  res.status(201).json(new ApiResponse(201, result, 'Globe destination created'));
+});
+
+export const adminUpdateGlobeDestination = asyncHandler(async (req, res) => {
+  const result = await strangerService.adminUpdateGlobeDestination(req.params.id, req.body);
+  res.status(200).json(new ApiResponse(200, result, 'Globe destination updated'));
+});
+
+export const adminDeleteGlobeDestination = asyncHandler(async (req, res) => {
+  const result = await strangerService.adminDeleteGlobeDestination(req.params.id);
+  res.status(200).json(new ApiResponse(200, result, 'Globe destination deleted'));
+});
+
+export const adminExportGlobeCatalog = asyncHandler(async (req, res) => {
+  const data = await strangerService.adminGetGlobeConfig();
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  res.setHeader('Content-Disposition', 'attachment; filename="globe_catalog.json"');
+  res.status(200).send(JSON.stringify(data, null, 2));
+});
+
+export const adminImportGlobeCatalog = asyncHandler(async (req, res) => {
+  let payload = req.body;
+  if (req.file && req.file.buffer) {
+    try {
+      payload = JSON.parse(req.file.buffer.toString('utf8'));
+    } catch {
+      return res.status(400).json(new ApiResponse(400, null, 'Invalid JSON file uploaded'));
+    }
+  } else if (Array.isArray(payload)) {
+    payload = { destinations: payload };
+  }
+
+  const mode = (req.query.mode || req.body?.mode || 'merge').toString().toLowerCase();
+  const result = await strangerService.adminImportGlobeCatalog({
+    pricingConfig: payload?.pricingConfig,
+    destinations: payload?.destinations,
+    mode,
+  });
+  res.status(200).json(new ApiResponse(200, result, 'Globe catalog imported and applied'));
 });

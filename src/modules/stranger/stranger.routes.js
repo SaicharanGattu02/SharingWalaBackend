@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import multer from 'multer';
 import { authenticate, optionalAuthenticate } from '../../middlewares/auth.middleware.js';
 import { validate } from '../../middlewares/validate.middleware.js';
 import {
@@ -60,7 +61,20 @@ router.get('/reels/:id/comments', optionalAuthenticate, strangerController.getRe
 router.post('/reels/:id/comments', authenticate, strangerController.addReelComment);
 router.delete('/reels/:id', authenticate, strangerController.deleteReel);
 
-// --- 5. TRIP GLOBE ---
+const globeJsonUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+});
+
+// --- 5. TRIP GLOBE & ADMIN CONFIG ---
 router.get('/globe', optionalAuthenticate, strangerController.getGlobeDestinations);
+router.get('/globe/weather', optionalAuthenticate, strangerController.getGlobeWeather);
+router.get('/globe/admin/destinations', authenticate, strangerController.adminGetGlobeConfig);
+router.get('/globe/admin/export', authenticate, strangerController.adminExportGlobeCatalog);
+router.post('/globe/admin/import', authenticate, globeJsonUpload.single('file'), strangerController.adminImportGlobeCatalog);
+router.put('/globe/admin/pricing-config', authenticate, strangerController.adminUpdateGlobePricingConfig);
+router.post('/globe/admin/destinations', authenticate, strangerController.adminCreateGlobeDestination);
+router.put('/globe/admin/destinations/:id', authenticate, strangerController.adminUpdateGlobeDestination);
+router.delete('/globe/admin/destinations/:id', authenticate, strangerController.adminDeleteGlobeDestination);
 
 export default router;
