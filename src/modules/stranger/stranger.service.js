@@ -3018,3 +3018,89 @@ export const addReelComment = async (userId, reelId, text) => {
   saveStore();
   return newComment;
 };
+
+// --- 5. TRIP GLOBE (Dynamic Destinations & Live Stranger Trips) ---
+const GLOBE_CITY_CATALOG = [
+  { id: 'delhi', name: 'Delhi', region: 'india', lat: 28.6139, lon: 77.2090, pricePerPerson: 5500, days: 3, vibe: 'Capital', place: 'Delhi NCR', emoji: '🏙️', match: 92, rating: 4.7, tagline: 'Red Fort, India Gate and Old Delhi food trails' },
+  { id: 'jaipur', name: 'Jaipur', region: 'india', lat: 26.9124, lon: 75.7873, pricePerPerson: 8422, days: 4, vibe: 'Heritage', place: 'Rajasthan', emoji: '🏰', match: 91, rating: 4.7, tagline: 'Forts, palaces and pink-city bazaars' },
+  { id: 'agra', name: 'Agra', region: 'india', lat: 27.1767, lon: 78.0081, pricePerPerson: 7452, days: 3, vibe: 'Iconic', place: 'Uttar Pradesh', emoji: '🕌', match: 88, rating: 4.6, tagline: 'Sunrise at the Taj Mahal' },
+  { id: 'varanasi', name: 'Varanasi', region: 'india', lat: 25.3176, lon: 82.9739, pricePerPerson: 8000, days: 3, vibe: 'Spiritual', place: 'Uttar Pradesh', emoji: '🛕', match: 84, rating: 4.5, tagline: 'Ghats, Ganga aarti and old lanes' },
+  { id: 'amritsar', name: 'Amritsar', region: 'india', lat: 31.6340, lon: 74.8723, pricePerPerson: 6865, days: 4, vibe: 'Pilgrim', place: 'Punjab', emoji: '⛩️', match: 90, rating: 4.7, tagline: 'Golden Temple, Wagah and kulcha' },
+  { id: 'jaisalmer', name: 'Jaisalmer', region: 'india', lat: 26.9157, lon: 70.9083, pricePerPerson: 12200, days: 4, vibe: 'Desert', place: 'Rajasthan', emoji: '🐫', match: 86, rating: 4.4, tagline: 'Camel safari under the stars' },
+  { id: 'srinagar', name: 'Srinagar', region: 'india', lat: 34.0837, lon: 74.7973, pricePerPerson: 15500, days: 5, vibe: 'Mountain', place: 'Jammu & Kashmir', emoji: '🛶', match: 80, rating: 4.8, tagline: 'Dal Lake shikara and Mughal gardens' },
+  { id: 'goa', name: 'Goa', region: 'india', lat: 15.2993, lon: 74.1240, pricePerPerson: 9800, days: 4, vibe: 'Beach', place: 'Goa', emoji: '🏖️', match: 93, rating: 4.8, tagline: 'Beaches, coastal rides and sunset shacks' },
+  { id: 'hyderabad', name: 'Hyderabad', region: 'india', lat: 17.3850, lon: 78.4867, pricePerPerson: 6200, days: 3, vibe: 'Tech & Food', place: 'Telangana', emoji: '🍛', match: 89, rating: 4.7, tagline: 'Charminar, Golconda and biryani trails' },
+  { id: 'bengaluru', name: 'Bengaluru', region: 'india', lat: 12.9716, lon: 77.5946, pricePerPerson: 7200, days: 3, vibe: 'City', place: 'Karnataka', emoji: '🌿', match: 87, rating: 4.6, tagline: 'Cafes, Cubbon Park and weekend getaways' },
+  { id: 'manali', name: 'Manali', region: 'india', lat: 32.2432, lon: 77.1892, pricePerPerson: 10500, days: 5, vibe: 'Mountain', place: 'Himachal Pradesh', emoji: '🏔️', match: 91, rating: 4.8, tagline: 'Solang Valley, Rohtang and pine cafes' },
+  { id: 'udaipur', name: 'Udaipur', region: 'india', lat: 24.5854, lon: 73.7125, pricePerPerson: 9200, days: 4, vibe: 'Lakes', place: 'Rajasthan', emoji: '🚤', match: 89, rating: 4.7, tagline: 'City of Lakes and sunset palaces' },
+  { id: 'mumbai', name: 'Mumbai', region: 'india', lat: 19.0760, lon: 72.8777, pricePerPerson: 8500, days: 3, vibe: 'Coastal', place: 'Maharashtra', emoji: '🌊', match: 86, rating: 4.6, tagline: 'Marine Drive, Colaba and ferry rides' },
+  { id: 'kathmandu', name: 'Kathmandu', region: 'abroad', lat: 27.7172, lon: 85.3240, pricePerPerson: 18000, days: 4, vibe: 'Himalaya', place: 'Nepal', emoji: '⛰️', match: 83, rating: 4.5, tagline: 'Temples and mountain air' },
+  { id: 'bangkok', name: 'Bangkok', region: 'abroad', lat: 13.7563, lon: 100.5018, pricePerPerson: 28000, days: 5, vibe: 'Street food', place: 'Thailand', emoji: '🛺', match: 87, rating: 4.6, tagline: 'Temples, canals and night markets' },
+  { id: 'dubai', name: 'Dubai', region: 'abroad', lat: 25.2048, lon: 55.2708, pricePerPerson: 42000, days: 4, vibe: 'Skyline', place: 'UAE', emoji: '🏜️', match: 85, rating: 4.4, tagline: 'Desert dunes and the tallest towers' },
+  { id: 'singapore', name: 'Singapore', region: 'abroad', lat: 1.3521, lon: 103.8198, pricePerPerson: 38000, days: 4, vibe: 'City', place: 'Singapore', emoji: '🌆', match: 89, rating: 4.7, tagline: 'Gardens by the Bay and hawker centres' },
+  { id: 'bali', name: 'Bali', region: 'abroad', lat: -8.3405, lon: 115.0920, pricePerPerson: 45000, days: 6, vibe: 'Beach', place: 'Indonesia', emoji: '🌴', match: 88, rating: 4.8, tagline: 'Rice terraces, surf and temples' },
+  { id: 'paris', name: 'Paris', region: 'abroad', lat: 48.8566, lon: 2.3522, pricePerPerson: 120000, days: 7, vibe: 'Romance', place: 'France', emoji: '🗼', match: 82, rating: 4.6, tagline: 'Cafes, museums and the Seine' },
+  { id: 'tokyo', name: 'Tokyo', region: 'abroad', lat: 35.6762, lon: 139.6503, pricePerPerson: 95000, days: 7, vibe: 'Neon', place: 'Japan', emoji: '🗾', match: 84, rating: 4.7, tagline: 'Shibuya crossings and quiet shrines' },
+];
+
+export const getGlobeDestinations = async ({ origin = 'delhi', region = 'all' } = {}) => {
+  const originKey = String(origin || 'delhi').trim().toLowerCase();
+  const originCity =
+    GLOBE_CITY_CATALOG.find((c) => c.id === originKey || c.name.toLowerCase() === originKey) ||
+    GLOBE_CITY_CATALOG[0];
+
+  const liveTrips = Array.isArray(strangerTrips) ? strangerTrips : [];
+  const livePlans = Array.isArray(strangerPlans) ? strangerPlans : [];
+
+  const enriched = GLOBE_CITY_CATALOG
+    .filter((c) => c.id !== originCity.id)
+    .map((city) => {
+      const needle = city.name.toLowerCase();
+      const matchingTrips = liveTrips.filter((t) => {
+        const dest = (t.destination || '').toLowerCase();
+        const status = (t.status || 'PUBLISHED').toUpperCase();
+        return status !== 'CANCELLED' && status !== 'COMPLETED' && dest.includes(needle);
+      });
+      const matchingPlans = livePlans.filter((p) => {
+        const loc = `${p.location || ''} ${p.title || ''}`.toLowerCase();
+        return loc.includes(needle);
+      });
+
+      const firstTrip = matchingTrips[0];
+      const livePrice = firstTrip?.pricePerPerson && Number(firstTrip.pricePerPerson) > 0
+        ? Math.round(Number(firstTrip.pricePerPerson))
+        : city.pricePerPerson;
+
+      return {
+        ...city,
+        pricePerPerson: livePrice,
+        activeTripsCount: matchingTrips.length + matchingPlans.length,
+        liveTripId: firstTrip?.id || null,
+        liveHostName: firstTrip?.hostName || null,
+        tagline: firstTrip?.notes || city.tagline,
+      };
+    });
+
+  const filtered = region === 'india' || region === 'abroad'
+    ? enriched.filter((c) => c.region === region)
+    : enriched;
+
+  return {
+    origin: {
+      id: originCity.id,
+      name: originCity.name,
+      region: originCity.region,
+      lat: originCity.lat,
+      lon: originCity.lon,
+      emoji: originCity.emoji,
+      place: originCity.place,
+    },
+    origins: GLOBE_CITY_CATALOG.filter((c) => c.region === 'india').slice(0, 7).map((c) => ({
+      id: c.id,
+      name: c.name,
+      lat: c.lat,
+      lon: c.lon,
+    })),
+    destinations: filtered,
+  };
+};

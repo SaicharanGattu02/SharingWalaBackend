@@ -206,3 +206,12 @@ export const deleteReel = asyncHandler(async (req, res) => {
   const result = await strangerService.deleteStrangerReel(req.user.id, req.params.id);
   res.status(200).json(new ApiResponse(200, result, 'Reel deleted successfully'));
 });
+
+// --- Globe ---
+export const getGlobeDestinations = asyncHandler(async (req, res) => {
+  const result = await strangerService.getGlobeDestinations({
+    origin: req.query.origin,
+    region: req.query.region,
+  });
+  res.status(200).json(new ApiResponse(200, result, 'Globe destinations retrieved'));
+});

@@ -60,4 +60,7 @@ router.get('/reels/:id/comments', optionalAuthenticate, strangerController.getRe
 router.post('/reels/:id/comments', authenticate, strangerController.addReelComment);
 router.delete('/reels/:id', authenticate, strangerController.deleteReel);
 
+// --- 5. TRIP GLOBE ---
+router.get('/globe', optionalAuthenticate, strangerController.getGlobeDestinations);
+
 export default router;
