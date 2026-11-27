@@ -160,7 +160,8 @@ export const resolveRideRouteData = (ride) => {
     routePoints = fallbackPoints;
   }
 
-  const encodedPolyline = storedPolyline || (routePoints.length >= 2 ? encodePolyline(routePoints) : '');
+  const encodedPolyline =
+    storedPolyline || (routePoints.length >= 3 ? encodePolyline(routePoints) : '');
 
   let distanceKm = ride?.route?.distanceKm !== undefined ? Number(ride.route.distanceKm) : 0;
   if (!distanceKm && routePoints.length >= 2) {
@@ -190,4 +191,54 @@ export const resolveRideRouteData = (ride) => {
     distanceKm,
     durationMinutes,
   };
+};
+
+const geocodeCache = new Map();
+
+/**
+ * Lightweight, cached geocoder (OpenStreetMap Nominatim) with a short timeout.
+ * Used only when a ride or stop was created with 0,0 coordinates.
+ */
+export const geocodePlaceName = async (placeName, { countryHint = 'India' } = {}) => {
+  const raw = String(placeName || '').trim();
+  if (!raw || raw.length < 2) return null;
+
+  const cacheKey = raw.toLowerCase();
+  if (geocodeCache.has(cacheKey)) {
+    return geocodeCache.get(cacheKey);
+  }
+
+  const queries = raw.toLowerCase().includes(countryHint.toLowerCase())
+    ? [raw]
+    : [raw, `${raw}, ${countryHint}`];
+
+  for (const q of queries) {
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 2500);
+      const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(q)}`;
+      const res = await fetch(url, {
+        signal: controller.signal,
+        headers: { 'User-Agent': 'Share2Go-Backend/1.0' },
+      });
+      clearTimeout(timer);
+
+      if (!res.ok) continue;
+      const data = await res.json();
+      if (Array.isArray(data) && data.length > 0) {
+        const lat = Number(data[0].lat);
+        const lng = Number(data[0].lon);
+        if (Number.isFinite(lat) && Number.isFinite(lng) && (lat !== 0 || lng !== 0)) {
+          const coords = { latitude: lat, longitude: lng };
+          geocodeCache.set(cacheKey, coords);
+          return coords;
+        }
+      }
+    } catch (_) {
+      // Ignore network/timeout errors and fall through
+    }
+  }
+
+  geocodeCache.set(cacheKey, null);
+  return null;
 };

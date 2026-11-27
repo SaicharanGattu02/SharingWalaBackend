@@ -9,6 +9,7 @@ import { getLiveTripState } from './trip.socket.js';
 import {
   decodePolyline,
   encodePolyline,
+  geocodePlaceName,
   haversineDistanceKm,
   resolveRideRouteData,
 } from '../../utils/polyline.js';
@@ -708,10 +709,25 @@ export const offerRide = async (userId, data) => {
   const notes = (data.notes || data.pickupFlexibility || 'Daily commute connection').trim();
   const meetingPoint = (data.meetingPoint || data.pickupFlexibility || `${data.origin} Main Point`).trim();
 
-  const sLat = toCoord(data.originLat);
-  const sLng = toCoord(data.originLng);
-  const eLat = toCoord(data.destLat);
-  const eLng = toCoord(data.destLng);
+  let sLat = toCoord(data.originLat);
+  let sLng = toCoord(data.originLng);
+  let eLat = toCoord(data.destLat);
+  let eLng = toCoord(data.destLng);
+
+  if (sLat === 0 || sLng === 0) {
+    const geoStart = await geocodePlaceName(data.origin);
+    if (geoStart) {
+      sLat = geoStart.latitude;
+      sLng = geoStart.longitude;
+    }
+  }
+  if (eLat === 0 || eLng === 0) {
+    const geoEnd = await geocodePlaceName(data.destination);
+    if (geoEnd) {
+      eLat = geoEnd.latitude;
+      eLng = geoEnd.longitude;
+    }
+  }
 
   const rawWaypoints = Array.isArray(data.waypoints)
     ? data.waypoints
@@ -732,11 +748,6 @@ export const offerRide = async (userId, data) => {
 
   if (!encodedPolyline && normalizedWaypoints.length >= 2) {
     encodedPolyline = encodePolyline(normalizedWaypoints);
-  } else if (!encodedPolyline && sLat !== 0 && sLng !== 0 && eLat !== 0 && eLng !== 0) {
-    encodedPolyline = encodePolyline([
-      { latitude: sLat, longitude: sLng },
-      { latitude: eLat, longitude: eLng },
-    ]);
   }
 
   const routePointsForDb = normalizedWaypoints.length > 0

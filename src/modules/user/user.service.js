@@ -7,7 +7,7 @@ import { sendRideNotificationPush } from '../../config/firebase.js';
 import { toAbsoluteUrl, getServerBaseUrl } from '../../utils/urlHelper.js';
 import { createNotification } from '../notification/notification.service.js';
 import { getLiveTripState } from '../rider/trip.socket.js';
-import { resolveRideRouteData } from '../../utils/polyline.js';
+import { resolveRideRouteData, geocodePlaceName } from '../../utils/polyline.js';
 
 const defaultMockRides = [
   {
@@ -1867,6 +1867,39 @@ export const getActiveRideTracking = async (userId, rideId) => {
 
   if (!ride) {
     throw new ApiError(404, 'Active ride not found');
+  }
+
+  // If ride was created with 0,0 coordinates, resolve & persist them on the fly
+  let resolvedStartLat = Number(ride.startLat);
+  let resolvedStartLng = Number(ride.startLng);
+  let resolvedEndLat = Number(ride.endLat);
+  let resolvedEndLng = Number(ride.endLng);
+  const coordUpdates = {};
+
+  if (resolvedStartLat === 0 || resolvedStartLng === 0) {
+    const geoStart = await geocodePlaceName(ride.startLocationName);
+    if (geoStart) {
+      resolvedStartLat = geoStart.latitude;
+      resolvedStartLng = geoStart.longitude;
+      coordUpdates.startLat = resolvedStartLat;
+      coordUpdates.startLng = resolvedStartLng;
+      ride.startLat = resolvedStartLat;
+      ride.startLng = resolvedStartLng;
+    }
+  }
+  if (resolvedEndLat === 0 || resolvedEndLng === 0) {
+    const geoEnd = await geocodePlaceName(ride.endLocationName);
+    if (geoEnd) {
+      resolvedEndLat = geoEnd.latitude;
+      resolvedEndLng = geoEnd.longitude;
+      coordUpdates.endLat = resolvedEndLat;
+      coordUpdates.endLng = resolvedEndLng;
+      ride.endLat = resolvedEndLat;
+      ride.endLng = resolvedEndLng;
+    }
+  }
+  if (Object.keys(coordUpdates).length > 0) {
+    prisma.ride.update({ where: { id: ride.id }, data: coordUpdates }).catch(() => {});
   }
 
   const isCaptain = Boolean(ride.driver?.userId && ride.driver.userId === userId);
