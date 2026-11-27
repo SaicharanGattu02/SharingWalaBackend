@@ -5,7 +5,8 @@ import * as authService from './auth.service.js';
 export const register = asyncHandler(async (req, res) => {
   const deviceId = req.headers['x-device-id'] || req.headers['device-id'] || req.body.deviceId;
   const deviceType = req.headers['x-device-type'] || req.headers['device-type'] || req.body.deviceType;
-  const result = await authService.registerUser({ ...req.body, deviceId, deviceType });
+  const fcmToken = req.body.fcm_token || req.body.fcmToken || req.body.push_token || req.body.device_token;
+  const result = await authService.registerUser({ ...req.body, deviceId, deviceType, fcmToken });
   res.status(201).json(new ApiResponse(201, result, 'User account registered successfully'));
 });
 
@@ -78,8 +79,6 @@ export const getAccountStatus = asyncHandler(async (req, res) => {
   const authHeader = req.headers.authorization;
   if (authHeader && authHeader.startsWith('Bearer ')) {
     token = authHeader.split(' ')[1];
-  } else if (req.query?.token) {
-    token = req.query.token;
   }
   const result = await authService.getAccountStatus(token);
   res.status(200).json(new ApiResponse(200, result, 'Account status checked successfully'));

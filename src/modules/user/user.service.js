@@ -7,6 +7,7 @@ import { sendRideNotificationPush } from '../../config/firebase.js';
 import { toAbsoluteUrl, getServerBaseUrl } from '../../utils/urlHelper.js';
 import { createNotification } from '../notification/notification.service.js';
 import { getLiveTripState } from '../rider/trip.socket.js';
+import { resolveRideRouteData } from '../../utils/polyline.js';
 
 const defaultMockRides = [
   {
@@ -245,17 +246,30 @@ export const formatRideForFlutter = (ride) => {
 
   const pendingRequests = (ride.bookings || [])
     .filter((b) => b.status === 'PENDING')
-    .map((b) => ({
-      bookingId: b.id,
-      passengerId: b.passenger?.id || b.passengerId,
-      passengerName: b.passenger?.displayName || 'Passenger',
-      passengerPhone: b.passenger?.phone || '',
-      passengerAvatar: b.passenger?.avatarUrl || '',
-      seatsRequested: b.seatsRequested,
-      status: 'pending',
-      totalFare: Number(b.totalCostContribution || 0),
-      requestedAt: b.requestedAt || b.createdAt,
-    }));
+    .map((b) => {
+      const cleanNotes = (b.passengerNotes || '').replace(/\[ONBOARD\]/g, '').trim();
+      const pickupLocation = b.pickupStop?.name || cleanNotes || `${ride.startLocationName} Point`;
+      const dropLocation = b.dropoffStop?.name || ride.endLocationName;
+      return {
+        bookingId: b.id,
+        passengerId: b.passenger?.id || b.passengerId,
+        passengerName: b.passenger?.displayName || 'Passenger',
+        passengerPhone: b.passenger?.phone || '',
+        passengerAvatar: b.passenger?.avatarUrl || '',
+        seatsRequested: b.seatsRequested,
+        status: 'pending',
+        totalFare: Number(b.totalCostContribution || 0),
+        pickupLocation,
+        dropLocation,
+        pickupPoint: pickupLocation,
+        dropoffPoint: dropLocation,
+        pickupLat: b.pickupStop?.latitude !== undefined ? Number(b.pickupStop.latitude) : Number(ride.startLat),
+        pickupLng: b.pickupStop?.longitude !== undefined ? Number(b.pickupStop.longitude) : Number(ride.startLng),
+        dropoffLat: b.dropoffStop?.latitude !== undefined ? Number(b.dropoffStop.latitude) : Number(ride.endLat),
+        dropoffLng: b.dropoffStop?.longitude !== undefined ? Number(b.dropoffStop.longitude) : Number(ride.endLng),
+        requestedAt: b.requestedAt || b.createdAt,
+      };
+    });
 
   return {
     id: ride.id,
@@ -1121,7 +1135,22 @@ export const getRideDetails = async (rideId, currentUserId = null) => {
 /**
  * 6. Request a Seat on a Ride
  */
-export const requestSeatOnRide = async (passengerUserId, rideId, { seats = 1, pickupPoint, dropoffPoint, notes } = {}) => {
+export const requestSeatOnRide = async (
+  passengerUserId,
+  rideId,
+  {
+    seats = 1,
+    pickupPoint,
+    dropoffPoint,
+    pickupLat,
+    pickupLng,
+    dropoffLat,
+    dropoffLng,
+    pickupStopId,
+    dropoffStopId,
+    notes,
+  } = {}
+) => {
   // 1. Check if mock commuter preview ride
   const mockRide = defaultMockRides.find((r) => r.id === rideId);
   if (mockRide) {
@@ -1186,6 +1215,52 @@ export const requestSeatOnRide = async (passengerUserId, rideId, { seats = 1, pi
     const startStop = stops.find((s) => s.stopType === 'START' || s.sequence === 1) || stops[0];
     const endStop = stops.find((s) => s.stopType === 'END' || s.sequence === stops.length) || stops[stops.length - 1];
 
+    let maxSeq = stops.reduce((max, s) => Math.max(max, Number(s.sequence || 0)), 0);
+
+    let resolvedPickupStop = pickupStopId ? stops.find((s) => s.id === pickupStopId) : null;
+    if (!resolvedPickupStop && (pickupPoint || (Number.isFinite(Number(pickupLat)) && Number.isFinite(Number(pickupLng))))) {
+      const pLat = Number.isFinite(Number(pickupLat)) ? Number(pickupLat) : Number(ride.startLat);
+      const pLng = Number.isFinite(Number(pickupLng)) ? Number(pickupLng) : Number(ride.startLng);
+      const pName = (pickupPoint || startStop?.name || ride.startLocationName).trim();
+      if (pName !== startStop?.name || pLat !== Number(startStop?.latitude) || pLng !== Number(startStop?.longitude)) {
+        maxSeq += 1;
+        resolvedPickupStop = await tx.rideStop.create({
+          data: {
+            rideId,
+            stopType: 'PICKUP',
+            name: pName,
+            latitude: pLat,
+            longitude: pLng,
+            sequence: maxSeq,
+            estimatedArrivalAt: ride.departureAt,
+          },
+        });
+      }
+    }
+    if (!resolvedPickupStop) resolvedPickupStop = startStop;
+
+    let resolvedDropoffStop = dropoffStopId ? stops.find((s) => s.id === dropoffStopId) : null;
+    if (!resolvedDropoffStop && (dropoffPoint || (Number.isFinite(Number(dropoffLat)) && Number.isFinite(Number(dropoffLng))))) {
+      const dLat = Number.isFinite(Number(dropoffLat)) ? Number(dropoffLat) : Number(ride.endLat);
+      const dLng = Number.isFinite(Number(dropoffLng)) ? Number(dropoffLng) : Number(ride.endLng);
+      const dName = (dropoffPoint || endStop?.name || ride.endLocationName).trim();
+      if (dName !== endStop?.name || dLat !== Number(endStop?.latitude) || dLng !== Number(endStop?.longitude)) {
+        maxSeq += 1;
+        resolvedDropoffStop = await tx.rideStop.create({
+          data: {
+            rideId,
+            stopType: 'DROPOFF',
+            name: dName,
+            latitude: dLat,
+            longitude: dLng,
+            sequence: maxSeq,
+            estimatedArrivalAt: ride.estimatedArrivalAt,
+          },
+        });
+      }
+    }
+    if (!resolvedDropoffStop) resolvedDropoffStop = endStop;
+
     const pricePerSeat = ride.pricing ? Number(ride.pricing.costPerSeat ?? 45.0) : 45.0;
     const totalFare = pricePerSeat * seats;
 
@@ -1226,8 +1301,8 @@ export const requestSeatOnRide = async (passengerUserId, rideId, { seats = 1, pi
       data: {
         rideId,
         passengerId: passengerUserId,
-        pickupStopId: startStop.id,
-        dropoffStopId: endStop.id,
+        pickupStopId: resolvedPickupStop.id,
+        dropoffStopId: resolvedDropoffStop.id,
         seatsRequested: seats,
         totalCostContribution: totalFare,
         passengerNotes: notes || pickupPoint || `${ride.startLocationName} Pickup`,
@@ -1265,6 +1340,13 @@ export const requestSeatOnRide = async (passengerUserId, rideId, { seats = 1, pi
     }
     if (!hostUserId) hostUserId = ride.driverId;
 
+    const pickupLocationName = resolvedPickupStop?.name || pickupPoint || ride.startLocationName;
+    const dropoffLocationName = resolvedDropoffStop?.name || dropoffPoint || ride.endLocationName;
+    const resolvedPickupLat = Number(resolvedPickupStop?.latitude ?? ride.startLat);
+    const resolvedPickupLng = Number(resolvedPickupStop?.longitude ?? ride.startLng);
+    const resolvedDropoffLat = Number(resolvedDropoffStop?.latitude ?? ride.endLat);
+    const resolvedDropoffLng = Number(resolvedDropoffStop?.longitude ?? ride.endLng);
+
     if (hostUserId) {
       // 1. Dispatch rich in-app notification & push alert to Host
       try {
@@ -1272,13 +1354,19 @@ export const requestSeatOnRide = async (passengerUserId, rideId, { seats = 1, pi
           userId: hostUserId,
           type: 'BOOKING_REQUEST',
           title: 'New Seat Request 🚗',
-          message: `${passengerName} requested ${seats} seat(s) on your trip to ${ride.endLocationName}`,
+          message: `${passengerName} requested ${seats} seat(s) (${pickupLocationName} → ${dropoffLocationName})`,
           data: {
             rideId,
             bookingId: booking.id,
             passengerId: passengerUserId,
             passengerName,
             seats: String(seats),
+            pickupLocation: pickupLocationName,
+            dropLocation: dropoffLocationName,
+            pickupLat: String(resolvedPickupLat),
+            pickupLng: String(resolvedPickupLng),
+            dropoffLat: String(resolvedDropoffLat),
+            dropoffLng: String(resolvedDropoffLng),
             route: '/my-rides',
           },
           sendPush: true,
@@ -1299,14 +1387,22 @@ export const requestSeatOnRide = async (passengerUserId, rideId, { seats = 1, pi
           passengerPhone: passenger?.phone || null,
           seatsRequested: seats,
           totalFare,
+          pickupLocation: pickupLocationName,
+          dropLocation: dropoffLocationName,
+          pickupPoint: pickupLocationName,
+          dropoffPoint: dropoffLocationName,
+          pickupLat: resolvedPickupLat,
+          pickupLng: resolvedPickupLng,
+          dropoffLat: resolvedDropoffLat,
+          dropoffLng: resolvedDropoffLng,
           status: booking.status.toLowerCase(),
           requestedAt: new Date().toISOString(),
-          message: `${passengerName} requested a seat on your ride`,
+          message: `${passengerName} requested a seat (${pickupLocationName} → ${dropoffLocationName})`,
         };
         io.to(`user:${hostUserId}`).emit('ride:seat_requested', eventPayload);
         io.to(`user:${hostUserId}`).emit('notification', {
           title: 'New Seat Request 🚗',
-          body: `${passengerName} requested ${seats} seat(s) on your trip to ${ride.endLocationName}`,
+          body: `${passengerName} requested ${seats} seat(s) (${pickupLocationName} → ${dropoffLocationName})`,
           data: eventPayload,
         });
       } catch (ioErr) {
@@ -1755,10 +1851,16 @@ export const getActiveRideTracking = async (userId, rideId) => {
       driver: { include: { user: true } },
       vehicle: true,
       pricing: true,
+      route: { include: { waypoints: { orderBy: { sequence: 'asc' } } } },
       stops: { orderBy: { sequence: 'asc' } },
       bookings: {
-        where: { passengerId: userId },
-        include: { pickupStop: true, dropoffStop: true },
+        where: { status: { in: ['PENDING', 'ACCEPTED', 'COMPLETED'] } },
+        include: {
+          passenger: { select: { id: true, displayName: true, phone: true, avatarUrl: true } },
+          pickupStop: true,
+          dropoffStop: true,
+        },
+        orderBy: { createdAt: 'desc' },
       },
     },
   });
@@ -1767,7 +1869,8 @@ export const getActiveRideTracking = async (userId, rideId) => {
     throw new ApiError(404, 'Active ride not found');
   }
 
-  const userBooking = ride.bookings?.[0] || null;
+  const isCaptain = Boolean(ride.driver?.userId && ride.driver.userId === userId);
+  const userBooking = ride.bookings?.find((b) => b.passengerId === userId) || null;
   const departureDate = new Date(ride.departureAt);
   const formattedTime = departureDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
   const formattedDate = departureDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
@@ -1777,11 +1880,103 @@ export const getActiveRideTracking = async (userId, rideId) => {
     ? Number(ride.pricing.costPerSeat ?? 45.0)
     : 45.0;
 
+  const routeData = resolveRideRouteData(ride);
+
+  // Deduplicate active bookings by passengerId (latest first)
+  const latestBookingsMap = new Map();
+  for (const b of ride.bookings || []) {
+    if (!latestBookingsMap.has(b.passengerId)) {
+      latestBookingsMap.set(b.passengerId, b);
+    }
+  }
+  const ridePassengers = Array.from(latestBookingsMap.values())
+    .filter((b) => b.status === 'ACCEPTED' || b.status === 'COMPLETED' || (b.passengerNotes && b.passengerNotes.includes('[ONBOARD]')))
+    .map((b) => {
+      const isCompleted = b.status === 'COMPLETED';
+      const isOnboard = !isCompleted && Boolean(b.passengerNotes && b.passengerNotes.includes('[ONBOARD]'));
+      const cleanNotes = (b.passengerNotes || '').replace(/\[ONBOARD\]/g, '').trim();
+      const pickupLat = b.pickupStop?.latitude !== undefined ? Number(b.pickupStop.latitude) : Number(ride.startLat);
+      const pickupLng = b.pickupStop?.longitude !== undefined ? Number(b.pickupStop.longitude) : Number(ride.startLng);
+      const dropoffLat = b.dropoffStop?.latitude !== undefined ? Number(b.dropoffStop.latitude) : Number(ride.endLat);
+      const dropoffLng = b.dropoffStop?.longitude !== undefined ? Number(b.dropoffStop.longitude) : Number(ride.endLng);
+      const statusLabel = isCompleted ? 'Dropped Off' : isOnboard ? 'Onboard' : 'Confirmed';
+
+      return {
+        id: b.id,
+        bookingId: b.id,
+        passengerId: b.passengerId,
+        name: b.passenger?.displayName || 'Passenger',
+        phone: b.passenger?.phone || '',
+        avatarUrl:
+          b.passenger?.avatarUrl ||
+          'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=200&q=80',
+        seats: b.seatsRequested,
+        fare: Number(b.totalCostContribution || 0),
+        isPickedUp: isOnboard || isCompleted,
+        isOnboard,
+        isDroppedOff: isCompleted,
+        isCompleted,
+        nextAction: isCompleted ? 'NONE' : isOnboard ? 'DROPOFF' : 'PICKUP',
+        status: statusLabel,
+        statusLabel,
+        rawStatus: b.status.toLowerCase(),
+        pickupLocation: b.pickupStop?.name || cleanNotes || `${ride.startLocationName} Point`,
+        dropLocation: b.dropoffStop?.name || ride.endLocationName,
+        pickupPoint: b.pickupStop?.name || cleanNotes || `${ride.startLocationName} Point`,
+        dropoffPoint: b.dropoffStop?.name || ride.endLocationName,
+        pickupLat: Number.isFinite(pickupLat) ? pickupLat : 0,
+        pickupLng: Number.isFinite(pickupLng) ? pickupLng : 0,
+        dropoffLat: Number.isFinite(dropoffLat) ? dropoffLat : 0,
+        dropoffLng: Number.isFinite(dropoffLng) ? dropoffLng : 0,
+        acceptedAt: b.acceptedAt,
+        completedAt: b.completedAt,
+      };
+    });
+
+  // Determine next suggested stop for captain navigation (Pickup pending -> Dropoff onboard -> Final destination)
+  const nextPickupPassenger = ridePassengers.find((p) => !p.isPickedUp && !p.isDroppedOff);
+  const nextDropoffPassenger = ridePassengers.find((p) => p.isOnboard && !p.isDroppedOff);
+  const nextStop = nextPickupPassenger
+    ? {
+        type: 'PICKUP',
+        bookingId: nextPickupPassenger.bookingId,
+        passengerId: nextPickupPassenger.passengerId,
+        passengerName: nextPickupPassenger.name,
+        name: nextPickupPassenger.pickupLocation,
+        latitude: nextPickupPassenger.pickupLat,
+        longitude: nextPickupPassenger.pickupLng,
+      }
+    : nextDropoffPassenger
+    ? {
+        type: 'DROPOFF',
+        bookingId: nextDropoffPassenger.bookingId,
+        passengerId: nextDropoffPassenger.passengerId,
+        passengerName: nextDropoffPassenger.name,
+        name: nextDropoffPassenger.dropLocation,
+        latitude: nextDropoffPassenger.dropoffLat,
+        longitude: nextDropoffPassenger.dropoffLng,
+      }
+    : {
+        type: 'END',
+        bookingId: null,
+        passengerId: null,
+        passengerName: null,
+        name: ride.endLocationName,
+        latitude: Number(ride.endLat),
+        longitude: Number(ride.endLng),
+      };
+
+  const userIsCompleted = userBooking?.status === 'COMPLETED';
+  const userIsOnboard = !userIsCompleted && Boolean(userBooking?.passengerNotes && userBooking.passengerNotes.includes('[ONBOARD]'));
+
   const result = {
     hasActiveRide: true,
     rideId: ride.id,
     id: ride.id,
     tripId: ride.id,
+    role: isCaptain ? 'driver' : 'passenger',
+    isDriver: isCaptain,
+    isCaptain,
     status: ride.status.toLowerCase(),
     statusLabel: ride.status === 'IN_PROGRESS' ? 'Trip in Progress' : 'Upcoming Trip',
     rawStatus: ride.status,
@@ -1795,6 +1990,18 @@ export const getActiveRideTracking = async (userId, rideId) => {
     originLng: Number(ride.startLng),
     destLat: Number(ride.endLat),
     destLng: Number(ride.endLng),
+    encodedPolyline: routeData.encodedPolyline,
+    polyline: routeData.polyline,
+    routePoints: routeData.routePoints,
+    waypoints: routeData.waypoints,
+    distanceKm: routeData.distanceKm,
+    durationMinutes: routeData.durationMinutes,
+    route: {
+      encodedPolyline: routeData.encodedPolyline,
+      distanceKm: routeData.distanceKm,
+      durationMinutes: routeData.durationMinutes,
+      waypoints: routeData.waypoints,
+    },
     date: formattedDate,
     departureTime: formattedTime,
     mode: ride.vehicle?.vehicleType === 'BIKE' ? 'bikepool' : 'carpool',
@@ -1828,12 +2035,22 @@ export const getActiveRideTracking = async (userId, rideId) => {
     pickupPoint: userBooking?.pickupStop?.name || ride.stops?.[0]?.name || ride.startLocationName,
     dropLocation: userBooking?.dropoffStop?.name || ride.stops?.[ride.stops.length - 1]?.name || ride.endLocationName,
     dropoffPoint: userBooking?.dropoffStop?.name || ride.stops?.[ride.stops.length - 1]?.name || ride.endLocationName,
+    pickupLat: userBooking?.pickupStop?.latitude !== undefined ? Number(userBooking.pickupStop.latitude) : Number(ride.startLat),
+    pickupLng: userBooking?.pickupStop?.longitude !== undefined ? Number(userBooking.pickupStop.longitude) : Number(ride.startLng),
+    dropoffLat: userBooking?.dropoffStop?.latitude !== undefined ? Number(userBooking.dropoffStop.latitude) : Number(ride.endLat),
+    dropoffLng: userBooking?.dropoffStop?.longitude !== undefined ? Number(userBooking.dropoffStop.longitude) : Number(ride.endLng),
     bookingId: userBooking?.id,
     seatsBooked: userBooking?.seatsRequested || 1,
     fare: price,
     bookingStatus: userBooking?.status?.toLowerCase() || 'accepted',
+    isPickedUp: userIsOnboard || userIsCompleted,
+    isOnboard: userIsOnboard,
+    isDroppedOff: userIsCompleted,
     otp: '4821',
     meetingPoint: userBooking?.pickupStop?.name || ride.stops?.[0]?.name || ride.startLocationName,
+    passengers: ridePassengers,
+    passengerCount: ridePassengers.length,
+    nextStop,
     stops: ride.stops.map((s) => ({
       id: s.id,
       name: s.name,

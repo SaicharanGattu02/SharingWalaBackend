@@ -17,7 +17,6 @@ const TEST_PHONE_NUMBERS = new Set([
 const TEST_BYPASS_CODES = new Set(['123456', '1234', '0000', '111111']);
 
 // Active OTP session storage mapping formattedMobile -> { reqId, timestamp }
-// Backed by persistent file storage so sessions survive server reloads & multi-workers
 const loadOtpSessions = () => {
   try {
     if (fs.existsSync(OTP_SESSIONS_FILE)) {
@@ -40,16 +39,30 @@ const loadOtpSessions = () => {
   return new Map();
 };
 
+let persistInFlight = false;
+let persistQueued = false;
 const persistOtpSessions = (map) => {
-  try {
-    const obj = {};
-    for (const [k, v] of map.entries()) {
-      obj[k] = v;
-    }
-    fs.writeFileSync(OTP_SESSIONS_FILE, JSON.stringify(obj, null, 2), 'utf-8');
-  } catch (err) {
-    console.warn('[MSG91] Failed to write otp_sessions.json:', err.message);
+  if (persistInFlight) {
+    persistQueued = true;
+    return;
   }
+  persistInFlight = true;
+  const obj = {};
+  for (const [k, v] of map.entries()) {
+    obj[k] = v;
+  }
+  fs.promises
+    .writeFile(OTP_SESSIONS_FILE, JSON.stringify(obj, null, 2), 'utf-8')
+    .catch((err) => {
+      console.warn('[MSG91] Failed to write otp_sessions.json:', err.message);
+    })
+    .finally(() => {
+      persistInFlight = false;
+      if (persistQueued) {
+        persistQueued = false;
+        persistOtpSessions(map);
+      }
+    });
 };
 
 const otpSessions = loadOtpSessions();
@@ -93,6 +106,17 @@ export const isTestNumber = (phone) => {
   return TEST_PHONE_NUMBERS.has(digits) || TEST_PHONE_NUMBERS.has(formatted);
 };
 
+const requireMsg91Config = () => {
+  const widgetId = env.msg91?.widgetId || process.env.MSG91_WIDGET_ID || '';
+  const authKey = env.msg91?.authKey || process.env.MSG91_AUTH_KEY || '';
+  const tokenAuth = env.msg91?.authToken || process.env.MSG91_AUTH_TOKEN || authKey;
+
+  if (!widgetId || (!authKey && !tokenAuth)) {
+    throw new ApiError(503, 'SMS OTP service is not configured');
+  }
+  return { widgetId, authKey, tokenAuth };
+};
+
 /**
  * Send OTP via MSG91 OTP Widget API
  */
@@ -106,22 +130,18 @@ export const sendMsg91Otp = async ({ phone }) => {
 
   // Developer / Reviewer test bypass
   if (isTestNumber(formattedMobile)) {
-    console.log(`[MSG91] 🧪 Bypassing OTP send for test number: ${normalized}`);
     return {
       success: true,
       isBypass: true,
       phone: normalized,
-      otp: '123456',
+      ...(env.isProduction ? {} : { otp: '123456' }),
       expiresIn: 300,
       resendAvailableIn: 30,
-      message: `OTP sent successfully to ${normalized} (Test Mode)`,
+      message: `OTP sent successfully to ${normalized}`,
     };
   }
 
-  const widgetId = env.msg91?.widgetId || process.env.MSG91_WIDGET_ID || '366b6a704454313533343732';
-  const tokenAuth = env.msg91?.authToken || process.env.MSG91_AUTH_TOKEN || '588874T5lR9OAcwJ6af35dbeP1';
-
-  console.log(`[MSG91 ${new Date().toISOString()}] 📤 Sending OTP to ${normalized} (identifier: ${formattedMobile}) using Widget ID: ${widgetId}`);
+  const { widgetId, tokenAuth } = requireMsg91Config();
 
   try {
     const res = await fetch('https://api.msg91.com/api/v5/widget/sendOtp', {
@@ -134,22 +154,20 @@ export const sendMsg91Otp = async ({ phone }) => {
         tokenAuth,
         identifier: formattedMobile,
       }),
+      signal: AbortSignal.timeout(10000),
     });
 
     const data = await res.json().catch(() => ({}));
-    console.log(`[MSG91 ${new Date().toISOString()}] 📥 MSG91 Send Response (HTTP ${res.status}):`, JSON.stringify(data));
 
-    if (data.type === 'error' || data.hasError) {
-      console.error('[MSG91] sendOtp error response:', data);
+    if (!res.ok || data.type === 'error' || data.hasError) {
+      console.error('[MSG91] sendOtp error:', data.message || res.status);
       throw new ApiError(400, data.message || 'Failed to send OTP via SMS', [], '', 'MSG91_SEND_ERROR');
     }
 
-    // Capture reqId from data.message
     const reqId = String(data.message || '').trim();
     if (reqId) {
       otpSessions.set(formattedMobile, { reqId, timestamp: Date.now() });
       persistOtpSessions(otpSessions);
-      console.log(`[MSG91] Stored session reqId for ${formattedMobile}: ${reqId}`);
     }
 
     return {
@@ -162,8 +180,8 @@ export const sendMsg91Otp = async ({ phone }) => {
     };
   } catch (error) {
     if (error instanceof ApiError) throw error;
-    console.error('[MSG91] Network / Exception in sendMsg91Otp:', error);
-    throw new ApiError(500, `SMS service error: ${error.message}`);
+    console.error('[MSG91] Network / Exception in sendMsg91Otp:', error.message);
+    throw new ApiError(502, 'SMS service temporarily unavailable. Please try again.');
   }
 };
 
@@ -180,19 +198,14 @@ export const verifyMsg91Otp = async ({ phone, otp, reqId: directReqId }) => {
 
   // Developer / Reviewer test bypass
   if (isTestNumber(formattedMobile) && TEST_BYPASS_CODES.has(trimmedOtp)) {
-    console.log(`[MSG91] 🧪 Bypassing OTP verification for test number: ${formattedMobile}`);
     return { verified: true, isBypass: true };
   }
 
-  const widgetId = env.msg91?.widgetId || process.env.MSG91_WIDGET_ID || '366b6a704454313533343732';
-  const authKey = env.msg91?.authKey || process.env.MSG91_AUTH_KEY || '588874AkxiMDsCLyw6af34b3eP1';
+  const { widgetId, authKey } = requireMsg91Config();
 
-  // Retrieve active session reqId (check both memory and disk file)
   const currentMap = loadOtpSessions();
   const session = otpSessions.get(formattedMobile) || currentMap.get(formattedMobile);
   const activeReqId = directReqId || session?.reqId;
-
-  console.log(`[MSG91 ${new Date().toISOString()}] 🔍 Verifying OTP for ${formattedMobile} (reqId: ${activeReqId || 'none'})`);
 
   if (!activeReqId) {
     throw new ApiError(400, 'OTP session expired or not found. Please tap "Resend OTP" to get a new code.', [], '', 'INVALID_OTP');
@@ -210,29 +223,26 @@ export const verifyMsg91Otp = async ({ phone, otp, reqId: directReqId }) => {
         reqId: activeReqId,
         otp: trimmedOtp,
       }),
+      signal: AbortSignal.timeout(10000),
     });
 
     const data = await res.json().catch(() => ({}));
-    console.log(`[MSG91 ${new Date().toISOString()}] 📥 MSG91 Verify Response (HTTP ${res.status}):`, JSON.stringify(data));
 
-    if (data.type === 'success' || String(data.message || '').toLowerCase().includes('success') || data.token) {
-      // Verified successfully! Clean up session
+    if (
+      res.ok &&
+      (data.type === 'success' || String(data.message || '').toLowerCase().includes('success') || Boolean(data.token))
+    ) {
       otpSessions.delete(formattedMobile);
       persistOtpSessions(otpSessions);
       return { verified: true, token: data.token };
     }
 
-    console.error('[MSG91] verifyOtp error response:', data);
-
-    if (data.message === 'invalid otp' || data.code === 705 || data.message === 'OTP not match' || data.message === 'OTP expired' || data.type === 'error') {
-      throw new ApiError(400, data.message || 'Invalid or expired OTP. Please try again.', [], '', 'INVALID_OTP');
-    }
-
-    return { verified: true };
+    // Fail closed on any non-success or unrecognized response
+    throw new ApiError(400, data.message || 'Invalid or expired OTP. Please try again.', [], '', 'INVALID_OTP');
   } catch (error) {
     if (error instanceof ApiError) throw error;
-    console.error('[MSG91] Network / Exception in verifyMsg91Otp:', error);
-    throw new ApiError(500, `OTP verification failed: ${error.message}`);
+    console.error('[MSG91] Network / Exception in verifyMsg91Otp:', error.message);
+    throw new ApiError(502, 'OTP verification service unavailable. Please try again.');
   }
 };
 
@@ -247,16 +257,14 @@ export const resendMsg91Otp = async ({ phone, retryChannel = 11 }) => {
     return {
       success: true,
       isBypass: true,
-      message: `OTP resent successfully to ${normalized} (Test Mode)`,
+      message: `OTP resent successfully to ${normalized}`,
     };
   }
 
-  const widgetId = env.msg91?.widgetId || process.env.MSG91_WIDGET_ID || '366b6a704454313533343732';
-  const authKey = env.msg91?.authKey || process.env.MSG91_AUTH_KEY || '588874AkxiMDsCLyw6af34b3eP1';
+  const { widgetId, authKey } = requireMsg91Config();
 
   const session = otpSessions.get(formattedMobile);
   if (!session?.reqId) {
-    // If no existing session, call sendMsg91Otp directly
     return await sendMsg91Otp({ phone });
   }
 
@@ -272,13 +280,12 @@ export const resendMsg91Otp = async ({ phone, retryChannel = 11 }) => {
         reqId: session.reqId,
         retryChannel: Number(retryChannel) || 11,
       }),
+      signal: AbortSignal.timeout(10000),
     });
 
     const data = await res.json().catch(() => ({}));
-    console.log(`[MSG91 ${new Date().toISOString()}] 📥 MSG91 Retry Response (HTTP ${res.status}):`, JSON.stringify(data));
 
-    if (data.type === 'error' || data.hasError) {
-      // If retry fails, fallback to fresh send
+    if (!res.ok || data.type === 'error' || data.hasError) {
       return await sendMsg91Otp({ phone });
     }
 
@@ -288,6 +295,6 @@ export const resendMsg91Otp = async ({ phone, retryChannel = 11 }) => {
     };
   } catch (error) {
     if (error instanceof ApiError) throw error;
-    throw new ApiError(500, `Failed to resend OTP: ${error.message}`);
+    throw new ApiError(502, 'Failed to resend OTP. Please try again.');
   }
 };

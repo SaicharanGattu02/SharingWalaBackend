@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { authenticateAdmin, requireAdminPermission } from '../../middlewares/adminAuth.middleware.js';
 import { validate } from '../../middlewares/validate.middleware.js';
+import { createRateLimiter } from '../../middlewares/rateLimit.middleware.js';
 import * as adminController from './admin.controller.js';
 import {
   adminLoginSchema,
@@ -42,14 +43,20 @@ const router = Router();
 // 1. ADMIN AUTHENTICATION ROUTES (Public & Profile)
 // ==============================================================================
 
+const adminAuthLimiter = createRateLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: 15,
+  message: 'Too many admin authentication attempts. Please try again later.',
+});
+
 // Staff Login (Credentials -> OTP triggered to 7674952516)
-router.post('/auth/login', validate(adminLoginSchema), adminController.login);
+router.post('/auth/login', adminAuthLimiter, validate(adminLoginSchema), adminController.login);
 
 // Staff 2FA OTP Verification
-router.post('/auth/verify-otp', validate(adminVerifyOtpSchema), adminController.verifyOtp);
+router.post('/auth/verify-otp', adminAuthLimiter, validate(adminVerifyOtpSchema), adminController.verifyOtp);
 
 // Staff 2FA Resend OTP
-router.post('/auth/resend-otp', validate(adminResendOtpSchema), adminController.resendOtp);
+router.post('/auth/resend-otp', adminAuthLimiter, validate(adminResendOtpSchema), adminController.resendOtp);
 
 // Refresh Access Token
 router.post('/auth/refresh', validate(adminRefreshTokenSchema), adminController.refreshToken);

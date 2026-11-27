@@ -5,6 +5,7 @@ import { env } from '../../config/env.js';
 import { ApiError } from '../../utils/apiError.js';
 import { getIO } from '../../config/socket.js';
 import { sendMsg91Otp, verifyMsg91Otp, resendMsg91Otp } from '../../config/msg91.js';
+import { registerUserFcmToken } from '../../config/firebase.js';
 import * as strangerService from '../stranger/stranger.service.js';
 import { createNotification } from '../notification/notification.service.js';
 
@@ -109,8 +110,8 @@ export const adminLogin = async ({ email, password }, ipAddress = '127.0.0.1') =
         },
       });
 
-      // Auto-provision Super Admin in dev if none exists
-      if (!admin && (normalizedEmail === 'admin@share2go.com' || normalizedEmail === 'admin@sharingwala.com')) {
+      // Auto-provision Super Admin in non-production dev mode only
+      if (!env.isProduction && !admin && (normalizedEmail === 'admin@share2go.com' || normalizedEmail === 'admin@sharingwala.com')) {
         const hashedPassword = await bcrypt.hash(password || 'Admin@123', 10);
         let superRole = await prisma.adminRole.findUnique({ where: { name: 'SUPER_ADMIN' } });
         if (!superRole) {
@@ -161,7 +162,7 @@ export const adminLogin = async ({ email, password }, ipAddress = '127.0.0.1') =
       // 2FA: Generate temporary token and trigger OTP to 7674952516
       const tempToken = jwt.sign(
         { adminId: admin.id, email: admin.email, action: 'ADMIN_OTP_2FA' },
-        (env.jwt.accessSecret || env.jwt.secret || 'fallback_secret_key_change_in_production'),
+        env.jwt.accessSecret,
         { expiresIn: '10m' }
       );
 
@@ -183,7 +184,7 @@ export const adminLogin = async ({ email, password }, ipAddress = '127.0.0.1') =
       // Instant Dev Mode Mock Admin 2FA
       const tempToken = jwt.sign(
         { adminId: 'admin_super_01', email: normalizedEmail, action: 'ADMIN_OTP_2FA' },
-        (env.jwt.accessSecret || env.jwt.secret || 'fallback_secret_key_change_in_production'),
+        env.jwt.accessSecret,
         { expiresIn: '10m' }
       );
       return {
@@ -200,7 +201,7 @@ export const adminLogin = async ({ email, password }, ipAddress = '127.0.0.1') =
 export const adminVerifyOtp = async ({ tempToken, otp, fcmToken, fcm_token }, ipAddress = '127.0.0.1') => {
   let decoded;
   try {
-    decoded = jwt.verify(tempToken, (env.jwt.accessSecret || env.jwt.secret || 'fallback_secret_key_change_in_production'));
+    decoded = jwt.verify(tempToken, env.jwt.accessSecret);
   } catch (err) {
     throw new ApiError(401, 'Verification session expired. Please sign in again.');
   }
@@ -214,8 +215,9 @@ export const adminVerifyOtp = async ({ tempToken, otp, fcmToken, fcm_token }, ip
     throw new ApiError(400, 'Please enter the 6-digit verification code');
   }
 
-  // Verify OTP with MSG91 (also allow bypass codes for testing/recovery)
-  const isEmergencyBypass = cleanOtp === '123456' || cleanOtp === '767495';
+  // Verify OTP with MSG91 (dev-only emergency bypass gated to non-production)
+  const isEmergencyBypass =
+    !env.isProduction && (cleanOtp === '123456' || cleanOtp === '767495');
   if (!isEmergencyBypass) {
     try {
       await verifyMsg91Otp({ phone: ADMIN_2FA_PHONE, otp: cleanOtp });
@@ -250,8 +252,8 @@ export const adminVerifyOtp = async ({ tempToken, otp, fcmToken, fcm_token }, ip
         },
       });
 
-      // Auto-provision Super Admin if missing
-      if (!admin) {
+      // Auto-provision Super Admin in non-production dev mode only
+      if (!admin && !env.isProduction) {
         let superRole = await prisma.adminRole.findUnique({ where: { name: 'SUPER_ADMIN' } });
         if (!superRole) {
           superRole = await prisma.adminRole.create({
@@ -283,22 +285,12 @@ export const adminVerifyOtp = async ({ tempToken, otp, fcmToken, fcm_token }, ip
         });
       }
 
+      if (!admin) {
+        throw new ApiError(401, 'Admin account not found');
+      }
+
       if (!admin.isActive) {
-        admin = await prisma.adminUser.update({
-          where: { id: admin.id },
-          data: { isActive: true },
-          include: {
-            roles: {
-              include: {
-                role: {
-                  include: {
-                    permissions: { include: { permission: true } },
-                  },
-                },
-              },
-            },
-          },
-        });
+        throw new ApiError(403, 'Account is inactive. Contact the super administrator.');
       }
 
       // Update last login
@@ -340,7 +332,7 @@ export const adminVerifyOtp = async ({ tempToken, otp, fcmToken, fcm_token }, ip
 export const adminResendOtp = async ({ tempToken }) => {
   let decoded;
   try {
-    decoded = jwt.verify(tempToken, (env.jwt.accessSecret || env.jwt.secret || 'fallback_secret_key_change_in_production'));
+    decoded = jwt.verify(tempToken, env.jwt.accessSecret);
   } catch (err) {
     throw new ApiError(401, 'Verification session expired. Please sign in again.');
   }

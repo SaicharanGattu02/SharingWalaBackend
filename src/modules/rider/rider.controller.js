@@ -58,7 +58,13 @@ export const respondToRequest = asyncHandler(async (req, res) => {
   const actionOrStatus =
     req.body.action ||
     req.body.status ||
-    (req.body.isPickedUp === true ? 'ONBOARD' : req.body.isPickedUp === false ? 'OFFBOARD' : null);
+    (req.body.isDroppedOff === true
+      ? 'DROPOFF'
+      : req.body.isPickedUp === true
+      ? 'ONBOARD'
+      : req.body.isPickedUp === false
+      ? 'OFFBOARD'
+      : null);
   const result = await riderService.respondToPassengerRequest(req.user.id, bookingId, actionOrStatus);
   res.status(200).json(new ApiResponse(200, result, result.message));
 });
@@ -67,6 +73,12 @@ export const onboardPassenger = asyncHandler(async (req, res) => {
   const bookingId = req.params.bookingId || req.params.id;
   const isPickedUp = req.body.isPickedUp !== undefined ? Boolean(req.body.isPickedUp) : true;
   const result = await riderService.onboardPassenger(req.user.id, bookingId, isPickedUp);
+  res.status(200).json(new ApiResponse(200, result, result.message));
+});
+
+export const dropoffPassenger = asyncHandler(async (req, res) => {
+  const bookingId = req.params.bookingId || req.params.id;
+  const result = await riderService.dropoffPassenger(req.user.id, bookingId);
   res.status(200).json(new ApiResponse(200, result, result.message));
 });
 

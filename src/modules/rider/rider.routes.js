@@ -89,6 +89,13 @@ router.patch('/bookings/:bookingId/onboard', riderController.onboardPassenger);
 router.post('/rides/:rideId/passengers/:bookingId/onboard', riderController.onboardPassenger);
 router.patch('/rides/:rideId/passengers/:bookingId/onboard', riderController.onboardPassenger);
 
+router.post('/requests/:bookingId/dropoff', riderController.dropoffPassenger);
+router.patch('/requests/:bookingId/dropoff', riderController.dropoffPassenger);
+router.post('/bookings/:bookingId/dropoff', riderController.dropoffPassenger);
+router.patch('/bookings/:bookingId/dropoff', riderController.dropoffPassenger);
+router.post('/rides/:rideId/passengers/:bookingId/dropoff', riderController.dropoffPassenger);
+router.patch('/rides/:rideId/passengers/:bookingId/dropoff', riderController.dropoffPassenger);
+
 // Trusted Contacts (Safety / SOS for Rider / Host)
 router.get('/trusted-contacts', userController.getTrustedContacts);
 router.post('/trusted-contacts', validate(trustedContactSchema), userController.addTrustedContact);

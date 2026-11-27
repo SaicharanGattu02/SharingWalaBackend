@@ -1034,7 +1034,10 @@
         "Adventure",
         "High Altitude"
       ],
-      "joinedUserIds": ["usr_seed_1", "usr_seed_2"],
+      "joinedUserIds": [
+        "usr_seed_1",
+        "usr_seed_2"
+      ],
       "members": []
     },
     {
@@ -1064,7 +1067,10 @@
         "Ghats",
         "Cultural Walk"
       ],
-      "joinedUserIds": ["usr_seed_1", "usr_seed_3"],
+      "joinedUserIds": [
+        "usr_seed_1",
+        "usr_seed_3"
+      ],
       "members": []
     },
     {
@@ -1094,7 +1100,9 @@
         "Lakes",
         "Adventure"
       ],
-      "joinedUserIds": ["usr_seed_1"],
+      "joinedUserIds": [
+        "usr_seed_1"
+      ],
       "members": []
     }
   ],

@@ -6,6 +6,17 @@ import { createNotification } from '../notification/notification.service.js';
 // tripId -> { lastLocation: { latitude, longitude, bearing, speed, accuracy, updatedAt }, isDeviated, currentStopIndex, status }
 const liveTripsState = new Map();
 
+// Prune stale live trip states older than 12 hours to prevent memory leaks
+setInterval(() => {
+  const cutoff = Date.now() - 12 * 60 * 60 * 1000;
+  for (const [tripId, state] of liveTripsState.entries()) {
+    const updatedMs = state?.updatedAt ? new Date(state.updatedAt).getTime() : 0;
+    if (updatedMs && updatedMs < cutoff) {
+      liveTripsState.delete(tripId);
+    }
+  }
+}, 60 * 60 * 1000).unref();
+
 /**
  * Returns in-memory live trip state if present
  */
@@ -124,7 +135,7 @@ export const registerTripSocketHandlers = (io, socket) => {
   });
 
   // 3. Driver Emits Vehicle Movement / Real-time GPS Location
-  socket.on('trip:location_update', async (data) => {
+  const handleLocationUpdate = async (data) => {
     try {
       const tripId = data?.tripId || data?.rideId;
       if (!tripId) return;
@@ -142,12 +153,17 @@ export const registerTripSocketHandlers = (io, socket) => {
         return;
       }
 
+      const bearing = toFiniteNumber(data.bearing ?? data.heading, 0);
+      const speed = Math.max(0, toFiniteNumber(data.speed ?? data.speedKmh, 0));
       const telemetry = {
         tripId,
+        rideId: tripId,
         latitude,
         longitude,
-        bearing: toFiniteNumber(data.bearing ?? data.heading, 0),
-        speed: Math.max(0, toFiniteNumber(data.speed, 0)),
+        bearing,
+        heading: bearing,
+        speed,
+        speedKmh: speed,
         accuracy: Math.max(0, toFiniteNumber(data.accuracy, 0)),
         // Server time: phones' clocks drift, passengers use this to detect stale fixes.
         timestamp: new Date().toISOString(),
@@ -164,10 +180,15 @@ export const registerTripSocketHandlers = (io, socket) => {
 
       // Broadcast immediately to all connected passengers and monitoring listeners
       io.to(`trip:${tripId}`).emit('trip:location_update', telemetry);
+      io.to(`trip:${tripId}`).emit('trip:vehicle_moved', telemetry);
     } catch (err) {
       console.warn('[TripSocket] Error handling trip location update:', err.message);
     }
-  });
+  };
+
+  socket.on('trip:location_update', handleLocationUpdate);
+  socket.on('ride:location_update', handleLocationUpdate);
+  socket.on('driver:location_update', handleLocationUpdate);
 
   // 4. Route Deviation / Off-Route Detection Event
   socket.on('trip:deviation', async (data) => {
@@ -241,35 +262,51 @@ export const registerTripSocketHandlers = (io, socket) => {
     try {
       const tripId = data?.tripId || data?.rideId;
       const bookingId = data?.bookingId;
-      const status = data?.status; // 'PICKED_UP' | 'DROPPED_OFF' | 'NO_SHOW'
-      if (!tripId || !bookingId) return;
+      const rawStatus = String(data?.status || '').toUpperCase().trim();
+      if (!tripId || !bookingId || !rawStatus) return;
       if (!(await isDriverOf(socket, tripId))) return;
 
-      // Update Booking status in database if valid enum
-      try {
-        // PICKED_UP keeps the booking ACCEPTED (pickup itself is stored by the
-        // REST onboard endpoint) — 'IN_PROGRESS' is not a BookingStatus.
-        let dbStatus = null;
-        if (status === 'DROPPED_OFF') dbStatus = 'COMPLETED';
-        if (status === 'NO_SHOW') dbStatus = 'NO_SHOW';
+      const isPickedUp = ['PICKED_UP', 'ONBOARD', 'PICKUP'].includes(rawStatus);
+      const isDroppedOff = ['DROPPED_OFF', 'DROPOFF', 'DROP', 'COMPLETED', 'COMPLETE'].includes(rawStatus);
+      const isNoShow = rawStatus === 'NO_SHOW';
+      if (!isPickedUp && !isDroppedOff && !isNoShow) return;
 
-        // The booking must belong to this ride — never trust the client's IDs.
+      const normalizedStatus = isPickedUp ? 'PICKED_UP' : isDroppedOff ? 'DROPPED_OFF' : 'NO_SHOW';
+      let targetPassengerId = data?.passengerId || null;
+
+      // Update Booking status & [ONBOARD] note in database so REST and Socket stay in sync
+      try {
         const booking = await prisma.booking.findFirst({
           where: { id: bookingId, rideId: tripId },
-          select: { passengerId: true },
+          select: { passengerId: true, passengerNotes: true, acceptedAt: true, completedAt: true },
         });
         if (!booking) return;
-        const targetPassengerId = booking.passengerId;
-        if (dbStatus) {
-          await prisma.booking.update({
-            where: { id: bookingId },
-            data: { status: dbStatus },
-          });
+        targetPassengerId = booking.passengerId;
+
+        const cleanNotes = (booking.passengerNotes || '').replace(/\[ONBOARD\]/g, '').trim();
+        const updateData = {};
+
+        if (isPickedUp) {
+          updateData.status = 'ACCEPTED';
+          updateData.acceptedAt = booking.acceptedAt || new Date();
+          updateData.passengerNotes = `${cleanNotes} [ONBOARD]`.trim();
+        } else if (isDroppedOff) {
+          updateData.status = 'COMPLETED';
+          updateData.completedAt = booking.completedAt || new Date();
+          updateData.passengerNotes = cleanNotes;
+        } else if (isNoShow) {
+          updateData.status = 'NO_SHOW';
+          updateData.passengerNotes = cleanNotes;
         }
+
+        await prisma.booking.update({
+          where: { id: bookingId },
+          data: updateData,
+        });
 
         // Send push & in-app notification to the passenger
         if (targetPassengerId) {
-          if (status === 'PICKED_UP') {
+          if (isPickedUp) {
             createNotification({
               userId: targetPassengerId,
               type: 'BOOKING_ACCEPTED',
@@ -282,7 +319,7 @@ export const registerTripSocketHandlers = (io, socket) => {
               },
               sendPush: true,
             }).catch((e) => console.warn('Failed to notify passenger of onboard:', e.message));
-          } else if (status === 'DROPPED_OFF') {
+          } else if (isDroppedOff) {
             createNotification({
               userId: targetPassengerId,
               type: 'RATING_REQUEST',
@@ -303,13 +340,20 @@ export const registerTripSocketHandlers = (io, socket) => {
 
       const payload = {
         tripId,
+        rideId: tripId,
         bookingId,
-        passengerId: data?.passengerId,
-        status,
+        passengerId: targetPassengerId,
+        status: normalizedStatus,
+        isPickedUp: isPickedUp || isDroppedOff,
+        isOnboard: isPickedUp,
+        isDroppedOff,
         updatedAt: new Date().toISOString(),
       };
 
       io.to(`trip:${tripId}`).emit('trip:passenger_updated', payload);
+      if (targetPassengerId) {
+        io.to(`user:${targetPassengerId}`).emit('trip:passenger_updated', payload);
+      }
     } catch (err) {
       console.warn('[TripSocket] Error handling passenger status:', err.message);
     }

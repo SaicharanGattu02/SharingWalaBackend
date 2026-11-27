@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { validate } from '../../middlewares/validate.middleware.js';
 import { optionalAuthenticate } from '../../middlewares/auth.middleware.js';
+import { authenticateAdmin } from '../../middlewares/adminAuth.middleware.js';
 import { contactSupportSchema } from './support.validation.js';
 import * as supportController from './support.controller.js';
 
@@ -24,8 +25,8 @@ router.post(
   supportController.submitContactTicket
 );
 
-// List tickets (internal)
-router.get('/tickets', supportController.listTickets);
+// List tickets (admin only)
+router.get('/tickets', authenticateAdmin, supportController.listTickets);
 
 export default router;
 

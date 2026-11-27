@@ -125,21 +125,37 @@ export const respondBookingSchema = {
     .object({
       action: z
         .enum([
-          'ACCEPT', 'DECLINE', 'REJECT', 'APPROVE', 'ONBOARD', 'PICKUP', 'PICKED_UP', 'OFFBOARD',
-          'accept', 'decline', 'reject', 'approve', 'onboard', 'pickup', 'picked_up', 'offboard',
+          'ACCEPT', 'DECLINE', 'REJECT', 'APPROVE',
+          'ONBOARD', 'PICKUP', 'PICKED_UP', 'OFFBOARD',
+          'DROPOFF', 'DROPPED_OFF', 'DROP', 'COMPLETE', 'COMPLETED',
+          'accept', 'decline', 'reject', 'approve',
+          'onboard', 'pickup', 'picked_up', 'offboard',
+          'dropoff', 'dropped_off', 'drop', 'complete', 'completed',
         ])
         .optional(),
       status: z
         .enum([
-          'ACCEPTED', 'REJECTED', 'DECLINED', 'ONBOARD', 'PICKED_UP', 'COMPLETED',
-          'accepted', 'rejected', 'declined', 'onboard', 'picked_up', 'completed',
+          'ACCEPTED', 'REJECTED', 'DECLINED',
+          'ONBOARD', 'PICKED_UP', 'OFFBOARD',
+          'DROPOFF', 'DROPPED_OFF', 'DROP', 'COMPLETED',
+          'accepted', 'rejected', 'declined',
+          'onboard', 'picked_up', 'offboard',
+          'dropoff', 'dropped_off', 'drop', 'completed',
         ])
         .optional(),
       isPickedUp: z.boolean().optional(),
+      isDroppedOff: z.boolean().optional(),
     })
-    .refine((data) => data.action !== undefined || data.status !== undefined || data.isPickedUp !== undefined, {
-      message: 'Either action (ACCEPT/DECLINE/ONBOARD), status, or isPickedUp must be provided',
-    }),
+    .refine(
+      (data) =>
+        data.action !== undefined ||
+        data.status !== undefined ||
+        data.isPickedUp !== undefined ||
+        data.isDroppedOff !== undefined,
+      {
+        message: 'Either action (ACCEPT/DECLINE/ONBOARD/DROPOFF), status, isPickedUp, or isDroppedOff must be provided',
+      }
+    ),
 };
 
 export const updateRideStatusSchema = {

@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { authenticate, optionalAuthenticate } from '../../middlewares/auth.middleware.js';
+import { authenticateAdmin, requireAdminPermission } from '../../middlewares/adminAuth.middleware.js';
 import { validate } from '../../middlewares/validate.middleware.js';
 import {
   updateProfileSchema,
@@ -13,6 +14,10 @@ import {
 import * as userController from './user.controller.js';
 
 const router = Router();
+
+// Admin / Management User Active & Inactive Status (guarded by Admin RBAC)
+router.patch('/admin/users/:id/status', authenticateAdmin, requireAdminPermission('users.block'), userController.updateUserStatus);
+router.patch('/users/:id/status', authenticateAdmin, requireAdminPermission('users.block'), userController.updateUserStatus);
 
 // Public / Semi-authenticated ride search & details
 router.get('/rides/search', optionalAuthenticate, validate({ query: searchRidesQuerySchema }), userController.searchRides);
@@ -52,9 +57,5 @@ router.post('/rides/:id/rate', validate(submitFeedbackSchema), userController.su
 router.post('/rides/:id/review', validate(submitFeedbackSchema), userController.submitRideFeedback);
 router.get('/rides/:id/feedback', userController.getRideFeedback);
 router.get('/rides/:id/rating', userController.getRideFeedback);
-
-// Admin / Management User Active & Inactive Status
-router.patch('/admin/users/:id/status', userController.updateUserStatus);
-router.patch('/users/:id/status', userController.updateUserStatus);
 
 export default router;

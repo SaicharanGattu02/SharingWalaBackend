@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import multer from 'multer';
 import { authenticate, optionalAuthenticate } from '../../middlewares/auth.middleware.js';
+import { authenticateAdmin } from '../../middlewares/adminAuth.middleware.js';
 import { validate } from '../../middlewares/validate.middleware.js';
 import {
   createStrangerTripSchema,
@@ -43,10 +44,10 @@ router.get('/plans/upcoming', optionalAuthenticate, strangerController.getUpcomi
 router.get('/plans/by-interest', optionalAuthenticate, strangerController.getPlansByInterest);
 router.get('/plans/:id', optionalAuthenticate, strangerController.getPlanById);
 router.post('/plans', authenticate, validate(createStrangerPlanSchema), strangerController.createPlan);
-router.post('/plans/:id/join', optionalAuthenticate, strangerController.joinPlan);
-router.post('/plans/:id/request', optionalAuthenticate, strangerController.joinPlan);
-router.post('/plans/:id/opt-in', optionalAuthenticate, strangerController.joinPlan);
-router.post('/plans/:id/leave', optionalAuthenticate, strangerController.leavePlan);
+router.post('/plans/:id/join', authenticate, strangerController.joinPlan);
+router.post('/plans/:id/request', authenticate, strangerController.joinPlan);
+router.post('/plans/:id/opt-in', authenticate, strangerController.joinPlan);
+router.post('/plans/:id/leave', authenticate, strangerController.leavePlan);
 router.get('/plans/:id/requests', authenticate, strangerController.getPlanRequests);
 router.post('/plans/:id/requests/:requestId/respond', authenticate, strangerController.respondToPlanRequest);
 router.post('/plans/:id/requests/:requestId/accept', authenticate, strangerController.respondToPlanRequest);
@@ -69,12 +70,12 @@ const globeJsonUpload = multer({
 // --- 5. TRIP GLOBE & ADMIN CONFIG ---
 router.get('/globe', optionalAuthenticate, strangerController.getGlobeDestinations);
 router.get('/globe/weather', optionalAuthenticate, strangerController.getGlobeWeather);
-router.get('/globe/admin/destinations', authenticate, strangerController.adminGetGlobeConfig);
-router.get('/globe/admin/export', authenticate, strangerController.adminExportGlobeCatalog);
-router.post('/globe/admin/import', authenticate, globeJsonUpload.single('file'), strangerController.adminImportGlobeCatalog);
-router.put('/globe/admin/pricing-config', authenticate, strangerController.adminUpdateGlobePricingConfig);
-router.post('/globe/admin/destinations', authenticate, strangerController.adminCreateGlobeDestination);
-router.put('/globe/admin/destinations/:id', authenticate, strangerController.adminUpdateGlobeDestination);
-router.delete('/globe/admin/destinations/:id', authenticate, strangerController.adminDeleteGlobeDestination);
+router.get('/globe/admin/destinations', authenticateAdmin, strangerController.adminGetGlobeConfig);
+router.get('/globe/admin/export', authenticateAdmin, strangerController.adminExportGlobeCatalog);
+router.post('/globe/admin/import', authenticateAdmin, globeJsonUpload.single('file'), strangerController.adminImportGlobeCatalog);
+router.put('/globe/admin/pricing-config', authenticateAdmin, strangerController.adminUpdateGlobePricingConfig);
+router.post('/globe/admin/destinations', authenticateAdmin, strangerController.adminCreateGlobeDestination);
+router.put('/globe/admin/destinations/:id', authenticateAdmin, strangerController.adminUpdateGlobeDestination);
+router.delete('/globe/admin/destinations/:id', authenticateAdmin, strangerController.adminDeleteGlobeDestination);
 
 export default router;

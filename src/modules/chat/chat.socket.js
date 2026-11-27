@@ -18,6 +18,7 @@ import {
   startSession,
 } from './call.session.js';
 
+const ALLOWED_MESSAGE_TYPES = new Set(['TEXT', 'LOCATION_SHARE', 'IMAGE', 'SYSTEM_ALERT', 'MISSED_CALL']);
 const CALLER_OFFLINE_GRACE_MS = 15 * 1000;
 const REDELIVER_INCOMING_WITHIN_MS = 45 * 1000;
 
@@ -378,6 +379,7 @@ export const registerChatSocketHandlers = (io, socket) => {
     async ({ conversationId, content, messageType = 'TEXT', latitude, longitude, mediaUrl, token }) => {
       try {
         if (!conversationId) return;
+        const safeMessageType = ALLOWED_MESSAGE_TYPES.has(messageType) ? messageType : 'TEXT';
 
         let effectiveUserId = socket.user?.id;
         // Verify token in payload to guarantee 100% identity accuracy and prevent stale session echoes
@@ -385,15 +387,16 @@ export const registerChatSocketHandlers = (io, socket) => {
           try {
             const decoded = jwt.verify(token, env.jwt.secret);
             if (decoded?.userId) {
+              const refreshedUser = await prisma.user.findUnique({
+                where: { id: decoded.userId },
+                select: { id: true, displayName: true, avatarUrl: true, status: true },
+              });
+              if (refreshedUser && refreshedUser.status !== 'ACTIVE') {
+                return socket.emit('chat_error', { conversationId, message: 'Account access restricted' });
+              }
               effectiveUserId = decoded.userId;
-              if (!socket.user || socket.user.id !== decoded.userId) {
-                const refreshedUser = await prisma.user.findUnique({
-                  where: { id: decoded.userId },
-                  select: { id: true, displayName: true, avatarUrl: true, status: true },
-                });
-                if (refreshedUser) {
-                  socket.user = refreshedUser;
-                }
+              if (refreshedUser && (!socket.user || socket.user.id !== decoded.userId)) {
+                socket.user = refreshedUser;
               }
             }
           } catch (_) {}
@@ -423,7 +426,7 @@ export const registerChatSocketHandlers = (io, socket) => {
           data: {
             conversationId: targetConvId,
             senderId: effectiveUserId,
-            messageType,
+            messageType: safeMessageType,
             content: content ? content.trim() : '',
             latitude: latitude ? String(latitude) : null,
             longitude: longitude ? String(longitude) : null,

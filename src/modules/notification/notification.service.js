@@ -264,32 +264,14 @@ export const createNotification = async ({
 export const saveDeviceToken = async (userId, deviceToken, deviceType = 'ANDROID') => {
   if (!userId || !deviceToken) return;
   await registerUserFcmToken(userId, deviceToken);
-  try {
-    await prisma.userDevice.upsert({
-      where: { deviceToken },
-      update: {
-        userId,
-        deviceType,
-        appVersion: 'FCM_TOKEN',
-        lastActiveAt: new Date(),
-      },
-      create: {
-        userId,
-        deviceToken,
-        deviceType,
-        appVersion: 'FCM_TOKEN',
-        lastActiveAt: new Date(),
-      },
-    });
-  } catch (err) {
-    console.warn('[NotificationService] userDevice upsert warning:', err.message);
-  }
 };
 
 /**
  * Fetch Notifications for Authenticated User / Rider
  */
 export const getUserNotifications = async (userId, { category, type, role, unreadOnly, page = 1, limit = 40 } = {}) => {
+  const safePage = Math.max(1, parseInt(page, 10) || 1);
+  const safeLimit = Math.min(Math.max(1, parseInt(limit, 10) || 40), 100);
   const isUnreadOnly = unreadOnly === 'true' || unreadOnly === true;
   const filterType = (type || category || '').trim();
 
@@ -323,8 +305,8 @@ export const getUserNotifications = async (userId, { category, type, role, unrea
         prisma.notification.findMany({
           where,
           orderBy: { createdAt: 'desc' },
-          skip: (Number(page) - 1) * Number(limit),
-          take: Number(limit),
+          skip: (safePage - 1) * safeLimit,
+          take: safeLimit,
         }),
         prisma.notification.count({ where }),
         prisma.notification.count({ where: { userId, readAt: null, type: { not: 'CHAT_MESSAGE' } } }),
@@ -345,7 +327,7 @@ export const getUserNotifications = async (userId, { category, type, role, unrea
 
       const unreadCount = inMemoryNotifications.filter((n) => n.userId === userId && !n.readAt && n.type !== 'CHAT_MESSAGE').length;
       return {
-        notifications: filtered.slice((page - 1) * limit, page * limit),
+        notifications: filtered.slice((safePage - 1) * safeLimit, safePage * safeLimit),
         totalCount: filtered.length,
         unreadCount,
       };
@@ -367,8 +349,8 @@ export const getUserNotifications = async (userId, { category, type, role, unrea
     notifications: formatted,
     total: dbResult.totalCount,
     unreadCount: dbResult.unreadCount,
-    page: Number(page),
-    limit: Number(limit),
+    page: safePage,
+    limit: safeLimit,
   };
 };
 

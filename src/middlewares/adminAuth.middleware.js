@@ -55,37 +55,39 @@ export const authenticateAdmin = asyncHandler(async (req, res, next) => {
         },
       });
     },
-    () => {
-      // Instant dev fallback admin profile
-      return {
-        id: adminId || 'admin_super_01',
-        name: 'Master Super Administrator',
-        email: 'admin@sharingwala.com',
-        isActive: true,
-        roles: [
-          {
-            role: {
-              name: 'SUPER_ADMIN',
-              permissions: [
-                { permission: { name: 'users.view' } },
-                { permission: { name: 'users.update' } },
-                { permission: { name: 'users.block' } },
-                { permission: { name: 'drivers.verify' } },
-                { permission: { name: 'vehicles.verify' } },
-                { permission: { name: 'rides.view' } },
-                { permission: { name: 'rides.cancel' } },
-                { permission: { name: 'reports.view' } },
-                { permission: { name: 'reports.resolve' } },
-                { permission: { name: 'communities.manage' } },
-                { permission: { name: 'pricing.manage' } },
-                { permission: { name: 'banners.manage' } },
-                { permission: { name: 'staff.manage' } },
-              ],
-            },
-          },
-        ],
-      };
-    }
+    env.isProduction
+      ? null
+      : () => {
+          // Instant dev fallback admin profile (non-production only)
+          return {
+            id: adminId || 'admin_super_01',
+            name: 'Master Super Administrator',
+            email: 'admin@sharingwala.com',
+            isActive: true,
+            roles: [
+              {
+                role: {
+                  name: 'SUPER_ADMIN',
+                  permissions: [
+                    { permission: { name: 'users.view' } },
+                    { permission: { name: 'users.update' } },
+                    { permission: { name: 'users.block' } },
+                    { permission: { name: 'drivers.verify' } },
+                    { permission: { name: 'vehicles.verify' } },
+                    { permission: { name: 'rides.view' } },
+                    { permission: { name: 'rides.cancel' } },
+                    { permission: { name: 'reports.view' } },
+                    { permission: { name: 'reports.resolve' } },
+                    { permission: { name: 'communities.manage' } },
+                    { permission: { name: 'pricing.manage' } },
+                    { permission: { name: 'banners.manage' } },
+                    { permission: { name: 'staff.manage' } },
+                  ],
+                },
+              },
+            ],
+          };
+        }
   );
 
   if (!admin) {
@@ -97,7 +99,7 @@ export const authenticateAdmin = asyncHandler(async (req, res, next) => {
   }
 
   // Extract roles and permissions
-  const roles = admin.roles?.map((r) => r.role?.name).filter(Boolean) || ['SUPER_ADMIN'];
+  const roles = admin.roles?.map((r) => r.role?.name).filter(Boolean) || [];
   const permissions = new Set();
 
   admin.roles?.forEach((r) => {

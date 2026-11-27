@@ -5,6 +5,13 @@ import { ApiError } from '../../utils/apiError.js';
 import { formatRideForFlutter } from '../user/user.service.js';
 import { createNotification } from '../notification/notification.service.js';
 import { getIO } from '../../config/socket.js';
+import { getLiveTripState } from './trip.socket.js';
+import {
+  decodePolyline,
+  encodePolyline,
+  haversineDistanceKm,
+  resolveRideRouteData,
+} from '../../utils/polyline.js';
 
 // Real coordinate or 0 (= unknown). Never substitute a made-up location —
 // the app treats 0 as "unknown" and geocodes the place name instead.
@@ -701,6 +708,61 @@ export const offerRide = async (userId, data) => {
   const notes = (data.notes || data.pickupFlexibility || 'Daily commute connection').trim();
   const meetingPoint = (data.meetingPoint || data.pickupFlexibility || `${data.origin} Main Point`).trim();
 
+  const sLat = toCoord(data.originLat);
+  const sLng = toCoord(data.originLng);
+  const eLat = toCoord(data.destLat);
+  const eLng = toCoord(data.destLng);
+
+  const rawWaypoints = Array.isArray(data.waypoints)
+    ? data.waypoints
+    : Array.isArray(data.routePoints)
+    ? data.routePoints
+    : [];
+  const normalizedWaypoints = rawWaypoints
+    .map((pt, idx) => ({
+      sequence: idx + 1,
+      latitude: Number(pt?.latitude ?? pt?.lat),
+      longitude: Number(pt?.longitude ?? pt?.lng),
+    }))
+    .filter((pt) => Number.isFinite(pt.latitude) && Number.isFinite(pt.longitude) && (pt.latitude !== 0 || pt.longitude !== 0));
+
+  let encodedPolyline = (typeof data.encodedPolyline === 'string' && data.encodedPolyline.trim())
+    || (typeof data.polyline === 'string' && data.polyline.trim())
+    || '';
+
+  if (!encodedPolyline && normalizedWaypoints.length >= 2) {
+    encodedPolyline = encodePolyline(normalizedWaypoints);
+  } else if (!encodedPolyline && sLat !== 0 && sLng !== 0 && eLat !== 0 && eLng !== 0) {
+    encodedPolyline = encodePolyline([
+      { latitude: sLat, longitude: sLng },
+      { latitude: eLat, longitude: eLng },
+    ]);
+  }
+
+  const routePointsForDb = normalizedWaypoints.length > 0
+    ? normalizedWaypoints
+    : encodedPolyline
+    ? decodePolyline(encodedPolyline).map((pt, idx) => ({
+        sequence: idx + 1,
+        latitude: pt.latitude,
+        longitude: pt.longitude,
+      }))
+    : [];
+
+  let routeDistanceKm = Number(data.distanceKm ?? data.distance_km ?? 0);
+  if (!Number.isFinite(routeDistanceKm) || routeDistanceKm <= 0) {
+    if (sLat !== 0 && sLng !== 0 && eLat !== 0 && eLng !== 0) {
+      routeDistanceKm = Number(haversineDistanceKm(sLat, sLng, eLat, eLng).toFixed(2));
+    } else {
+      routeDistanceKm = 0;
+    }
+  }
+  const routeDurationMinutes = Number(data.durationMinutes ?? data.duration_minutes ?? 0) > 0
+    ? Math.round(Number(data.durationMinutes ?? data.duration_minutes))
+    : routeDistanceKm > 0
+    ? Math.max(5, Math.round((routeDistanceKm / 30) * 60))
+    : 0;
+
   const ride = await prisma.ride.create({
     data: {
       driverId: driver.id,
@@ -712,11 +774,11 @@ export const offerRide = async (userId, data) => {
       totalSeats,
       availableSeats: totalSeats,
       startLocationName: data.origin,
-      startLat: toCoord(data.originLat),
-      startLng: toCoord(data.originLng),
+      startLat: sLat,
+      startLng: sLng,
       endLocationName: data.destination,
-      endLat: toCoord(data.destLat),
-      endLng: toCoord(data.destLng),
+      endLat: eLat,
+      endLng: eLng,
       status: 'PUBLISHED',
       womenOnly: Boolean(data.isWomenOnly),
       autoAccept: Boolean(data.autoAccept),
@@ -729,21 +791,35 @@ export const offerRide = async (userId, data) => {
           currency: 'INR',
         },
       },
+      ...(encodedPolyline
+        ? {
+            route: {
+              create: {
+                distanceKm: routeDistanceKm,
+                durationMinutes: routeDurationMinutes,
+                encodedPolyline,
+                ...(routePointsForDb.length > 0
+                  ? { waypoints: { create: routePointsForDb } }
+                  : {}),
+              },
+            },
+          }
+        : {}),
       stops: {
         create: [
           {
             sequence: 1,
             name: meetingPoint,
-            latitude: toCoord(data.originLat),
-            longitude: toCoord(data.originLng),
+            latitude: sLat,
+            longitude: sLng,
             stopType: 'START',
             estimatedArrivalAt: departureDate,
           },
           {
             sequence: 2,
             name: data.destination,
-            latitude: toCoord(data.destLat),
-            longitude: toCoord(data.destLng),
+            latitude: eLat,
+            longitude: eLng,
             stopType: 'END',
             estimatedArrivalAt: estimatedArrival,
           },
@@ -755,6 +831,7 @@ export const offerRide = async (userId, data) => {
       vehicle: true,
       pricing: true,
       stops: true,
+      route: { include: { waypoints: { orderBy: { sequence: 'asc' } } } },
     },
   });
 
@@ -843,6 +920,8 @@ export const getMyOfferedRides = async (userId, query = {}) => {
           passenger: {
             select: { id: true, displayName: true, phone: true, avatarUrl: true },
           },
+          pickupStop: true,
+          dropoffStop: true,
         },
         orderBy: { createdAt: 'desc' },
       },
@@ -857,17 +936,30 @@ export const getMyOfferedRides = async (userId, query = {}) => {
       continue;
     }
     formatted.isHost = true;
-    formatted.passengerRequests = r.bookings.map((b) => ({
-      bookingId: b.id,
-      passengerId: b.passenger.id,
-      passengerName: b.passenger.displayName,
-      passengerPhone: b.passenger.phone,
-      passengerAvatar: b.passenger.avatarUrl,
-      seatsRequested: b.seatsRequested,
-      status: b.status.toLowerCase(),
-      totalFare: Number(b.totalCostContribution || 0),
-      requestedAt: b.requestedAt || b.createdAt,
-    }));
+    formatted.passengerRequests = r.bookings.map((b) => {
+      const cleanNotes = (b.passengerNotes || '').replace(/\[ONBOARD\]/g, '').trim();
+      const pickupLocation = b.pickupStop?.name || cleanNotes || `${r.startLocationName} Point`;
+      const dropLocation = b.dropoffStop?.name || r.endLocationName;
+      return {
+        bookingId: b.id,
+        passengerId: b.passenger.id,
+        passengerName: b.passenger.displayName,
+        passengerPhone: b.passenger.phone,
+        passengerAvatar: b.passenger.avatarUrl,
+        seatsRequested: b.seatsRequested,
+        status: b.status.toLowerCase(),
+        totalFare: Number(b.totalCostContribution || 0),
+        pickupLocation,
+        dropLocation,
+        pickupPoint: pickupLocation,
+        dropoffPoint: dropLocation,
+        pickupLat: b.pickupStop?.latitude !== undefined ? Number(b.pickupStop.latitude) : Number(r.startLat),
+        pickupLng: b.pickupStop?.longitude !== undefined ? Number(b.pickupStop.longitude) : Number(r.startLng),
+        dropoffLat: b.dropoffStop?.latitude !== undefined ? Number(b.dropoffStop.latitude) : Number(r.endLat),
+        dropoffLng: b.dropoffStop?.longitude !== undefined ? Number(b.dropoffStop.longitude) : Number(r.endLng),
+        requestedAt: b.requestedAt || b.createdAt,
+      };
+    });
     result.push(formatted);
   }
 
@@ -908,6 +1000,7 @@ export const getOfferedRidePassengers = async (userId, rideId) => {
     include: {
       vehicle: true,
       pricing: true,
+      route: { include: { waypoints: { orderBy: { sequence: 'asc' } } } },
       stops: { orderBy: { sequence: 'asc' } },
       bookings: {
         include: {
@@ -928,6 +1021,7 @@ export const getOfferedRidePassengers = async (userId, rideId) => {
       include: {
         vehicle: true,
         pricing: true,
+        route: { include: { waypoints: { orderBy: { sequence: 'asc' } } } },
         stops: { orderBy: { sequence: 'asc' } },
         bookings: {
           include: {
@@ -1072,14 +1166,14 @@ export const getOfferedRidePassengers = async (userId, rideId) => {
   const allMapped = uniqueBookings.map((b) => {
     const isAccepted = b.status === 'ACCEPTED';
     const isPending = b.status === 'PENDING';
-    const isOnboard = Boolean(b.passengerNotes && b.passengerNotes.includes('[ONBOARD]'));
     const isCompleted = b.status === 'COMPLETED' || ride.status === 'COMPLETED';
+    const isOnboard = !isCompleted && Boolean(b.passengerNotes && b.passengerNotes.includes('[ONBOARD]'));
 
     let passengerStatus = 'Pending';
-    if (isOnboard) {
+    if (isCompleted) {
+      passengerStatus = 'Dropped Off';
+    } else if (isOnboard) {
       passengerStatus = 'Onboard';
-    } else if (isCompleted) {
-      passengerStatus = 'Trip Completed';
     } else if (isAccepted) {
       passengerStatus = 'Confirmed';
     } else if (b.status === 'REJECTED') {
@@ -1094,6 +1188,10 @@ export const getOfferedRidePassengers = async (userId, rideId) => {
     }
 
     const cleanNotes = (b.passengerNotes || '').replace(/\[ONBOARD\]/g, '').trim();
+    const pickupLat = b.pickupStop?.latitude !== undefined ? Number(b.pickupStop.latitude) : Number(ride.startLat);
+    const pickupLng = b.pickupStop?.longitude !== undefined ? Number(b.pickupStop.longitude) : Number(ride.startLng);
+    const dropoffLat = b.dropoffStop?.latitude !== undefined ? Number(b.dropoffStop.latitude) : Number(ride.endLat);
+    const dropoffLng = b.dropoffStop?.longitude !== undefined ? Number(b.dropoffStop.longitude) : Number(ride.endLng);
 
     return {
       id: b.id,
@@ -1106,8 +1204,11 @@ export const getOfferedRidePassengers = async (userId, rideId) => {
         'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=200&q=80',
       seats: b.seatsRequested,
       fare,
-      isPickedUp: isOnboard,
+      isPickedUp: isOnboard || isCompleted,
       isOnboard,
+      isDroppedOff: isCompleted,
+      isCompleted,
+      nextAction: isCompleted ? 'NONE' : isOnboard ? 'DROPOFF' : isAccepted ? 'PICKUP' : 'ACCEPT',
       status: passengerStatus,
       statusLabel: passengerStatus,
       rawStatus: b.status.toLowerCase(),
@@ -1118,8 +1219,13 @@ export const getOfferedRidePassengers = async (userId, rideId) => {
       dropLocation: b.dropoffStop?.name || ride.endLocationName,
       pickupPoint: b.pickupStop?.name || cleanNotes || `${ride.startLocationName} Point`,
       dropoffPoint: b.dropoffStop?.name || ride.endLocationName,
+      pickupLat: Number.isFinite(pickupLat) ? pickupLat : 0,
+      pickupLng: Number.isFinite(pickupLng) ? pickupLng : 0,
+      dropoffLat: Number.isFinite(dropoffLat) ? dropoffLat : 0,
+      dropoffLng: Number.isFinite(dropoffLng) ? dropoffLng : 0,
       requestedAt: b.requestedAt || b.createdAt,
       acceptedAt: b.acceptedAt,
+      completedAt: b.completedAt,
     };
   });
 
@@ -1193,17 +1299,18 @@ export const respondToPassengerRequest = async (userId, bookingId, actionOrStatu
     const isAccept = ['ACCEPT', 'ACCEPTED', 'APPROVE'].includes(raw);
     const isReject = ['REJECT', 'REJECTED', 'DECLINE', 'DECLINED'].includes(raw);
     const isOnboard = ['ONBOARD', 'PICKUP', 'PICKED_UP', 'ONBOARDED'].includes(raw);
-    const isOffboard = ['OFFBOARD', 'DROPOFF', 'DROPPED_OFF'].includes(raw);
+    const isOffboard = ['OFFBOARD'].includes(raw);
+    const isDropoff = ['DROPOFF', 'DROPPED_OFF', 'DROP', 'COMPLETE', 'COMPLETED'].includes(raw);
 
-    if (!isAccept && !isReject && !isOnboard && !isOffboard) {
-      throw new ApiError(400, 'Invalid action. Must be ACCEPT, DECLINE/REJECT, ONBOARD, or OFFBOARD');
+    if (!isAccept && !isReject && !isOnboard && !isOffboard && !isDropoff) {
+      throw new ApiError(400, 'Invalid action. Must be ACCEPT, DECLINE/REJECT, ONBOARD, OFFBOARD, or DROPOFF');
     }
 
     const passengerName = booking.passenger?.displayName || 'Passenger';
     const seats = booking.seatsRequested;
     let currentRide = booking.ride;
 
-    // --- Action: ONBOARD ---
+    // --- Action: ONBOARD (Picked Up) ---
     if (isOnboard) {
       let notes = booking.passengerNotes || '';
       if (!notes.includes('[ONBOARD]')) {
@@ -1233,6 +1340,41 @@ export const respondToPassengerRequest = async (userId, bookingId, actionOrStatu
         },
       });
 
+      const targetPassengerId = booking.passenger?.id || booking.passengerId;
+      if (targetPassengerId) {
+        createNotification({
+          userId: targetPassengerId,
+          type: 'BOOKING_ACCEPTED',
+          title: 'Onboard! 🚗',
+          message: 'You have been picked up. Enjoy your ride!',
+          data: {
+            rideId: booking.rideId,
+            bookingId: updated.id,
+            route: '/active-ride',
+          },
+          sendPush: true,
+        }).catch((e) => console.warn('Failed to notify passenger of onboard:', e.message));
+
+        try {
+          const io = getIO();
+          if (io) {
+            const socketPayload = {
+              tripId: booking.rideId,
+              rideId: booking.rideId,
+              bookingId: updated.id,
+              passengerId: targetPassengerId,
+              status: 'PICKED_UP',
+              isPickedUp: true,
+              isOnboard: true,
+              isDroppedOff: false,
+              updatedAt: new Date().toISOString(),
+            };
+            io.to(`trip:${booking.rideId}`).emit('trip:passenger_updated', socketPayload);
+            io.to(`user:${targetPassengerId}`).emit('trip:passenger_updated', socketPayload);
+          }
+        } catch (_) {}
+      }
+
       return {
         bookingId: updated.id,
         rideId: booking.rideId,
@@ -1243,6 +1385,8 @@ export const respondToPassengerRequest = async (userId, bookingId, actionOrStatu
         bookingStatus: 'ACCEPTED',
         isPickedUp: true,
         isOnboard: true,
+        isDroppedOff: false,
+        nextAction: 'DROPOFF',
         seats,
         availableSeats: currentRide.availableSeats,
         totalSeats: currentRide.totalSeats,
@@ -1251,7 +1395,76 @@ export const respondToPassengerRequest = async (userId, bookingId, actionOrStatu
       };
     }
 
-    // --- Action: OFFBOARD ---
+    // --- Action: DROPOFF (Passenger Dropped Off / Completed) ---
+    if (isDropoff) {
+      const cleanNotes = (booking.passengerNotes || '').replace(/\[ONBOARD\]/g, '').trim();
+      const updated = await tx.booking.update({
+        where: { id: bookingId },
+        data: {
+          status: 'COMPLETED',
+          completedAt: booking.completedAt || new Date(),
+          passengerNotes: cleanNotes,
+        },
+      });
+
+      const targetPassengerId = booking.passenger?.id || booking.passengerId;
+      if (targetPassengerId) {
+        createNotification({
+          userId: targetPassengerId,
+          type: 'RATING_REQUEST',
+          title: "You've Arrived! 🏁",
+          message: 'You have reached your destination. Please rate your captain!',
+          data: {
+            rideId: booking.rideId,
+            bookingId: updated.id,
+            route: '/active-ride',
+          },
+          sendPush: true,
+        }).catch((e) => console.warn('Failed to notify passenger of drop-off:', e.message));
+
+        try {
+          const io = getIO();
+          if (io) {
+            const socketPayload = {
+              tripId: booking.rideId,
+              rideId: booking.rideId,
+              bookingId: updated.id,
+              passengerId: targetPassengerId,
+              status: 'DROPPED_OFF',
+              isPickedUp: true,
+              isOnboard: false,
+              isDroppedOff: true,
+              updatedAt: new Date().toISOString(),
+            };
+            io.to(`trip:${booking.rideId}`).emit('trip:passenger_updated', socketPayload);
+            io.to(`user:${targetPassengerId}`).emit('trip:passenger_updated', socketPayload);
+          }
+        } catch (_) {}
+      }
+
+      return {
+        bookingId: updated.id,
+        rideId: booking.rideId,
+        passengerId: booking.passenger.id,
+        passengerName,
+        status: 'Dropped Off',
+        statusLabel: 'Dropped Off',
+        bookingStatus: 'COMPLETED',
+        isPickedUp: true,
+        isOnboard: false,
+        isDroppedOff: true,
+        isCompleted: true,
+        nextAction: 'NONE',
+        seats,
+        availableSeats: currentRide.availableSeats,
+        totalSeats: currentRide.totalSeats,
+        bookedCount: currentRide.totalSeats - currentRide.availableSeats,
+        completedAt: updated.completedAt,
+        message: `${passengerName} has been dropped off!`,
+      };
+    }
+
+    // --- Action: OFFBOARD (Undo accidental pickup -> back to Confirmed) ---
     if (isOffboard) {
       const cleanNotes = (booking.passengerNotes || '').replace(/\[ONBOARD\]/g, '').trim();
       const updated = await tx.booking.update({
@@ -1269,6 +1482,8 @@ export const respondToPassengerRequest = async (userId, bookingId, actionOrStatu
         bookingStatus: 'ACCEPTED',
         isPickedUp: false,
         isOnboard: false,
+        isDroppedOff: false,
+        nextAction: 'PICKUP',
         seats,
         availableSeats: currentRide.availableSeats,
         totalSeats: currentRide.totalSeats,
@@ -1418,6 +1633,10 @@ export const onboardPassenger = async (userId, bookingId, isPickedUp = true) => 
   return respondToPassengerRequest(userId, bookingId, isPickedUp ? 'ONBOARD' : 'OFFBOARD');
 };
 
+export const dropoffPassenger = async (userId, bookingId) => {
+  return respondToPassengerRequest(userId, bookingId, 'DROPOFF');
+};
+
 /**
  * 7. Start Trip (Rider starts the offered ride)
  */
@@ -1441,6 +1660,7 @@ export const startTrip = async (userId, rideId, options = {}) => {
     include: {
       vehicle: true,
       pricing: true,
+      route: { include: { waypoints: { orderBy: { sequence: 'asc' } } } },
       stops: { orderBy: { sequence: 'asc' } },
       bookings: {
         include: {
@@ -1461,6 +1681,7 @@ export const startTrip = async (userId, rideId, options = {}) => {
       include: {
         vehicle: true,
         pricing: true,
+        route: { include: { waypoints: { orderBy: { sequence: 'asc' } } } },
         stops: { orderBy: { sequence: 'asc' } },
         bookings: {
           include: {
@@ -1504,6 +1725,7 @@ export const startTrip = async (userId, rideId, options = {}) => {
       include: {
         vehicle: true,
         pricing: true,
+        route: { include: { waypoints: { orderBy: { sequence: 'asc' } } } },
         stops: { orderBy: { sequence: 'asc' } },
         bookings: {
           include: {
@@ -1555,10 +1777,16 @@ export const startTrip = async (userId, rideId, options = {}) => {
         (b.passengerNotes && b.passengerNotes.includes('[ONBOARD]'))
     )
     .map((b) => {
-      const isOnboard = Boolean(b.passengerNotes && b.passengerNotes.includes('[ONBOARD]'));
+      const isCompleted = b.status === 'COMPLETED';
+      const isOnboard = !isCompleted && Boolean(b.passengerNotes && b.passengerNotes.includes('[ONBOARD]'));
       const fare = Number(b.totalCostContribution || 0);
       totalFareCollected += fare;
       const cleanNotes = (b.passengerNotes || '').replace(/\[ONBOARD\]/g, '').trim();
+      const pickupLat = b.pickupStop?.latitude !== undefined ? Number(b.pickupStop.latitude) : Number(currentRide.startLat);
+      const pickupLng = b.pickupStop?.longitude !== undefined ? Number(b.pickupStop.longitude) : Number(currentRide.startLng);
+      const dropoffLat = b.dropoffStop?.latitude !== undefined ? Number(b.dropoffStop.latitude) : Number(currentRide.endLat);
+      const dropoffLng = b.dropoffStop?.longitude !== undefined ? Number(b.dropoffStop.longitude) : Number(currentRide.endLng);
+      const statusLabel = isCompleted ? 'Dropped Off' : isOnboard ? 'Onboard' : 'Confirmed';
 
       return {
         id: b.id,
@@ -1571,16 +1799,24 @@ export const startTrip = async (userId, rideId, options = {}) => {
           'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=200&q=80',
         seats: b.seatsRequested,
         fare,
-        isPickedUp: isOnboard,
+        isPickedUp: isOnboard || isCompleted,
         isOnboard,
-        status: isOnboard ? 'Onboard' : 'Confirmed',
-        statusLabel: isOnboard ? 'Onboard' : 'Confirmed',
+        isDroppedOff: isCompleted,
+        isCompleted,
+        nextAction: isCompleted ? 'NONE' : isOnboard ? 'DROPOFF' : 'PICKUP',
+        status: statusLabel,
+        statusLabel,
         rawStatus: b.status.toLowerCase(),
         pickupLocation: b.pickupStop?.name || cleanNotes || `${currentRide.startLocationName} Point`,
         dropLocation: b.dropoffStop?.name || currentRide.endLocationName,
         pickupPoint: b.pickupStop?.name || cleanNotes || `${currentRide.startLocationName} Point`,
         dropoffPoint: b.dropoffStop?.name || currentRide.endLocationName,
+        pickupLat: Number.isFinite(pickupLat) ? pickupLat : 0,
+        pickupLng: Number.isFinite(pickupLng) ? pickupLng : 0,
+        dropoffLat: Number.isFinite(dropoffLat) ? dropoffLat : 0,
+        dropoffLng: Number.isFinite(dropoffLng) ? dropoffLng : 0,
         acceptedAt: b.acceptedAt,
+        completedAt: b.completedAt,
       };
     });
 
@@ -1591,11 +1827,16 @@ export const startTrip = async (userId, rideId, options = {}) => {
   const destName = currentRide.endLocationName.includes(',')
     ? currentRide.endLocationName.split(',')[0].trim()
     : currentRide.endLocationName;
+  const routeData = resolveRideRouteData(currentRide);
+  const lastLoc = getLiveTripState(currentRide.id)?.lastLocation;
 
   const responsePayload = {
     id: currentRide.id,
     rideId: currentRide.id,
     tripId: currentRide.id,
+    role: 'driver',
+    isDriver: true,
+    isCaptain: true,
     status: 'in_progress',
     statusLabel: 'Trip in Progress',
     rawStatus: currentRide.status,
@@ -1606,6 +1847,32 @@ export const startTrip = async (userId, rideId, options = {}) => {
     originName,
     destination: currentRide.endLocationName,
     destName,
+    originLat: Number(currentRide.startLat),
+    originLng: Number(currentRide.startLng),
+    destLat: Number(currentRide.endLat),
+    destLng: Number(currentRide.endLng),
+    encodedPolyline: routeData.encodedPolyline,
+    polyline: routeData.polyline,
+    routePoints: routeData.routePoints,
+    waypoints: routeData.waypoints,
+    distanceKm: routeData.distanceKm,
+    durationMinutes: routeData.durationMinutes,
+    route: {
+      encodedPolyline: routeData.encodedPolyline,
+      distanceKm: routeData.distanceKm,
+      durationMinutes: routeData.durationMinutes,
+      waypoints: routeData.waypoints,
+    },
+    currentLocation:
+      lastLoc && Number.isFinite(lastLoc.latitude) && Number.isFinite(lastLoc.longitude)
+        ? {
+            latitude: lastLoc.latitude,
+            longitude: lastLoc.longitude,
+            heading: Number.isFinite(lastLoc.bearing) ? lastLoc.bearing : 0,
+            speedKmh: Number.isFinite(lastLoc.speed) ? lastLoc.speed : 0,
+            updatedAt: lastLoc.timestamp || null,
+          }
+        : null,
     date: formattedDate,
     departureTime: formattedTime,
     mode: currentRide.vehicle?.vehicleType === 'BIKE' ? 'bikepool' : 'carpool',

@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { prisma, withDbTimeout } from '../../config/db.js';
@@ -128,7 +129,7 @@ export const generateAuthTokens = (user) => {
   };
 };
 
-export const registerUser = async ({ username, displayName, phone, email, password, gender, deviceId, deviceType }) => {
+export const registerUser = async ({ username, displayName, phone, email, password, gender, deviceId, deviceType, fcmToken }) => {
   const normalizedPhone = phone.trim();
   const normalizedUsername = username.toLowerCase().trim();
   const normalizedEmail = email ? email.toLowerCase().trim() : null;
@@ -444,7 +445,8 @@ export const loginOrRegisterWithPhone = async ({ phone, otp, deviceId, deviceTyp
 
       if (!existingUser) {
         isNewUser = true;
-        const defaultPasswordHash = await bcrypt.hash('Share2Go@123', 10);
+        const randomPassword = crypto.randomBytes(24).toString('hex');
+        const defaultPasswordHash = await bcrypt.hash(randomPassword, 10);
         const uniqueSuffix = Date.now().toString().slice(-6);
 
         existingUser = await prisma.user.create({

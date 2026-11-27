@@ -24,14 +24,28 @@ const loadTokens = () => {
   } catch (_) {}
 };
 
+let saveTokensInFlight = false;
+let saveTokensQueued = false;
 const saveTokens = () => {
-  try {
-    const obj = {};
-    for (const [userId, set] of userFcmTokens.entries()) {
-      obj[userId] = Array.from(set);
-    }
-    fs.writeFileSync(tokenStorePath, JSON.stringify(obj, null, 2));
-  } catch (_) {}
+  if (saveTokensInFlight) {
+    saveTokensQueued = true;
+    return;
+  }
+  saveTokensInFlight = true;
+  const obj = {};
+  for (const [userId, set] of userFcmTokens.entries()) {
+    obj[userId] = Array.from(set);
+  }
+  fs.promises
+    .writeFile(tokenStorePath, JSON.stringify(obj, null, 2))
+    .catch(() => {})
+    .finally(() => {
+      saveTokensInFlight = false;
+      if (saveTokensQueued) {
+        saveTokensQueued = false;
+        saveTokens();
+      }
+    });
 };
 
 loadTokens();

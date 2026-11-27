@@ -41,19 +41,21 @@ export const authenticate = asyncHandler(async (req, res, next) => {
         },
       });
     },
-    () => {
-      return {
-        id: decoded.userId,
-        uuid: decoded.userId,
-        username: 'user_' + String(decoded.userId).slice(-6),
-        displayName: 'Commuter',
-        phone: '+919999999999',
-        email: 'user@share2go.app',
-        gender: 'MALE',
-        status: 'ACTIVE',
-        driverProfile: null,
-      };
-    }
+    env.isProduction
+      ? null
+      : () => {
+          return {
+            id: decoded.userId,
+            uuid: decoded.userId,
+            username: 'user_' + String(decoded.userId).slice(-6),
+            displayName: 'Commuter',
+            phone: '+919999999999',
+            email: 'user@share2go.app',
+            gender: 'MALE',
+            status: 'ACTIVE',
+            driverProfile: null,
+          };
+        }
   );
 
   if (!user) {

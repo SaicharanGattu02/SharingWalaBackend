@@ -26,7 +26,10 @@ export const errorHandler = (err, req, res, next) => {
         error = new ApiError(400, 'Foreign key constraint failed');
         break;
       default:
-        error = new ApiError(500, `Database error: ${err.message}`);
+        error = new ApiError(
+          500,
+          env.isProduction ? 'Database operation failed' : `Database error: ${err.message}`
+        );
         break;
     }
   }
@@ -41,7 +44,10 @@ export const errorHandler = (err, req, res, next) => {
   // Fallback to standard ApiError if not already one
   if (!(error instanceof ApiError)) {
     const statusCode = error.statusCode || 500;
-    const message = error.message || 'Internal Server Error';
+    const message =
+      env.isProduction && statusCode >= 500
+        ? 'Internal Server Error'
+        : error.message || 'Internal Server Error';
     error = new ApiError(statusCode, message, [], err.stack);
   }
 

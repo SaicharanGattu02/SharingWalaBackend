@@ -5,10 +5,19 @@ import { prisma } from './db.js';
 
 let ioInstance = null;
 
+const isOriginAllowed = (origin) => {
+  if (!origin || !env.isProduction || env.corsOrigin === '*') return true;
+  const allowed = env.corsOrigin.split(',').map((o) => o.trim()).filter(Boolean);
+  return allowed.includes(origin);
+};
+
 export const initSocket = (httpServer) => {
   ioInstance = new Server(httpServer, {
     cors: {
-      origin: (origin, callback) => callback(null, true),
+      origin: (origin, callback) => {
+        if (isOriginAllowed(origin)) return callback(null, true);
+        return callback(new Error('Not allowed by CORS'));
+      },
       credentials: true,
       methods: ['GET', 'POST'],
     },
@@ -30,6 +39,31 @@ export const initSocket = (httpServer) => {
 
       const decoded = jwt.verify(token, env.jwt.secret);
 
+      // Handle Admin Dashboard socket connections
+      if (decoded.isAdmin || decoded.adminId) {
+        const adminId = decoded.adminId || decoded.userId;
+        const admin = await prisma.adminUser.findUnique({
+          where: { id: adminId },
+          select: { id: true, name: true, email: true, isActive: true },
+        }).catch(() => null);
+
+        if (env.isProduction && (!admin || !admin.isActive)) {
+          return next(new Error('Admin account inactive or not found'));
+        }
+
+        socket.isAdmin = true;
+        socket.admin = admin || { id: adminId, name: 'Admin', email: decoded.email, isActive: true };
+        socket.user = {
+          id: adminId,
+          username: 'admin',
+          displayName: socket.admin.name,
+          avatarUrl: null,
+          status: 'ACTIVE',
+        };
+        socket.join('admin');
+        return next();
+      }
+
       let user = null;
       try {
         user = await prisma.user.findUnique({
@@ -44,13 +78,19 @@ export const initSocket = (httpServer) => {
         });
       } catch (dbErr) {
         console.warn('⚠️ [Socket.io] DB lookup warning during handshake:', dbErr.message);
+        if (env.isProduction) {
+          return next(new Error('Authentication service unavailable'));
+        }
       }
 
       if (!user) {
-        // Fallback for mock/dev users or in-memory mode
+        if (env.isProduction) {
+          return next(new Error('Invalid token: User no longer exists'));
+        }
+        // Fallback for mock/dev users in non-production only
         user = {
           id: decoded.userId,
-          username: decoded.username || `user_${decoded.userId.toString().slice(-6)}`,
+          username: decoded.username || `user_${String(decoded.userId).slice(-6)}`,
           displayName: decoded.displayName || decoded.username || 'SharingWala User',
           avatarUrl: decoded.avatarUrl || null,
           status: 'ACTIVE',

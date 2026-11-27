@@ -59,8 +59,14 @@ export const requestSeatSchema = {
     seats: z.number().int().min(1).default(1),
     pickupPoint: z.string().optional(),
     dropoffPoint: z.string().optional(),
+    pickupLat: z.coerce.number().optional(),
+    pickupLng: z.coerce.number().optional(),
+    dropoffLat: z.coerce.number().optional(),
+    dropoffLng: z.coerce.number().optional(),
+    pickupStopId: z.string().optional(),
+    dropoffStopId: z.string().optional(),
     notes: z.string().max(500).optional(),
-  }),
+  }).passthrough(),
 };
 
 export const submitFeedbackSchema = {

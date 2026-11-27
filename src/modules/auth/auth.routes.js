@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { validate } from '../../middlewares/validate.middleware.js';
 import { authenticate, optionalAuthenticate } from '../../middlewares/auth.middleware.js';
+import { createRateLimiter } from '../../middlewares/rateLimit.middleware.js';
 import {
   registerSchema,
   loginSchema,
@@ -13,12 +14,24 @@ import * as authController from './auth.controller.js';
 
 const router = Router();
 
-router.post('/register', validate(registerSchema), authController.register);
-router.post('/login', validate(loginSchema), authController.login);
-router.post('/send-otp', validate(sendOtpSchema), authController.sendOtp);
-router.post('/resend-otp', validate(sendOtpSchema), authController.resendOtp);
-router.post('/verify-otp', validate(verifyOtpSchema), authController.verifyOtp);
-router.post('/phone-login', validate(phoneOtpLoginSchema), authController.phoneLogin);
+const otpSendLimiter = createRateLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  message: 'Too many OTP requests. Please wait a few minutes before trying again.',
+});
+
+const authAttemptLimiter = createRateLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: 25,
+  message: 'Too many authentication attempts. Please try again later.',
+});
+
+router.post('/register', authAttemptLimiter, validate(registerSchema), authController.register);
+router.post('/login', authAttemptLimiter, validate(loginSchema), authController.login);
+router.post('/send-otp', otpSendLimiter, validate(sendOtpSchema), authController.sendOtp);
+router.post('/resend-otp', otpSendLimiter, validate(sendOtpSchema), authController.resendOtp);
+router.post('/verify-otp', authAttemptLimiter, validate(verifyOtpSchema), authController.verifyOtp);
+router.post('/phone-login', authAttemptLimiter, validate(phoneOtpLoginSchema), authController.phoneLogin);
 router.post('/refresh-token', validate(refreshTokenSchema), authController.refreshToken);
 router.get('/status', authController.getAccountStatus);
 router.get('/account-status', authController.getAccountStatus);

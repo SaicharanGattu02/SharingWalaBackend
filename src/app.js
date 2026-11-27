@@ -26,11 +26,19 @@ app.use(
 // Dynamic CORS configuration:
 // When credentials: true is set, browsers forbid Access-Control-Allow-Origin: '*'
 // Reflecting the requesting origin satisfies the W3C/Fetch CORS specification for local web dashboards & apps.
+const allowedOrigins = env.corsOrigin
+  .split(',')
+  .map((o) => o.trim())
+  .filter(Boolean);
+
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Allow requests with no origin (like mobile apps, curl, Postman) or any origin in dev
-      callback(null, true);
+      // Allow requests with no origin (mobile apps, curl, Postman) or when '*' / development
+      if (!origin || !env.isProduction || env.corsOrigin === '*' || allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+      return callback(new ApiError(403, 'Origin not allowed by CORS'));
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
@@ -40,9 +48,11 @@ app.use(
       'X-Requested-With',
       'Accept',
       'Origin',
-      'X-Custom-Header',
-      'Access-Control-Request-Method',
-      'Access-Control-Request-Headers',
+      'X-Device-Id',
+      'X-Device-Type',
+      'X-Device-Name',
+      'Device-Id',
+      'Device-Type',
     ],
     exposedHeaders: ['Content-Range', 'X-Content-Range'],
   })
@@ -57,8 +67,16 @@ if (env.nodeEnv === 'development') {
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Static Assets (uploads, avatars)
-app.use('/uploads', express.static(path.join(process.cwd(), 'public', 'uploads')));
+// Static Assets (uploads, avatars) with nosniff and cache headers
+app.use(
+  '/uploads',
+  express.static(path.join(process.cwd(), 'public', 'uploads'), {
+    maxAge: '7d',
+    setHeaders: (res) => {
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+    },
+  })
+);
 
 // Shareable trip links (/r/ride/:id) + Android App Links verification
 // (/.well-known/assetlinks.json). Opens the app if installed, else Play Store.

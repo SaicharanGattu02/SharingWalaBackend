@@ -68,6 +68,47 @@ export const riderApi = {
   updateRideStatus: async (rideId, status) => {
     return await httpClient.patch(`/rider/rides/${rideId}/status`, { status });
   },
+
+  /**
+   * 8. Get Passengers & Requests for an Offered Ride
+   * @param {string} rideId
+   */
+  getRidePassengers: async (rideId) => {
+    return await httpClient.get(`/rider/rides/${rideId}/passengers`);
+  },
+
+  /**
+   * 9. Start Active Trip (Captain)
+   * @param {string} rideId
+   */
+  startTrip: async (rideId) => {
+    return await httpClient.post(`/rider/rides/${rideId}/start`);
+  },
+
+  /**
+   * 10. Complete Active Trip (Captain)
+   * @param {string} rideId
+   */
+  completeTrip: async (rideId) => {
+    return await httpClient.post(`/rider/rides/${rideId}/complete`);
+  },
+
+  /**
+   * 11. Mark Passenger Picked Up / Onboard (or Offboard if isPickedUp = false)
+   * @param {string} bookingId
+   * @param {boolean} isPickedUp
+   */
+  onboardPassenger: async (bookingId, isPickedUp = true) => {
+    return await httpClient.patch(`/rider/bookings/${bookingId}/onboard`, { isPickedUp });
+  },
+
+  /**
+   * 12. Mark Picked-Up Passenger Dropped Off / Completed
+   * @param {string} bookingId
+   */
+  dropoffPassenger: async (bookingId) => {
+    return await httpClient.patch(`/rider/bookings/${bookingId}/dropoff`);
+  },
 };
 
 export default riderApi;

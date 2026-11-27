@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import { prisma } from '../../config/db.js';
 import { getIO } from '../../config/socket.js';
@@ -121,7 +122,7 @@ export const triggerSos = async (userId, data) => {
   }
 
   // 3. Build Incident Record
-  const incidentId = `SOS-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+  const incidentId = `SOS-${Date.now().toString(36).toUpperCase()}-${crypto.randomBytes(2).toString('hex').toUpperCase()}`;
   const incident = {
     id: incidentId,
     userId: user.id,
@@ -149,11 +150,11 @@ export const triggerSos = async (userId, data) => {
   incidents.unshift(incident);
   saveIncidents(incidents);
 
-  // 5. Broadcast to Connected Admin Dashboards via Socket.io
+  // 5. Broadcast ONLY to Connected Admin Dashboards via Socket.io (never broadcast PII to all users!)
   try {
     const io = getIO();
-    io.emit('admin:sos_alert', incident);
-    io.emit('admin:new_notification', {
+    io.to('admin').emit('admin:sos_alert', incident);
+    io.to('admin').emit('admin:new_notification', {
       type: 'SOS_EMERGENCY',
       title: '🚨 CRITICAL: SOS ALERT TRIGGERED!',
       message: `${incident.userName} triggered an emergency alert near ${incident.address}`,
@@ -267,11 +268,13 @@ export const updateSosIncidentStatus = async (adminId, id, { status, adminNotes 
   list[index] = current;
   saveIncidents(list);
 
-  // Broadcast update to Admin Portal & App
+  // Broadcast update to Admin Portal & the incident's user only
   try {
     const io = getIO();
-    io.emit('admin:sos_updated', current);
-    io.emit(`sos:update:${current.id}`, current);
+    io.to('admin').emit('admin:sos_updated', current);
+    if (current.userId) {
+      io.to(`user:${current.userId}`).emit(`sos:update:${current.id}`, current);
+    }
   } catch (err) {
     // Ignore socket error
   }
