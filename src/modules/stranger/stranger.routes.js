@@ -69,6 +69,7 @@ const globeJsonUpload = multer({
 
 // --- 5. TRIP GLOBE & ADMIN CONFIG ---
 router.get('/globe', optionalAuthenticate, strangerController.getGlobeDestinations);
+router.get('/globe/search', optionalAuthenticate, strangerController.getGlobeDestinations);
 router.get('/globe/weather', optionalAuthenticate, strangerController.getGlobeWeather);
 router.get('/globe/admin/destinations', authenticateAdmin, strangerController.adminGetGlobeConfig);
 router.get('/globe/admin/export', authenticateAdmin, strangerController.adminExportGlobeCatalog);

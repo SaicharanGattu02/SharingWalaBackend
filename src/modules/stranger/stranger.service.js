@@ -7,6 +7,7 @@ import { getIO } from '../../config/socket.js';
 import { sendRideNotificationPush } from '../../config/firebase.js';
 import { toAbsoluteVideoUrl, toAbsoluteUrl } from '../../utils/urlHelper.js';
 import { createNotification } from '../notification/notification.service.js';
+import { scoreSearchItem, buildSearchSuggestions } from '../../utils/fuzzySearch.js';
 
 // Real coordinate or 0 (= unknown). Never substitute a made-up location.
 const toCoord = (v) => {
@@ -4376,6 +4377,19 @@ export const getGlobeDestinations = async ({
   lon,
   days,
   travelers = 2,
+  q,
+  search,
+  query,
+  sort,
+  sortBy,
+  vibe,
+  category,
+  minBudget,
+  maxBudget,
+  budget,
+  minDays,
+  maxDays,
+  onlyLive,
 } = {}) => {
   const catalog = getActiveCatalog();
   const originKey = String(origin || 'delhi').trim().toLowerCase();
@@ -4484,7 +4498,7 @@ export const getGlobeDestinations = async ({
       };
     });
 
-  const filtered = (region === 'india' || region === 'abroad'
+  const baseDestinations = (region === 'india' || region === 'abroad'
     ? enriched.filter((c) => c.region === region)
     : enriched
   ).filter(
@@ -4492,6 +4506,92 @@ export const getGlobeDestinations = async ({
       c.id !== originCity.id &&
       c.name.toLowerCase() !== originCity.name.toLowerCase()
   );
+
+  // Build dynamic vibe facets from the region-scoped destinations
+  const vibeCounts = new Map();
+  for (const dest of baseDestinations) {
+    const v = String(dest.vibe || '').trim();
+    if (!v) continue;
+    vibeCounts.set(v, (vibeCounts.get(v) || 0) + 1);
+  }
+  const availableVibes = Array.from(vibeCounts.entries())
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => b.count - a.count);
+
+  const searchQuery = String(q ?? search ?? query ?? '').trim();
+  const vibeFilter = String(vibe ?? category ?? '').trim().toLowerCase();
+  const minBudgetNum = Number(minBudget);
+  const maxBudgetNum = Number(maxBudget ?? budget);
+  const minDaysNum = Number(minDays);
+  const maxDaysNum = Number(maxDays);
+  const liveOnly = onlyLive === true || String(onlyLive).toLowerCase() === 'true';
+
+  const SEARCH_FIELDS = [
+    { key: 'name', boost: 5.0 },
+    { key: 'place', boost: 3.0 },
+    { key: 'vibe', boost: 2.5 },
+    { key: 'tagline', boost: 1.5 },
+    { key: 'seasonNote', boost: 1.2 },
+    { key: 'mustEat', boost: 1.0 },
+    { key: 'proTips', boost: 1.0 },
+  ];
+
+  let results = baseDestinations
+    .map((dest) => {
+      if (!searchQuery) {
+        return { ...dest, matchScore: dest.match || 90, matchedFields: [] };
+      }
+      const { score, matchedFields } = scoreSearchItem(dest, searchQuery, SEARCH_FIELDS);
+      return { ...dest, matchScore: score, matchedFields };
+    })
+    .filter((dest) => {
+      if (searchQuery && dest.matchScore <= 0) return false;
+      if (vibeFilter && vibeFilter !== 'all' && !String(dest.vibe || '').toLowerCase().includes(vibeFilter)) {
+        return false;
+      }
+      if (Number.isFinite(minBudgetNum) && minBudgetNum > 0 && dest.pricePerPerson < minBudgetNum) {
+        return false;
+      }
+      if (Number.isFinite(maxBudgetNum) && maxBudgetNum > 0 && dest.pricePerPerson > maxBudgetNum) {
+        return false;
+      }
+      if (Number.isFinite(minDaysNum) && minDaysNum > 0 && dest.days < minDaysNum) {
+        return false;
+      }
+      if (Number.isFinite(maxDaysNum) && maxDaysNum > 0 && dest.days > maxDaysNum) {
+        return false;
+      }
+      if (liveOnly && (!dest.activeTripsCount || dest.activeTripsCount <= 0)) {
+        return false;
+      }
+      return true;
+    });
+
+  const normalizedSort = String(sort ?? sortBy ?? 'best_match').trim().toLowerCase();
+  if (normalizedSort === 'cheapest' || normalizedSort === 'price_asc') {
+    results.sort((a, b) => a.pricePerPerson - b.pricePerPerson || a.distanceKm - b.distanceKm);
+  } else if (normalizedSort === 'closest' || normalizedSort === 'distance_asc') {
+    results.sort((a, b) => a.distanceKm - b.distanceKm || a.pricePerPerson - b.pricePerPerson);
+  } else if (normalizedSort === 'top_rated' || normalizedSort === 'rating_desc') {
+    results.sort((a, b) => (b.rating || 0) - (a.rating || 0) || b.matchScore - a.matchScore);
+  } else if (normalizedSort === 'live_first') {
+    results.sort((a, b) => (b.activeTripsCount || 0) - (a.activeTripsCount || 0) || b.matchScore - a.matchScore);
+  } else {
+    // 'best_match' (default): combine search relevance, live trips, and curated match
+    results.sort((a, b) => {
+      if (searchQuery && b.matchScore !== a.matchScore) {
+        return b.matchScore - a.matchScore;
+      }
+      const scoreA = (a.activeTripsCount > 0 ? 15 : 0) + (a.match || 85) + (a.rating || 4.5) * 2;
+      const scoreB = (b.activeTripsCount > 0 ? 15 : 0) + (b.match || 85) + (b.rating || 4.5) * 2;
+      return scoreB - scoreA;
+    });
+  }
+
+  const suggestions =
+    searchQuery && results.length < 3
+      ? buildSearchSuggestions(baseDestinations, searchQuery, 5)
+      : [];
 
   return {
     origin: {
@@ -4509,7 +4609,24 @@ export const getGlobeDestinations = async ({
       lat: c.lat,
       lon: c.lon,
     })),
-    destinations: filtered,
+    totalCount: baseDestinations.length,
+    filteredCount: results.length,
+    appliedFilters: {
+      q: searchQuery || null,
+      region,
+      sort: normalizedSort,
+      vibe: vibeFilter || null,
+      minBudget: Number.isFinite(minBudgetNum) ? minBudgetNum : null,
+      maxBudget: Number.isFinite(maxBudgetNum) ? maxBudgetNum : null,
+      minDays: Number.isFinite(minDaysNum) ? minDaysNum : null,
+      maxDays: Number.isFinite(maxDaysNum) ? maxDaysNum : null,
+      onlyLive: liveOnly,
+    },
+    availableVibes,
+    sortOptions: ['best_match', 'cheapest', 'closest', 'top_rated', 'live_first'],
+    suggestions,
+    didYouMean: results.length === 0 && suggestions.length > 0 ? suggestions[0] : null,
+    destinations: results,
   };
 };
 

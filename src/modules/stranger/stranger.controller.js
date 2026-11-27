@@ -217,6 +217,19 @@ export const getGlobeDestinations = asyncHandler(async (req, res) => {
     lon: req.query.lon,
     days: req.query.days,
     travelers: req.query.travelers,
+    q: req.query.q,
+    search: req.query.search,
+    query: req.query.query,
+    sort: req.query.sort,
+    sortBy: req.query.sortBy,
+    vibe: req.query.vibe,
+    category: req.query.category,
+    minBudget: req.query.minBudget,
+    maxBudget: req.query.maxBudget,
+    budget: req.query.budget,
+    minDays: req.query.minDays,
+    maxDays: req.query.maxDays,
+    onlyLive: req.query.onlyLive,
   });
   res.status(200).json(new ApiResponse(200, result, 'Globe destinations retrieved'));
 });
