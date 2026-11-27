@@ -1407,6 +1407,14 @@ export const respondToPassengerRequest = async (userId, bookingId, actionOrStatu
         },
       });
 
+      const remainingPassengersCount = await tx.booking.count({
+        where: {
+          rideId: booking.rideId,
+          status: 'ACCEPTED',
+        },
+      });
+      const allPassengersDroppedOff = remainingPassengersCount === 0;
+
       const targetPassengerId = booking.passenger?.id || booking.passengerId;
       if (targetPassengerId) {
         createNotification({
@@ -1418,6 +1426,7 @@ export const respondToPassengerRequest = async (userId, bookingId, actionOrStatu
             rideId: booking.rideId,
             bookingId: updated.id,
             route: '/active-ride',
+            shouldNavigateToRating: 'true',
           },
           sendPush: true,
         }).catch((e) => console.warn('Failed to notify passenger of drop-off:', e.message));
@@ -1434,10 +1443,26 @@ export const respondToPassengerRequest = async (userId, bookingId, actionOrStatu
               isPickedUp: true,
               isOnboard: false,
               isDroppedOff: true,
+              isCompleted: true,
+              canSubmitFeedback: true,
+              shouldNavigateToRating: true,
+              remainingPassengersCount,
+              allPassengersDroppedOff,
               updatedAt: new Date().toISOString(),
             };
             io.to(`trip:${booking.rideId}`).emit('trip:passenger_updated', socketPayload);
             io.to(`user:${targetPassengerId}`).emit('trip:passenger_updated', socketPayload);
+            io.to(`user:${targetPassengerId}`).emit('trip:completed', {
+              tripId: booking.rideId,
+              rideId: booking.rideId,
+              bookingId: updated.id,
+              passengerId: targetPassengerId,
+              status: 'COMPLETED',
+              reason: 'PASSENGER_DROPPED_OFF',
+              shouldNavigateToRating: true,
+              canSubmitFeedback: true,
+              timestamp: new Date().toISOString(),
+            });
           }
         } catch (_) {}
       }
@@ -1455,6 +1480,8 @@ export const respondToPassengerRequest = async (userId, bookingId, actionOrStatu
         isDroppedOff: true,
         isCompleted: true,
         nextAction: 'NONE',
+        remainingPassengersCount,
+        allPassengersDroppedOff,
         seats,
         availableSeats: currentRide.availableSeats,
         totalSeats: currentRide.totalSeats,

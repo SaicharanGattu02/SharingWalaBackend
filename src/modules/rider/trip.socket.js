@@ -304,6 +304,15 @@ export const registerTripSocketHandlers = (io, socket) => {
           data: updateData,
         });
 
+        let remainingPassengersCount = null;
+        let allPassengersDroppedOff = false;
+        if (isDroppedOff) {
+          remainingPassengersCount = await prisma.booking.count({
+            where: { rideId: tripId, status: 'ACCEPTED' },
+          });
+          allPassengersDroppedOff = remainingPassengersCount === 0;
+        }
+
         // Send push & in-app notification to the passenger
         if (targetPassengerId) {
           if (isPickedUp) {
@@ -329,16 +338,54 @@ export const registerTripSocketHandlers = (io, socket) => {
                 rideId: tripId,
                 bookingId,
                 route: '/active-ride',
+                shouldNavigateToRating: 'true',
               },
               sendPush: true,
             }).catch((e) => console.warn('Failed to notify passenger of drop-off:', e.message));
           }
         }
+
+        const payload = {
+          tripId,
+          rideId: tripId,
+          bookingId,
+          passengerId: targetPassengerId,
+          status: normalizedStatus,
+          isPickedUp: isPickedUp || isDroppedOff,
+          isOnboard: isPickedUp,
+          isDroppedOff,
+          isCompleted: isDroppedOff,
+          canSubmitFeedback: isDroppedOff,
+          shouldNavigateToRating: isDroppedOff,
+          ...(remainingPassengersCount !== null
+            ? { remainingPassengersCount, allPassengersDroppedOff }
+            : {}),
+          updatedAt: new Date().toISOString(),
+        };
+
+        io.to(`trip:${tripId}`).emit('trip:passenger_updated', payload);
+        if (targetPassengerId) {
+          io.to(`user:${targetPassengerId}`).emit('trip:passenger_updated', payload);
+          if (isDroppedOff) {
+            io.to(`user:${targetPassengerId}`).emit('trip:completed', {
+              tripId,
+              rideId: tripId,
+              bookingId,
+              passengerId: targetPassengerId,
+              status: 'COMPLETED',
+              reason: 'PASSENGER_DROPPED_OFF',
+              shouldNavigateToRating: true,
+              canSubmitFeedback: true,
+              timestamp: new Date().toISOString(),
+            });
+          }
+        }
+        return;
       } catch (dbErr) {
         console.warn('[TripSocket] DB update error for booking passenger status:', dbErr.message);
       }
 
-      const payload = {
+      const fallbackPayload = {
         tripId,
         rideId: tripId,
         bookingId,
@@ -347,12 +394,15 @@ export const registerTripSocketHandlers = (io, socket) => {
         isPickedUp: isPickedUp || isDroppedOff,
         isOnboard: isPickedUp,
         isDroppedOff,
+        isCompleted: isDroppedOff,
+        canSubmitFeedback: isDroppedOff,
+        shouldNavigateToRating: isDroppedOff,
         updatedAt: new Date().toISOString(),
       };
 
-      io.to(`trip:${tripId}`).emit('trip:passenger_updated', payload);
+      io.to(`trip:${tripId}`).emit('trip:passenger_updated', fallbackPayload);
       if (targetPassengerId) {
-        io.to(`user:${targetPassengerId}`).emit('trip:passenger_updated', payload);
+        io.to(`user:${targetPassengerId}`).emit('trip:passenger_updated', fallbackPayload);
       }
     } catch (err) {
       console.warn('[TripSocket] Error handling passenger status:', err.message);

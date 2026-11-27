@@ -2075,10 +2075,15 @@ export const getActiveRideTracking = async (userId, rideId) => {
     } catch (e) {}
   }
 
-  const isCompleted = ride.status === 'COMPLETED';
+  const isRideCompleted = ride.status === 'COMPLETED';
+  const isPassengerTripCompleted = !isCaptain && userIsCompleted;
+  const isCompleted = isRideCompleted || isPassengerTripCompleted;
   const isFeedbackSubmitted = Boolean(existingRating);
   const canSubmitFeedback = isCompleted && !isFeedbackSubmitted;
 
+  result.isRideCompleted = isRideCompleted;
+  result.isCompleted = isCompleted;
+  result.shouldNavigateToRating = canSubmitFeedback;
   result.isFeedbackSubmitted = isFeedbackSubmitted;
   result.hasSubmittedFeedback = isFeedbackSubmitted;
   result.hasRated = isFeedbackSubmitted;
